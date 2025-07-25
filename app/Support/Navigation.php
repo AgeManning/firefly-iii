@@ -73,6 +73,9 @@ class Navigation
             'MTD'       => Periodicity::Monthly,
             'QTD'       => Periodicity::Quarterly,
             'YTD'       => Periodicity::Yearly,
+            'FYC'       => Periodicity::Yearly, // Current financial year
+            'FYP'       => Periodicity::Yearly, // Previous financial year
+            'FY3'       => Periodicity::Yearly, // Third last financial year
         ];
 
         if (!array_key_exists($repeatFreq, $functionMap)) {
@@ -218,6 +221,9 @@ class Navigation
             'MTD'     => $date->startOfMonth()->startOfDay(),
             'QTD'     => $date->firstOfQuarter()->startOfDay(),
             'YTD'     => $date->startOfYear()->startOfDay(),
+            'FYC'     => $this->getCurrentFinancialYearStart($date)->startOfDay(),
+            'FYP'     => $this->getPreviousFinancialYearStart($date)->startOfDay(),
+            'FY3'     => $this->getThirdLastFinancialYearStart($date)->startOfDay(),
             default   => null,
         };
         if (null !== $result) {
@@ -300,6 +306,9 @@ class Navigation
             'MTD'     => $currentEnd->startOfMonth()->startOfDay(),
             'QTD'     => $currentEnd->firstOfQuarter()->startOfDay(),
             'YTD'     => $currentEnd->startOfYear()->startOfDay(),
+            'FYC'     => $this->getCurrentFinancialYearEnd($currentEnd)->endOfDay(),
+            'FYP'     => $this->getPreviousFinancialYearEnd($currentEnd)->endOfDay(),
+            'FY3'     => $this->getThirdLastFinancialYearEnd($currentEnd)->endOfDay(),
             default   => null,
         };
         if (null !== $result) {
@@ -720,6 +729,21 @@ class Navigation
                 $date->subMonth();
 
                 return $date;
+
+            case 'FYC':
+                // For current financial year, subtract one year to get previous financial year
+                $date->subYear();
+                return $date;
+
+            case 'FYP':
+                // For previous financial year, subtract one year to get the one before
+                $date->subYear();
+                return $date;
+
+            case 'FY3':
+                // For third last financial year, subtract one year to get fourth last
+                $date->subYear();
+                return $date;
         }
 
         throw new FireflyException(sprintf('Cannot do subtractPeriod for $repeat_freq "%s"', $repeatFreq));
@@ -866,5 +890,69 @@ class Navigation
         }
 
         throw new FireflyException(sprintf('updateStartDate cannot handle range "%s"', $range));
+    }
+
+    /**
+     * Get the start of the current financial year
+     */
+    private function getCurrentFinancialYearStart(Carbon $date): Carbon
+    {
+        /** @var FiscalHelperInterface $fiscalHelper */
+        $fiscalHelper = app(FiscalHelperInterface::class);
+        return $fiscalHelper->startOfFiscalYear($date);
+    }
+
+    /**
+     * Get the end of the current financial year
+     */
+    private function getCurrentFinancialYearEnd(Carbon $date): Carbon
+    {
+        /** @var FiscalHelperInterface $fiscalHelper */
+        $fiscalHelper = app(FiscalHelperInterface::class);
+        return $fiscalHelper->endOfFiscalYear($date);
+    }
+
+    /**
+     * Get the start of the previous financial year
+     */
+    private function getPreviousFinancialYearStart(Carbon $date): Carbon
+    {
+        /** @var FiscalHelperInterface $fiscalHelper */
+        $fiscalHelper = app(FiscalHelperInterface::class);
+        $currentFYStart = $fiscalHelper->startOfFiscalYear($date);
+        return $fiscalHelper->startOfFiscalYear($currentFYStart->subYear());
+    }
+
+    /**
+     * Get the end of the previous financial year
+     */
+    private function getPreviousFinancialYearEnd(Carbon $date): Carbon
+    {
+        $previousFYStart = $this->getPreviousFinancialYearStart($date);
+        /** @var FiscalHelperInterface $fiscalHelper */
+        $fiscalHelper = app(FiscalHelperInterface::class);
+        return $fiscalHelper->endOfFiscalYear($previousFYStart);
+    }
+
+    /**
+     * Get the start of the third last financial year
+     */
+    private function getThirdLastFinancialYearStart(Carbon $date): Carbon
+    {
+        /** @var FiscalHelperInterface $fiscalHelper */
+        $fiscalHelper = app(FiscalHelperInterface::class);
+        $currentFYStart = $fiscalHelper->startOfFiscalYear($date);
+        return $fiscalHelper->startOfFiscalYear($currentFYStart->subYears(2));
+    }
+
+    /**
+     * Get the end of the third last financial year
+     */
+    private function getThirdLastFinancialYearEnd(Carbon $date): Carbon
+    {
+        $thirdLastFYStart = $this->getThirdLastFinancialYearStart($date);
+        /** @var FiscalHelperInterface $fiscalHelper */
+        $fiscalHelper = app(FiscalHelperInterface::class);
+        return $fiscalHelper->endOfFiscalYear($thirdLastFYStart);
     }
 }
