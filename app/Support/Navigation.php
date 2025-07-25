@@ -807,6 +807,18 @@ class Navigation
             return $end;
         }
 
+        // Handle financial year ranges
+        switch ($range) {
+            case 'FYC':
+                return $this->getCurrentFinancialYearEnd(today(config('app.timezone')));
+
+            case 'FYP':
+                return $this->getPreviousFinancialYearEnd(today(config('app.timezone')));
+
+            case 'FY3':
+                return $this->getThirdLastFinancialYearEnd(today(config('app.timezone')));
+        }
+
         throw new FireflyException(sprintf('updateEndDate cannot handle range "%s"', $range));
     }
 
@@ -887,6 +899,15 @@ class Navigation
                 $start->startOfMonth();
 
                 return $start;
+
+            case 'FYC':
+                return $this->getCurrentFinancialYearStart(today(config('app.timezone')));
+
+            case 'FYP':
+                return $this->getPreviousFinancialYearStart(today(config('app.timezone')));
+
+            case 'FY3':
+                return $this->getThirdLastFinancialYearStart(today(config('app.timezone')));
         }
 
         throw new FireflyException(sprintf('updateStartDate cannot handle range "%s"', $range));

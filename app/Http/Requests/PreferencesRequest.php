@@ -38,6 +38,7 @@ class PreferencesRequest extends FormRequest
     public function rules(): array
     {
         $rules = [
+            'viewRange'         => sprintf('nullable|in:%s', implode(',', config('firefly.valid_view_ranges'))),
             'slack_webhook_url' => ['nullable', 'url', 'min:1', new IsValidSlackOrDiscordUrl()],
             'ntfy_server'       => ['nullable', 'url', 'min:1'],
             'ntfy_user'         => ['required_with:ntfy_pass,ntfy_auth', 'nullable', 'string', 'min:1'],
