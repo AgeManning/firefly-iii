@@ -41,6 +41,9 @@ use FireflyIII\Http\Controllers\Chart\ExpenseReportController;
 use FireflyIII\Http\Controllers\Chart\TagReportController;
 use FireflyIII\User;
 use Illuminate\Support\Collection;
+use ReflectionClass;
+use FireflyIII\Repositories\Account\AccountTaskerInterface;
+use FireflyIII\Support\Report\Category\CategoryReportGenerator;
 
 /**
  * Class ReportDataCollector
@@ -77,6 +80,9 @@ class ReportDataCollector
         $data = [
             'accounts' => $this->collectAccountData(),
             'balance' => $this->collectBalanceData(),
+            'income' => $this->collectIncomeData(),
+            'expenses' => $this->collectExpensesData(),
+            'operations' => $this->collectOperationsData(),
             'charts' => $this->collectChartData(),
         ];
 
@@ -102,12 +108,9 @@ class ReportDataCollector
                 $data['double_charts'] = $this->collectDoubleChartData();
                 break;
                 
-            case 'audit':
-                $data['operations'] = $this->collectOperationsData();
-                break;
-                
             default:
-                $data['operations'] = $this->collectOperationsData();
+                // For default reports, also collect category data
+                $data['categories'] = $this->collectCategoryOperationsData();
                 break;
         }
 
@@ -130,8 +133,15 @@ class ReportDataCollector
                 return $response->getData(true);
             }
             
-            // If it's a view response, get the rendered content
-            return ['html' => $response->render()];
+            if (is_string($response)) {
+                return ['html' => $response];
+            }
+            
+            if (method_exists($response, 'render')) {
+                return ['html' => $response->render()];
+            }
+            
+            return ['html' => (string)$response];
         } catch (\Exception $e) {
             app('log')->error(sprintf('Could not collect account data: %s', $e->getMessage()));
             return ['error' => $e->getMessage()];
@@ -139,19 +149,36 @@ class ReportDataCollector
     }
 
     /**
-     * Collect balance data
+     * Collect balance data (Income vs Expenses summary)
      */
     private function collectBalanceData(): array
     {
         try {
-            $controller = app(BalanceController::class);
-            $response = $controller->incomeVsExpenses($this->accounts, $this->start, $this->end);
+            // Get raw data directly from AccountTasker like OperationsController does
+            $tasker = app(AccountTaskerInterface::class);
+            $tasker->setUser($this->user);
             
-            if ($response instanceof \Illuminate\Http\JsonResponse) {
-                return $response->getData(true);
+            $incomes = $tasker->getIncomeReport($this->start, $this->end, $this->accounts);
+            $expenses = $tasker->getExpenseReport($this->start, $this->end, $this->accounts);
+            $sums = [];
+            $keys = array_unique(array_merge(array_keys($incomes['sums']), array_keys($expenses['sums'])));
+
+            foreach ($keys as $currencyId) {
+                $currencyInfo = $incomes['sums'][$currencyId] ?? $expenses['sums'][$currencyId];
+                $sums[$currencyId] = [
+                    'currency_id' => $currencyId,
+                    'currency_name' => $currencyInfo['currency_name'],
+                    'currency_code' => $currencyInfo['currency_code'],
+                    'currency_symbol' => $currencyInfo['currency_symbol'],
+                    'currency_decimal_places' => $currencyInfo['currency_decimal_places'],
+                    'in' => $incomes['sums'][$currencyId]['sum'] ?? '0',
+                    'out' => $expenses['sums'][$currencyId]['sum'] ?? '0',
+                    'sum' => '0',
+                ];
+                $sums[$currencyId]['sum'] = bcadd($sums[$currencyId]['in'], $sums[$currencyId]['out']);
             }
             
-            return ['html' => $response->render()];
+            return ['operations' => $sums];
         } catch (\Exception $e) {
             app('log')->error(sprintf('Could not collect balance data: %s', $e->getMessage()));
             return ['error' => $e->getMessage()];
@@ -208,7 +235,15 @@ class ReportDataCollector
                 return $response->getData(true);
             }
             
-            return ['html' => $response->render()];
+            if (is_string($response)) {
+                return ['html' => $response];
+            }
+            
+            if (method_exists($response, 'render')) {
+                return ['html' => $response->render()];
+            }
+            
+            return ['html' => (string)$response];
         } catch (\Exception $e) {
             app('log')->error(sprintf('Could not collect budget data: %s', $e->getMessage()));
             return ['error' => $e->getMessage()];
@@ -404,23 +439,51 @@ class ReportDataCollector
     }
 
     /**
+     * Collect income data
+     */
+    private function collectIncomeData(): array
+    {
+        try {
+            // Get raw data directly from AccountTasker
+            $tasker = app(AccountTaskerInterface::class);
+            $tasker->setUser($this->user);
+            
+            return $tasker->getIncomeReport($this->start, $this->end, $this->accounts);
+        } catch (\Exception $e) {
+            app('log')->error(sprintf('Could not collect income data: %s', $e->getMessage()));
+            return ['error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Collect expenses data
+     */
+    private function collectExpensesData(): array
+    {
+        try {
+            // Get raw data directly from AccountTasker
+            $tasker = app(AccountTaskerInterface::class);
+            $tasker->setUser($this->user);
+            
+            return $tasker->getExpenseReport($this->start, $this->end, $this->accounts);
+        } catch (\Exception $e) {
+            app('log')->error(sprintf('Could not collect expenses data: %s', $e->getMessage()));
+            return ['error' => $e->getMessage()];
+        }
+    }
+
+    /**
      * Collect operations data
      */
     private function collectOperationsData(): array
     {
         try {
-            $controller = app(OperationsController::class);
-            
             $data = [];
             
-            // Top transactions
-            if (method_exists($controller, 'topTransactions')) {
-                $response = $controller->topTransactions($this->accounts, $this->start, $this->end);
-                if ($response instanceof \Illuminate\Http\JsonResponse) {
-                    $data['top_transactions'] = $response->getData(true);
-                } else {
-                    $data['top_transactions'] = ['html' => $response->render()];
-                }
+            // Get operations data from balance collection (which now has raw data)
+            $balanceData = $this->collectBalanceData();
+            if (isset($balanceData['operations'])) {
+                $data['operations'] = $balanceData['operations'];
             }
 
             return $data;
@@ -443,7 +506,15 @@ class ReportDataCollector
                 return $response->getData(true);
             }
             
-            return ['html' => $response->render()];
+            if (is_string($response)) {
+                return ['html' => $response];
+            }
+            
+            if (method_exists($response, 'render')) {
+                return ['html' => $response->render()];
+            }
+            
+            return ['html' => (string)$response];
         } catch (\Exception $e) {
             app('log')->error(sprintf('Could not collect bill data: %s', $e->getMessage()));
             return ['error' => $e->getMessage()];
@@ -493,5 +564,26 @@ class ReportDataCollector
     public function setExpenseAccounts(Collection $expenseAccounts): void
     {
         $this->expenseAccounts = $expenseAccounts;
+    }
+
+    /**
+     * Collect category operations data for default reports
+     */
+    private function collectCategoryOperationsData(): array
+    {
+        try {
+            $generator = app(CategoryReportGenerator::class);
+            $generator->setUser($this->user);
+            $generator->setStart($this->start);
+            $generator->setEnd($this->end);
+            $generator->setAccounts($this->accounts);
+            
+            // Generate the report data like CategoryController does
+            $generator->operations();
+            return $generator->getReport();
+        } catch (\Exception $e) {
+            app('log')->error(sprintf('Could not collect category operations data: %s', $e->getMessage()));
+            return ['error' => $e->getMessage()];
+        }
     }
 }

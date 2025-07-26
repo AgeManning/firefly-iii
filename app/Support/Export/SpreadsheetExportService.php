@@ -42,6 +42,8 @@ use PhpOffice\PhpSpreadsheet\Chart\Legend;
 use PhpOffice\PhpSpreadsheet\Chart\PlotArea;
 use PhpOffice\PhpSpreadsheet\Chart\Title;
 use PhpOffice\PhpSpreadsheet\Chart\Layout;
+use FireflyIII\Repositories\Account\AccountTaskerInterface;
+use FireflyIII\Support\Report\Category\CategoryReportGenerator;
 
 /**
  * Class SpreadsheetExportService
@@ -62,11 +64,40 @@ class SpreadsheetExportService
     private array $reportData;
     private Spreadsheet $spreadsheet;
     
-    // Firefly III brand colors
-    private const string PRIMARY_COLOR = '357CA4';
-    private const string SUCCESS_COLOR = '28A745';
-    private const string DANGER_COLOR = 'DC3545';
-    private const string WARNING_COLOR = 'FFC107';
+    // Subtle Google Sheets-inspired blue color scheme for professional appearance
+    private const string PRIMARY_COLOR = '9FC5E8';      // Much softer light blue for headers
+    private const string HEADER_COLOR = '6FA8DC';        // Softer medium blue for section headers  
+    private const string SUCCESS_COLOR = '228B22';       // Forest green for positive values (used consistently)
+    private const string DANGER_COLOR = 'F56C6C';        // Softer red for negative values  
+    private const string SUCCESS_BRIGHT = '228B22';      // Same as SUCCESS_COLOR for consistency
+    private const string WARNING_COLOR = 'F9AB00';       // Orange for expense highlights
+    private const string NEUTRAL_COLOR = '5F6368';       // Google gray for neutral values
+    private const string LIGHT_BLUE = 'E8F0FE';          // Very light blue for alternating rows (Google style)
+    private const string MEDIUM_BLUE = 'D2E3FC';         // Light blue for borders and accents
+    private const string DARK_GRAY = '202124';           // Google dark gray for text
+    private const string WHITE = 'FFFFFF';               // White for backgrounds
+    private const string TOTAL_ROW_COLOR = 'C5E1F5';     // Light blue for totals (matches theme)
+    
+    // Firefly III Chart Colors - 17-color palette
+    private const array CHART_COLORS = [
+        '357CA4', // Primary blue (with transparency applied in charts)
+        '008D4C', // Green
+        'DB8B0B', // Orange/Gold
+        'CA195A', // Magenta
+        '555299', // Purple
+        '4285F4', // Google Blue
+        'DB4437', // Red
+        'F4B400', // Yellow
+        '0F9D58', // Forest Green
+        'AB47BC', // Violet
+        '00ACC1', // Cyan
+        'FF7043', // Orange
+        '9E9D24', // Olive
+        '5C6BC0', // Periwinkle
+        'F06292', // Pink
+        '00796B', // Teal
+        'C2185B', // Deep Pink
+    ];
     
     public function __construct()
     {
@@ -128,32 +159,129 @@ class SpreadsheetExportService
     }
 
     /**
-     * Create the summary sheet with key metrics
+     * Create the summary sheet with enhanced branding and key metrics
      */
     private function createSummarySheet(): void
     {
         $sheet = $this->spreadsheet->getActiveSheet();
         $sheet->setTitle('Summary');
         
-        // Header
-        $sheet->setCellValue('A1', 'Firefly III Report Export');
-        $sheet->setCellValue('A2', sprintf('%s Report', ucfirst($this->reportType)));
-        $sheet->setCellValue('A3', sprintf('Period: %s to %s', 
-            $this->start->format('Y-m-d'), 
-            $this->end->format('Y-m-d')
+        // Create professional branding section
+        $nextRow = $this->createBrandingSection($sheet, 1);
+        
+        // Add summary metrics if available
+        if (!empty($this->reportData)) {
+            $this->addSummaryMetrics($sheet, $nextRow);
+        }
+        
+        // Set dynamic column widths for better appearance
+        $this->setDynamicColumnWidths($sheet, [
+            'A' => 25,  // Increased for better label display
+            'B' => 18,  // Increased for data
+            'C' => 15,
+            'D' => 18,  // Increased for labels
+            'E' => 18   // Increased for data
+        ]);
+    }
+    
+    /**
+     * Create professional title/branding section
+     */
+    private function createBrandingSection($sheet, int $startRow = 1): int
+    {
+        $row = $startRow;
+        
+        // Main title
+        $sheet->setCellValue('A' . $row, 'Firefly III Financial Report');
+        $this->styleSectionHeader($sheet, 'A' . $row . ':E' . $row);
+        $row++;
+        
+        // Report type
+        $sheet->setCellValue('A' . $row, sprintf('%s Report', ucfirst($this->reportType)));
+        $this->styleHeader($sheet, 'A' . $row . ':E' . $row);
+        $row++;
+        
+        // Report details in a structured format
+        $sheet->setCellValue('A' . $row, 'Period:');
+        $sheet->setCellValue('B' . $row, sprintf('%s to %s', 
+            $this->start->format('M j, Y'), 
+            $this->end->format('M j, Y')
         ));
-        $sheet->setCellValue('A4', sprintf('Generated: %s', now()->toDateTimeString()));
-        $sheet->setCellValue('A5', sprintf('User: %s', $this->user->email));
         
-        // Style the header
-        $this->styleHeader($sheet, 'A1:E5');
+        $sheet->setCellValue('D' . $row, 'Generated:');
+        $sheet->setCellValue('E' . $row, now()->format('M j, Y g:i A'));
         
-        // Set column widths
-        $sheet->getColumnDimension('A')->setWidth(20);
-        $sheet->getColumnDimension('B')->setWidth(15);
-        $sheet->getColumnDimension('C')->setWidth(15);
-        $sheet->getColumnDimension('D')->setWidth(15);
-        $sheet->getColumnDimension('E')->setWidth(15);
+        $this->styleAlternatingRows($sheet, 'A' . $row . ':E' . $row, true);
+        $row++;
+        
+        // User info
+        $sheet->setCellValue('A' . $row, 'User:');
+        $sheet->setCellValue('B' . $row, $this->user->email);
+        $this->styleAlternatingRows($sheet, 'A' . $row . ':E' . $row, false);
+        $row++;
+        
+        // Add spacing
+        $row++;
+        
+        return $row;
+    }
+    
+    /**
+     * Add summary metrics to the summary sheet
+     */
+    private function addSummaryMetrics($sheet, int $startRow): void
+    {
+        $row = $startRow;
+        
+        // Summary section header
+        $sheet->setCellValue('A' . $row, 'Report Summary');
+        $this->styleHeader($sheet, 'A' . $row . ':E' . $row);
+        $row++;
+        
+        // Add key metrics based on available data
+        if (isset($this->reportData['balance'])) {
+            $balanceData = $this->reportData['balance'];
+            
+            if (isset($balanceData['operations'])) {
+                foreach ($balanceData['operations'] as $currencyId => $data) {
+                    $currency = $data['currency_symbol'] ?? $data['currency_code'] ?? '';
+                    
+                    // Income row
+                    $sheet->setCellValue('A' . $row, 'Total Income (' . $currency . ')');
+                    $sheet->setCellValue('B' . $row, $this->formatCurrency((float)($data['in'] ?? 0)));
+                    $this->styleAlternatingRows($sheet, 'A' . $row . ':E' . $row, true);
+                    $this->applyCurrencyFormatting($sheet, 'B' . $row, (float)($data['in'] ?? 0), true);
+                    $row++;
+                    
+                    // Expenses row
+                    $sheet->setCellValue('A' . $row, 'Total Expenses (' . $currency . ')');
+                    $sheet->setCellValue('B' . $row, $this->formatCurrency((float)($data['out'] ?? 0)));
+                    $this->styleAlternatingRows($sheet, 'A' . $row . ':E' . $row, false);
+                    $this->applyCurrencyFormatting($sheet, 'B' . $row, (float)($data['out'] ?? 0), false);
+                    $row++;
+                    
+                    // Total row using SUM formula
+                    $incomeRow = $row - 2; // Income row is 2 rows above
+                    $expenseRow = $row - 1; // Expense row is 1 row above
+                    $netResult = (float)($data['sum'] ?? 0);
+                    $sheet->setCellValue('A' . $row, 'TOTAL (' . $currency . ')');
+                    $sheet->setCellValue('B' . $row, sprintf('=B%d+B%d', $incomeRow, $expenseRow));
+                    $this->styleTotalRow($sheet, 'A' . $row . ':E' . $row);
+                    $this->applyCurrencyFormatting($sheet, 'B' . $row, $netResult, false);
+                    $row++;
+                    
+                    $row++; // Add spacing between currencies
+                }
+            }
+        }
+        
+        // Add account summary if available
+        if (isset($this->reportData['accounts']['accounts']) && count($this->reportData['accounts']['accounts']) > 0) {
+            $sheet->setCellValue('A' . $row, 'Number of Accounts');
+            $sheet->setCellValue('B' . $row, count($this->reportData['accounts']['accounts']));
+            $this->styleAlternatingRows($sheet, 'A' . $row . ':E' . $row, true);
+            $row++;
+        }
     }
 
     /**
@@ -206,29 +334,76 @@ class SpreadsheetExportService
             $this->populateAccountData($accountSheet, $this->reportData['accounts']);
         }
         
-        // Income/Expense sheet
-        $incomeExpenseSheet = $this->spreadsheet->createSheet();
-        $incomeExpenseSheet->setTitle('Income vs Expenses');
+        // Income sheet
+        $incomeSheet = $this->spreadsheet->createSheet();
+        $incomeSheet->setTitle('Income');
         
-        $incomeExpenseSheet->setCellValue('A1', 'Type');
-        $incomeExpenseSheet->setCellValue('B1', 'Amount');
-        $incomeExpenseSheet->setCellValue('C1', 'Currency');
+        $incomeSheet->setCellValue('A1', 'Account');
+        $incomeSheet->setCellValue('B1', 'Amount');
+        $incomeSheet->setCellValue('C1', 'Currency');
         
-        $this->styleHeader($incomeExpenseSheet, 'A1:C1');
+        $this->styleHeader($incomeSheet, 'A1:C1');
+        
+        // Populate income data if available
+        if (isset($this->reportData['income'])) {
+            $this->populateIncomeData($incomeSheet, $this->reportData['income']);
+        }
+        
+        // Expenses sheet
+        $expenseSheet = $this->spreadsheet->createSheet();
+        $expenseSheet->setTitle('Expenses');
+        
+        $expenseSheet->setCellValue('A1', 'Account');
+        $expenseSheet->setCellValue('B1', 'Amount');
+        $expenseSheet->setCellValue('C1', 'Currency');
+        
+        $this->styleHeader($expenseSheet, 'A1:C1');
+        
+        // Populate expenses data if available
+        if (isset($this->reportData['expenses'])) {
+            $this->populateExpensesData($expenseSheet, $this->reportData['expenses']);
+        }
+        
+        // Income vs Expenses Summary sheet
+        $summarySheet = $this->spreadsheet->createSheet();
+        $summarySheet->setTitle('Income vs Expenses');
+        
+        $summarySheet->setCellValue('A1', 'Type');
+        $summarySheet->setCellValue('B1', 'Amount');
+        $summarySheet->setCellValue('C1', 'Currency');
+        
+        $this->styleHeader($summarySheet, 'A1:C1');
         
         // Populate balance data if available
         if (isset($this->reportData['balance'])) {
-            $this->populateBalanceData($incomeExpenseSheet, $this->reportData['balance']);
+            $this->populateBalanceData($summarySheet, $this->reportData['balance']);
         }
         
-        // Set column widths
-        foreach ([$accountSheet, $incomeExpenseSheet] as $sheet) {
-            $sheet->getColumnDimension('A')->setWidth(25);
-            $sheet->getColumnDimension('B')->setWidth(15);
-            $sheet->getColumnDimension('C')->setWidth(15);
-            $sheet->getColumnDimension('D')->setWidth(15);
-            $sheet->getColumnDimension('E')->setWidth(10);
-        }
+        // Categories sheet with monthly breakdown
+        $categoriesSheet = $this->spreadsheet->createSheet();
+        $categoriesSheet->setTitle('Categories');
+        
+        // Create monthly categories data similar to the web report
+        $this->createMonthlyCategoriesSheet($categoriesSheet);
+        
+        // Set dynamic column widths for better professional appearance
+        $this->setDynamicColumnWidths($accountSheet, [
+            'A' => 30, 'B' => 18, 'C' => 18, 'D' => 18, 'E' => 12
+        ]);
+        
+        $this->setDynamicColumnWidths($incomeSheet, [
+            'A' => 30, 'B' => 18, 'C' => 12
+        ]);
+        
+        $this->setDynamicColumnWidths($expenseSheet, [
+            'A' => 30, 'B' => 18, 'C' => 12
+        ]);
+        
+        $this->setDynamicColumnWidths($summarySheet, [
+            'A' => 30, 'B' => 18, 'C' => 18
+        ]);
+        
+        // Categories sheet column widths are set in createMonthlyCategoriesSheet method
     }
 
     /**
@@ -322,15 +497,16 @@ class SpreadsheetExportService
     }
 
     /**
-     * Apply header styling to a range
+     * Apply professional header styling with gradient effect
      */
     private function styleHeader($sheet, string $range): void
     {
         $sheet->getStyle($range)->applyFromArray([
             'font' => [
                 'bold' => true,
-                'color' => ['argb' => 'FFFFFF'],
-                'size' => 12
+                'color' => ['argb' => self::DARK_GRAY],
+                'size' => 12,
+                'name' => 'Calibri'
             ],
             'fill' => [
                 'fillType' => Fill::FILL_SOLID,
@@ -341,12 +517,217 @@ class SpreadsheetExportService
                 'vertical' => Alignment::VERTICAL_CENTER
             ],
             'borders' => [
-                'allBorders' => [
+                'outline' => [
+                    'borderStyle' => Border::BORDER_MEDIUM,
+                    'color' => ['argb' => self::DARK_GRAY]
+                ],
+                'inside' => [
                     'borderStyle' => Border::BORDER_THIN,
-                    'color' => ['argb' => '000000']
+                    'color' => ['argb' => self::MEDIUM_BLUE]
                 ]
             ]
         ]);
+        
+        // Set row height for better appearance
+        $this->setRowHeight($sheet, $range, 22);
+    }
+    
+    /**
+     * Apply section header styling (larger, more prominent) - Google Sheets style
+     */
+    private function styleSectionHeader($sheet, string $range): void
+    {
+        $sheet->getStyle($range)->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'color' => ['argb' => self::WHITE],
+                'size' => 14,
+                'name' => 'Calibri'
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['argb' => self::HEADER_COLOR]
+            ],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_LEFT,
+                'vertical' => Alignment::VERTICAL_CENTER
+            ],
+            'borders' => [
+                'outline' => [
+                    'borderStyle' => Border::BORDER_THICK,
+                    'color' => ['argb' => self::DARK_GRAY]
+                ]
+            ]
+        ]);
+        
+        $this->setRowHeight($sheet, $range, 26);
+    }
+    
+    /**
+     * Apply alternating row styling (Google Sheets-inspired blue theme)
+     */
+    private function styleAlternatingRows($sheet, string $range, bool $isOddRow = false): void
+    {
+        $backgroundColor = $isOddRow ? self::WHITE : self::LIGHT_BLUE;
+        
+        $sheet->getStyle($range)->applyFromArray([
+            'font' => [
+                'size' => 11,
+                'name' => 'Calibri'
+                // Removed color override to preserve currency formatting
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['argb' => $backgroundColor]
+            ],
+            'alignment' => [
+                'vertical' => Alignment::VERTICAL_CENTER
+            ],
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_HAIR,
+                    'color' => ['argb' => self::MEDIUM_BLUE]
+                ]
+            ]
+        ]);
+        
+        $this->setRowHeight($sheet, $range, 18);
+    }
+    
+    /**
+     * Set default text color for non-currency cells
+     */
+    private function setDefaultTextColor($sheet, string $range): void
+    {
+        $sheet->getStyle($range)->getFont()->getColor()->setARGB(self::DARK_GRAY);
+    }
+    
+    /**
+     * Apply professional total row styling - Google Sheets inspired
+     */
+    private function styleTotalRow($sheet, string $range): void
+    {
+        $sheet->getStyle($range)->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'size' => 12,
+                'name' => 'Calibri',
+                'color' => ['argb' => self::DARK_GRAY]
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['argb' => self::TOTAL_ROW_COLOR]
+            ],
+            'alignment' => [
+                'vertical' => Alignment::VERTICAL_CENTER
+            ],
+            'borders' => [
+                'top' => [
+                    'borderStyle' => Border::BORDER_MEDIUM,
+                    'color' => ['argb' => self::DARK_GRAY]
+                ],
+                'bottom' => [
+                    'borderStyle' => Border::BORDER_MEDIUM,
+                    'color' => ['argb' => self::DARK_GRAY]
+                ],
+                'left' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color' => ['argb' => self::MEDIUM_BLUE]
+                ],
+                'right' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color' => ['argb' => self::MEDIUM_BLUE]
+                ]
+            ]
+        ]);
+        
+        $this->setRowHeight($sheet, $range, 20);
+    }
+    
+    /**
+     * Apply currency formatting with conditional colors
+     */
+    private function applyCurrencyFormatting($sheet, string $range, float $value = null, bool $isIncome = false, bool $isExpense = false): void
+    {
+        // Apply number formatting
+        $sheet->getStyle($range)->getNumberFormat()->setFormatCode('#,##0.00');
+        
+        // Apply conditional color coding if value is provided
+        if ($value !== null) {
+            $color = self::NEUTRAL_COLOR; // Default neutral gray
+            
+            if ($isExpense) {
+                // Expenses should always be red (regardless of sign)
+                $color = self::DANGER_COLOR;
+            } elseif ($isIncome) {
+                // Income should be green if positive, neutral if zero/negative
+                $color = $value > 0 ? self::SUCCESS_COLOR : self::NEUTRAL_COLOR;
+            } else {
+                // General case: green for positive, red for negative
+                if ($value > 0) {
+                    $color = self::SUCCESS_COLOR;
+                } elseif ($value < 0) {
+                    $color = self::DANGER_COLOR;
+                }
+            }
+            
+            $sheet->getStyle($range)->getFont()->getColor()->setARGB($color);
+        }
+    }
+    
+    /**
+     * Set row height for a range
+     */
+    private function setRowHeight($sheet, string $range, float $height): void
+    {
+        // Extract row numbers from range
+        if (preg_match('/([0-9]+):.*?([0-9]+)/', $range, $matches)) {
+            $startRow = (int)$matches[1];
+            $endRow = (int)$matches[2];
+            
+            for ($row = $startRow; $row <= $endRow; $row++) {
+                $sheet->getRowDimension($row)->setRowHeight($height);
+            }
+        } elseif (preg_match('/[A-Z]+([0-9]+)/', $range, $matches)) {
+            // Single cell range
+            $row = (int)$matches[1];
+            $sheet->getRowDimension($row)->setRowHeight($height);
+        }
+    }
+    
+    /**
+     * Set dynamic column widths based on content
+     */
+    private function setDynamicColumnWidths($sheet, array $columnWidths): void
+    {
+        foreach ($columnWidths as $column => $width) {
+            $sheet->getColumnDimension($column)->setWidth($width);
+        }
+    }
+    
+    /**
+     * Apply professional table styling to a data range
+     */
+    private function styleDataTable($sheet, string $headerRange, string $dataRange, int $dataStartRow, int $dataEndRow, array $currencyColumns = []): void
+    {
+        // Style header
+        $this->styleHeader($sheet, $headerRange);
+        
+        // Style data rows with alternating colors
+        for ($row = $dataStartRow; $row <= $dataEndRow; $row++) {
+            $isOddRow = ($row - $dataStartRow) % 2 === 0;
+            $rowRange = preg_replace('/[0-9]+:[A-Z]+[0-9]+/', $row . ':' . substr($dataRange, strpos($dataRange, ':') + 1, 1) . $row, $dataRange);
+            $this->styleAlternatingRows($sheet, $rowRange, $isOddRow);
+            
+            // Apply currency formatting to specified columns
+            foreach ($currencyColumns as $column => $isIncome) {
+                $cellRange = $column . $row;
+                $cellValue = $sheet->getCell($cellRange)->getCalculatedValue();
+                if (is_numeric($cellValue)) {
+                    $this->applyCurrencyFormatting($sheet, $cellRange, (float)$cellValue, $isIncome);
+                }
+            }
+        }
     }
 
     /**
@@ -378,6 +759,7 @@ class SpreadsheetExportService
         }
         
         $writer = new Xlsx($this->spreadsheet);
+        $writer->setIncludeCharts(true); // Enable chart writing for LibreOffice compatibility
         $writer->save($filename);
     }
 
@@ -429,22 +811,25 @@ class SpreadsheetExportService
     }
 
     /**
-     * Populate account data in the spreadsheet
+     * Populate account data in the spreadsheet with professional styling
      */
     private function populateAccountData($sheet, array $accountData): void
     {
         $row = 2;
         
-        // Handle HTML data by extracting useful information
-        if (isset($accountData['html'])) {
-            // For now, just add a note that this is HTML data
-            $sheet->setCellValue('A' . $row, 'Data available in HTML format');
-            $sheet->setCellValue('B' . $row, 'See original report');
+        // Debug logging
+        app('log')->info('Account data received for export', ['data' => $accountData]);
+        
+        // Try to extract data from different possible formats
+        if (isset($accountData['html']) && is_string($accountData['html'])) {
+            // Parse HTML to extract account data
+            $this->parseAccountDataFromHtml($sheet, $accountData['html']);
             return;
         }
         
         // If we have structured data, use it
-        if (isset($accountData['accounts'])) {
+        if (isset($accountData['accounts']) && is_array($accountData['accounts'])) {
+            $startDataRow = $row;
             foreach ($accountData['accounts'] as $account) {
                 $sheet->setCellValue('A' . $row, $account['name'] ?? 'N/A');
                 $sheet->setCellValue('B' . $row, $this->formatCurrency($account['start_balance'] ?? 0));
@@ -452,75 +837,192 @@ class SpreadsheetExportService
                 $sheet->setCellValue('D' . $row, $this->formatCurrency(($account['end_balance'] ?? 0) - ($account['start_balance'] ?? 0)));
                 $sheet->setCellValue('E' . $row, $account['currency_symbol'] ?? '');
                 
-                // Apply number formatting for currency columns
-                $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-                $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-                $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                // Apply professional currency formatting with conditional colors
+                $startBalance = (float)($account['start_balance'] ?? 0);
+                $endBalance = (float)($account['end_balance'] ?? 0);
+                $difference = $endBalance - $startBalance;
                 
-                // Apply color coding for difference column
-                $difference = ($account['end_balance'] ?? 0) - ($account['start_balance'] ?? 0);
-                if ($difference > 0) {
-                    $sheet->getStyle('D' . $row)->getFont()->getColor()->setARGB(self::SUCCESS_COLOR);
-                } elseif ($difference < 0) {
-                    $sheet->getStyle('D' . $row)->getFont()->getColor()->setARGB(self::DANGER_COLOR);
-                }
+                $this->applyCurrencyFormatting($sheet, 'B' . $row, $startBalance, false);
+                $this->applyCurrencyFormatting($sheet, 'C' . $row, $endBalance, false);
+                $this->applyCurrencyFormatting($sheet, 'D' . $row, $difference, false);
+                
+                // Apply alternating row styling
+                $isOddRow = ($row - $startDataRow) % 2 === 0;
+                $this->styleAlternatingRows($sheet, 'A' . $row . ':E' . $row, $isOddRow);
+                
+                // Set default text color for non-currency columns (name and currency symbol)
+                $this->setDefaultTextColor($sheet, 'A' . $row);
+                $this->setDefaultTextColor($sheet, 'E' . $row);
                 
                 $row++;
+            }
+            
+            // Add totals grouped by currency if we have multiple accounts
+            if ($row > $startDataRow + 1) {
+                $row++; // Empty separator row
+                $endDataRow = $row - 2;
+                
+                // Group accounts by currency for separate totals
+                $currencyTotals = [];
+                foreach ($accountData['accounts'] as $account) {
+                    $currency = $account['currency_symbol'] ?? 'Unknown';
+                    if (!isset($currencyTotals[$currency])) {
+                        $currencyTotals[$currency] = [
+                            'start_balance' => 0,
+                            'end_balance' => 0,
+                            'difference' => 0
+                        ];
+                    }
+                    $currencyTotals[$currency]['start_balance'] += (float)($account['start_balance'] ?? 0);
+                    $currencyTotals[$currency]['end_balance'] += (float)($account['end_balance'] ?? 0);
+                    $currencyTotals[$currency]['difference'] += (float)(($account['end_balance'] ?? 0) - ($account['start_balance'] ?? 0));
+                }
+                
+                // Add professional total rows for each currency
+                foreach ($currencyTotals as $currency => $totals) {
+                    $sheet->setCellValue('A' . $row, sprintf('TOTAL (%s)', $currency));
+                    $sheet->setCellValue('B' . $row, $this->formatCurrency($totals['start_balance']));
+                    $sheet->setCellValue('C' . $row, $this->formatCurrency($totals['end_balance']));
+                    $sheet->setCellValue('D' . $row, $this->formatCurrency($totals['difference']));
+                    $sheet->setCellValue('E' . $row, $currency);
+                    
+                    // Apply professional total row styling
+                    $this->styleTotalRow($sheet, 'A' . $row . ':E' . $row);
+                    
+                    // Apply professional currency formatting with conditional colors
+                    $this->applyCurrencyFormatting($sheet, 'B' . $row, $totals['start_balance'], false);
+                    $this->applyCurrencyFormatting($sheet, 'C' . $row, $totals['end_balance'], false);
+                    $this->applyCurrencyFormatting($sheet, 'D' . $row, $totals['difference'], false);
+                    
+                    $row++;
+                }
+            }
+        } else {
+            // Try to use the accounts collection directly
+            $startDataRow = $row;
+            foreach ($this->accounts as $account) {
+                $sheet->setCellValue('A' . $row, $account->name);
+                $sheet->setCellValue('B' . $row, 'N/A');
+                $sheet->setCellValue('C' . $row, 'N/A');
+                $sheet->setCellValue('D' . $row, 'N/A');
+                $sheet->setCellValue('E' . $row, $account->currency ? $account->currency->symbol : '');
+                $row++;
+            }
+            
+            // Add note about totals not being available
+            if ($row > $startDataRow + 1) {
+                $row++;
+                $sheet->setCellValue('A' . $row, 'TOTALS - Not available without structured data');
+                $sheet->getStyle('A' . $row . ':E' . $row)->getFont()->setBold(true);
+                $sheet->getStyle('A' . $row . ':E' . $row)->getFill()
+                    ->setFillType(Fill::FILL_SOLID)
+                    ->getStartColor()->setARGB('FFE6E6');
             }
         }
     }
 
     /**
-     * Populate balance data in the spreadsheet
+     * Populate balance data in the spreadsheet (Income vs Expenses summary)
      */
     private function populateBalanceData($sheet, array $balanceData): void
     {
         $row = 2;
         
+        // Debug logging
+        app('log')->info('Balance data received for export', ['data' => $balanceData]);
+        
         // Handle HTML data by extracting useful information
-        if (isset($balanceData['html'])) {
-            // For now, just add a note that this is HTML data
-            $sheet->setCellValue('A' . $row, 'Data available in HTML format');
-            $sheet->setCellValue('B' . $row, 'See original report');
+        if (isset($balanceData['html']) && is_string($balanceData['html'])) {
+            $this->parseBalanceDataFromHtml($sheet, $balanceData['html']);
             return;
         }
         
-        // If we have structured data, use it
-        if (isset($balanceData['income'])) {
-            $sheet->setCellValue('A' . $row, 'Income');
-            $sheet->setCellValue('B' . $row, $this->formatCurrency($balanceData['income']));
-            $sheet->setCellValue('C' . $row, $balanceData['currency_symbol'] ?? '');
-            $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->getStyle('B' . $row)->getFont()->getColor()->setARGB(self::SUCCESS_COLOR);
-            $row++;
-        }
-        
-        if (isset($balanceData['expenses'])) {
-            $sheet->setCellValue('A' . $row, 'Expenses');
-            $sheet->setCellValue('B' . $row, $this->formatCurrency($balanceData['expenses']));
-            $sheet->setCellValue('C' . $row, $balanceData['currency_symbol'] ?? '');
-            $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->getStyle('B' . $row)->getFont()->getColor()->setARGB(self::DANGER_COLOR);
-            $row++;
-        }
-        
-        if (isset($balanceData['difference'])) {
-            $sheet->setCellValue('A' . $row, 'Net Result');
-            $sheet->setCellValue('B' . $row, $this->formatCurrency($balanceData['difference']));
-            $sheet->setCellValue('C' . $row, $balanceData['currency_symbol'] ?? '');
-            $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+        // If we have operations data with currency breakdown
+        if (isset($balanceData['operations']) && is_array($balanceData['operations'])) {
+            $operations = $balanceData['operations'];
+            $startRow = $row;
             
-            // Apply color coding based on positive/negative
-            $difference = $balanceData['difference'];
-            if ($difference > 0) {
+            foreach ($operations as $currencyId => $data) {
+                $currency = $data['currency_symbol'] ?? $data['currency_code'] ?? '';
+                
+                // Income row with alternating styling
+                $sheet->setCellValue('A' . $row, sprintf('Income (%s)', $currency));
+                $sheet->setCellValue('B' . $row, $this->formatCurrency((float)($data['in'] ?? 0)));
+                $sheet->setCellValue('C' . $row, $currency);
+                $isOddRow = ($row - $startRow) % 2 === 0;
+                $this->styleAlternatingRows($sheet, 'A' . $row . ':C' . $row, $isOddRow);
+                $this->applyCurrencyFormatting($sheet, 'B' . $row, (float)($data['in'] ?? 0), true);
+                // Set default text color for non-currency columns
+                $this->setDefaultTextColor($sheet, 'A' . $row);
+                $this->setDefaultTextColor($sheet, 'C' . $row);
+                $row++;
+                
+                // Expenses row with alternating styling
+                $sheet->setCellValue('A' . $row, sprintf('Expenses (%s)', $currency));
+                $sheet->setCellValue('B' . $row, $this->formatCurrency((float)($data['out'] ?? 0)));
+                $sheet->setCellValue('C' . $row, $currency);
+                $isOddRow = ($row - $startRow) % 2 === 0;
+                $this->styleAlternatingRows($sheet, 'A' . $row . ':C' . $row, $isOddRow);
+                $this->applyCurrencyFormatting($sheet, 'B' . $row, (float)($data['out'] ?? 0), false, true);
+                // Set default text color for non-currency columns
+                $this->setDefaultTextColor($sheet, 'A' . $row);
+                $this->setDefaultTextColor($sheet, 'C' . $row);
+                $row++;
+                
+                // Total row using SUM formula with professional styling
+                $incomeRow = $row - 2; // Income row is 2 rows above
+                $expenseRow = $row - 1; // Expense row is 1 row above
+                $netResult = (float)($data['sum'] ?? 0);
+                $sheet->setCellValue('A' . $row, sprintf('TOTAL (%s)', $currency));
+                $sheet->setCellValue('B' . $row, sprintf('=B%d+B%d', $incomeRow, $expenseRow));
+                $sheet->setCellValue('C' . $row, $currency);
+                $this->styleTotalRow($sheet, 'A' . $row . ':C' . $row);
+                $this->applyCurrencyFormatting($sheet, 'B' . $row, $netResult, false);
+                $row++;
+                
+                // Add separator
+                if (count($operations) > 1) {
+                    $row++;
+                }
+            }
+        } else {
+            // Fallback to old structure
+            if (isset($balanceData['income'])) {
+                $sheet->setCellValue('A' . $row, 'Income');
+                $sheet->setCellValue('B' . $row, $this->formatCurrency($balanceData['income']));
+                $sheet->setCellValue('C' . $row, $balanceData['currency_symbol'] ?? '');
+                $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
                 $sheet->getStyle('B' . $row)->getFont()->getColor()->setARGB(self::SUCCESS_COLOR);
-            } elseif ($difference < 0) {
-                $sheet->getStyle('B' . $row)->getFont()->getColor()->setARGB(self::DANGER_COLOR);
+                $row++;
             }
             
-            // Make the net result row bold
-            $sheet->getStyle('A' . $row . ':C' . $row)->getFont()->setBold(true);
-            $row++;
+            if (isset($balanceData['expenses'])) {
+                $sheet->setCellValue('A' . $row, 'Expenses');
+                $sheet->setCellValue('B' . $row, $this->formatCurrency($balanceData['expenses']));
+                $sheet->setCellValue('C' . $row, $balanceData['currency_symbol'] ?? '');
+                $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle('B' . $row)->getFont()->getColor()->setARGB(self::DANGER_COLOR);
+                $row++;
+            }
+            
+            if (isset($balanceData['difference'])) {
+                // Calculate TOTAL as formula (Income + Expenses) - fallback version
+                $incomeRow = $row - 2; // Income should be 2 rows above
+                $expenseRow = $row - 1; // Expenses should be 1 row above
+                $sheet->setCellValue('A' . $row, 'TOTAL');
+                $sheet->setCellValue('B' . $row, sprintf('=B%d+B%d', $incomeRow, $expenseRow)); // Formula calculation
+                $sheet->setCellValue('C' . $row, $balanceData['currency_symbol'] ?? '');
+                $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                
+                $sheet->getStyle('A' . $row . ':C' . $row)->getFont()->setBold(true);
+                $row++;
+            }
+        }
+        
+        // If no structured data, show data not available
+        if ($row === 2) {
+            $sheet->setCellValue('A' . $row, 'No balance data available');
+            $sheet->setCellValue('B' . $row, 'Check report data source');
         }
     }
 
@@ -537,7 +1039,16 @@ class SpreadsheetExportService
      */
     private function createChartSheets(): void
     {
+
+        // Debug logging for chart data
+        app('log')->info('Chart creation started', [
+            'has_charts' => isset($this->reportData['charts']),
+            'charts_empty' => empty($this->reportData['charts'] ?? []),
+            'chart_keys' => array_keys($this->reportData['charts'] ?? []),
+            'report_data_keys' => array_keys($this->reportData)
+        ]);
         if (!isset($this->reportData['charts']) || empty($this->reportData['charts'])) {
+            app('log')->warning('No chart data available for export');
             return;
         }
 
@@ -845,11 +1356,67 @@ class SpreadsheetExportService
     }
 
     /**
+     * Create Income vs Expenses chart with monthly breakdown
+     */
+    private function createIncomeVsExpensesChart(array $balanceData): void
+    {
+        try {
+            // Create new worksheet for the chart
+            $chartSheet = $this->spreadsheet->createSheet();
+            $chartSheet->setTitle('Income vs Expenses Chart');
+            
+            // Get monthly breakdown data using AccountTasker
+            $monthlyData = $this->getMonthlyIncomeExpensesData();
+            
+            if (!empty($monthlyData['labels'])) {
+                // Create chart data in Chart.js format with monthly breakdown
+                $chartData = [
+                    'labels' => $monthlyData['labels'], // Month names
+                    'datasets' => [
+                        [
+                            'label' => 'Income',
+                            'data' => $monthlyData['income']
+                        ],
+                        [
+                            'label' => 'Expenses', 
+                            'data' => $monthlyData['expenses']
+                        ]
+                    ]
+                ];
+                
+                // Prepare data worksheet
+                $dataWorksheet = $this->prepareChartData($chartSheet, $chartData, 'Income vs Expenses by Month');
+                
+                // Create bar chart
+                $chart = $this->createBarChart(
+                    $dataWorksheet,
+                    $chartData,
+                    'Income vs Expenses by Month'
+                );
+                
+                if ($chart !== null) {
+                    $chartSheet->addChart($chart);
+                }
+            } else {
+                // No data available - add a message
+                $chartSheet->setCellValue('A1', 'Income vs Expenses Chart');
+                $chartSheet->setCellValue('A3', 'No monthly chart data available');
+                $this->styleHeader($chartSheet, 'A1:C1');
+            }
+        } catch (\Exception $e) {
+            app('log')->error(sprintf('Failed to create income vs expenses chart: %s', $e->getMessage()));
+        }
+    }
+
+    /**
      * Create default charts for standard reports
      */
     private function createDefaultCharts(): void
     {
-        // Default charts are handled by createGeneralCharts()
+        // Create Income vs Expenses chart if balance data is available
+        if (isset($this->reportData['balance']) && !empty($this->reportData['balance'])) {
+            $this->createIncomeVsExpensesChart($this->reportData['balance']);
+        }
     }
 
     /**
@@ -862,15 +1429,16 @@ class SpreadsheetExportService
     }
 
     /**
-     * Prepare chart data in worksheet
+     * Prepare chart data in worksheet with professional styling
      */
     private function prepareChartData($worksheet, array $chartData, string $title)
     {
-        // Add title
+        // Add professional chart title
         $worksheet->setCellValue('A1', $title);
-        $this->styleHeader($worksheet, 'A1:C1');
+        $this->styleSectionHeader($worksheet, 'A1:E1');
         
         $row = 3;
+        $dataStartRow = $row;
         
         // Handle different chart data formats
         if (isset($chartData['labels']) && isset($chartData['datasets'])) {
@@ -881,38 +1449,97 @@ class SpreadsheetExportService
             // Headers
             $worksheet->setCellValue('A2', 'Label');
             $col = 'B';
+            $colCount = 1;
             foreach ($datasets as $dataset) {
                 $worksheet->setCellValue($col . '2', $dataset['label'] ?? 'Data');
                 $col++;
+                $colCount++;
             }
             
-            // Data
+            // Style headers
+            $headerRange = 'A2:' . chr(65 + $colCount) . '2';
+            $this->styleHeader($worksheet, $headerRange);
+            
+            // Data with alternating row styling
             foreach ($labels as $index => $label) {
                 $worksheet->setCellValue('A' . $row, $label);
                 $col = 'B';
-                foreach ($datasets as $dataset) {
+                foreach ($datasets as $datasetIndex => $dataset) {
                     $value = $dataset['data'][$index] ?? 0;
                     $worksheet->setCellValue($col . $row, $this->formatCurrency((float)$value));
+                    
+                    // Apply currency formatting with appropriate color
+                    $isIncome = isset($dataset['label']) && stripos($dataset['label'], 'income') !== false;
+                    $this->applyCurrencyFormatting($worksheet, $col . $row, (float)$value, $isIncome);
+                    
                     $col++;
                 }
+                
+                // Apply alternating row styling
+                $isOddRow = ($row - $dataStartRow) % 2 === 0;
+                $rowRange = 'A' . $row . ':' . chr(65 + $colCount) . $row;
+                $this->styleAlternatingRows($worksheet, $rowRange, $isOddRow);
+                
                 $row++;
             }
         } elseif (is_array($chartData) && !empty($chartData)) {
             // Simple key-value format
             $worksheet->setCellValue('A2', 'Category');
             $worksheet->setCellValue('B2', 'Value');
+            $this->styleHeader($worksheet, 'A2:B2');
             
             foreach ($chartData as $key => $value) {
                 $worksheet->setCellValue('A' . $row, $key);
                 $worksheet->setCellValue('B' . $row, $this->formatCurrency((float)$value));
+                
+                // Apply currency formatting and alternating row styling
+                $this->applyCurrencyFormatting($worksheet, 'B' . $row, (float)$value, false);
+                $isOddRow = ($row - $dataStartRow) % 2 === 0;
+                $this->styleAlternatingRows($worksheet, 'A' . $row . ':B' . $row, $isOddRow);
+                
                 $row++;
             }
         }
         
-        // Style the headers
-        $this->styleHeader($worksheet, 'A2:C2');
+        // Set dynamic column widths
+        $this->setDynamicColumnWidths($worksheet, [
+            'A' => 20, 'B' => 15, 'C' => 15, 'D' => 15, 'E' => 15
+        ]);
         
         return $worksheet;
+    }
+    
+    /**
+     * Get chart color from Firefly III palette
+     */
+    private function getChartColor(int $index): string
+    {
+        return self::CHART_COLORS[$index % count(self::CHART_COLORS)];
+    }
+    
+    /**
+     * Apply professional chart theming
+     */
+    private function applyChartTheming(Chart $chart): void
+    {
+        try {
+            // Get plot area for styling
+            $plotArea = $chart->getPlotArea();
+            if ($plotArea) {
+                $dataSeries = $plotArea->getPlotGroupByIndex(0)->getDataSeriesCollection();
+                
+                // Apply Firefly III colors to each data series
+                foreach ($dataSeries as $seriesIndex => $series) {
+                    $color = $this->getChartColor($seriesIndex);
+                    
+                    // Apply color theming (this varies by chart type and PhpSpreadsheet version)
+                    // Note: PhpSpreadsheet has limited chart customization capabilities
+                    // The colors will be more prominent in the data table styling
+                }
+            }
+        } catch (\Exception $e) {
+            app('log')->warning('Failed to apply chart theming: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -939,7 +1566,7 @@ class SpreadsheetExportService
                     // Series label
                     $dataSeriesLabels[] = new DataSeriesValues(
                         DataSeriesValues::DATASERIES_TYPE_STRING,
-                        $worksheet->getTitle() . '!' . '$' . $colLetter . '$2',
+                        $this->getQuotedWorksheetName($worksheet->getTitle()) . '!' . '$' . $colLetter . '$2',
                         null,
                         1
                     );
@@ -947,14 +1574,14 @@ class SpreadsheetExportService
                     // Series values
                     $dataSeriesValues[] = new DataSeriesValues(
                         DataSeriesValues::DATASERIES_TYPE_NUMBER,
-                        $worksheet->getTitle() . '!' . '$' . $colLetter . '$3:$' . $colLetter . '$' . (2 + $rowCount),
+                        $this->getQuotedWorksheetName($worksheet->getTitle()) . '!' . '$' . $colLetter . '$3:$' . $colLetter . '$' . (2 + $rowCount),
                         null,
                         $rowCount
                     );
                 }
                 
                 // Category labels (X-axis)
-                $xAxisRange = $worksheet->getTitle() . '!' . '$A$3:$A$' . (2 + $rowCount);
+                $xAxisRange = $this->getQuotedWorksheetName($worksheet->getTitle()) . '!' . '$A$3:$A$' . (2 + $rowCount);
             }
             
             // Create data series
@@ -1031,7 +1658,7 @@ class SpreadsheetExportService
             $dataSeriesLabels = [
                 new DataSeriesValues(
                     DataSeriesValues::DATASERIES_TYPE_STRING,
-                    $worksheet->getTitle() . '!' . '$B$2',
+                    $this->getQuotedWorksheetName($worksheet->getTitle()) . '!' . '$B$2',
                     null,
                     1
                 )
@@ -1040,7 +1667,7 @@ class SpreadsheetExportService
             $dataSeriesValues = [
                 new DataSeriesValues(
                     DataSeriesValues::DATASERIES_TYPE_NUMBER,
-                    $worksheet->getTitle() . '!' . '$B$3:$B$' . $lastRow,
+                    $this->getQuotedWorksheetName($worksheet->getTitle()) . '!' . '$B$3:$B$' . $lastRow,
                     null,
                     $lastRow - 2
                 )
@@ -1048,7 +1675,7 @@ class SpreadsheetExportService
             
             $xAxisLabels = new DataSeriesValues(
                 DataSeriesValues::DATASERIES_TYPE_STRING,
-                $worksheet->getTitle() . '!' . '$A$3:$A$' . $lastRow,
+                $this->getQuotedWorksheetName($worksheet->getTitle()) . '!' . '$A$3:$A$' . $lastRow,
                 null,
                 $lastRow - 2
             );
@@ -1118,7 +1745,7 @@ class SpreadsheetExportService
                     // Series label
                     $dataSeriesLabels[] = new DataSeriesValues(
                         DataSeriesValues::DATASERIES_TYPE_STRING,
-                        $worksheet->getTitle() . '!' . '$' . $colLetter . '$2',
+                        $this->getQuotedWorksheetName($worksheet->getTitle()) . '!' . '$' . $colLetter . '$2',
                         null,
                         1
                     );
@@ -1126,14 +1753,14 @@ class SpreadsheetExportService
                     // Series values
                     $dataSeriesValues[] = new DataSeriesValues(
                         DataSeriesValues::DATASERIES_TYPE_NUMBER,
-                        $worksheet->getTitle() . '!' . '$' . $colLetter . '$3:$' . $colLetter . '$' . (2 + $rowCount),
+                        $this->getQuotedWorksheetName($worksheet->getTitle()) . '!' . '$' . $colLetter . '$3:$' . $colLetter . '$' . (2 + $rowCount),
                         null,
                         $rowCount
                     );
                 }
                 
                 // Category labels (X-axis)
-                $xAxisRange = $worksheet->getTitle() . '!' . '$A$3:$A$' . (2 + $rowCount);
+                $xAxisRange = $this->getQuotedWorksheetName($worksheet->getTitle()) . '!' . '$A$3:$A$' . (2 + $rowCount);
             }
             
             // Create data series
@@ -1182,6 +1809,649 @@ class SpreadsheetExportService
         } catch (\Exception $e) {
             app('log')->error(sprintf('Failed to create bar chart: %s', $e->getMessage()));
             return null;
+        }
+    }
+
+    /**
+     * Parse account data from HTML response
+     */
+    private function parseAccountDataFromHtml($sheet, string $html): void
+    {
+        $row = 2;
+        
+        // Try to extract data from HTML table (basic approach)
+        if (preg_match_all('/<tr.*?>(.*?)<\/tr>/s', $html, $matches)) {
+            foreach ($matches[1] as $tableRow) {
+                if (preg_match_all('/<td.*?>(.*?)<\/td>/s', $tableRow, $cellMatches)) {
+                    $cells = $cellMatches[1];
+                    if (count($cells) >= 2) {
+                        // Extract account name (remove HTML tags)
+                        $accountName = strip_tags($cells[0]);
+                        if (!empty(trim($accountName)) && trim($accountName) !== 'Account') {
+                            $sheet->setCellValue('A' . $row, trim($accountName));
+                            $sheet->setCellValue('B' . $row, 'See web report');
+                            $sheet->setCellValue('C' . $row, 'See web report');
+                            $sheet->setCellValue('D' . $row, 'See web report');
+                            $row++;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if ($row === 2) {
+            $sheet->setCellValue('A' . $row, 'No account data parsed from HTML');
+            $sheet->setCellValue('B' . $row, 'Check data collection process');
+        }
+    }
+
+    /**
+     * Parse balance data from HTML response
+     */
+    private function parseBalanceDataFromHtml($sheet, string $html): void
+    {
+        $row = 2;
+        
+        // Extract balance information from HTML
+        if (preg_match('/income.*?([0-9,.]+)/i', strip_tags($html), $matches)) {
+            $sheet->setCellValue('A' . $row, 'Income');
+            $sheet->setCellValue('B' . $row, $matches[1]);
+            $sheet->setCellValue('C' . $row, 'From HTML');
+            $row++;
+        }
+        
+        if (preg_match('/expense.*?([0-9,.]+)/i', strip_tags($html), $matches)) {
+            $sheet->setCellValue('A' . $row, 'Expenses');
+            $sheet->setCellValue('B' . $row, $matches[1]);
+            $sheet->setCellValue('C' . $row, 'From HTML');
+            $row++;
+        }
+        
+        if ($row === 2) {
+            $sheet->setCellValue('A' . $row, 'No balance data parsed from HTML');
+            $sheet->setCellValue('B' . $row, 'Check data collection process');
+        }
+    }
+
+    /**
+     * Populate income data in the spreadsheet
+     */
+    private function populateIncomeData($sheet, array $incomeData): void
+    {
+        $row = 2;
+        
+        app('log')->info('Income data received for export', ['data' => $incomeData]);
+        
+        // Handle HTML data
+        if (isset($incomeData['html']) && is_string($incomeData['html'])) {
+            $this->parseIncomeDataFromHtml($sheet, $incomeData['html']);
+            return;
+        }
+        
+        // Handle structured data with professional styling
+        if (isset($incomeData['accounts']) && is_array($incomeData['accounts'])) {
+            $startDataRow = $row;
+            foreach ($incomeData['accounts'] as $accountKey => $account) {
+                $sheet->setCellValue('A' . $row, $account['name'] ?? 'N/A');
+                $sheet->setCellValue('B' . $row, $this->formatCurrency((float)($account['sum'] ?? 0)));
+                $sheet->setCellValue('C' . $row, $account['currency_symbol'] ?? '');
+                
+                // Apply professional styling and formatting
+                $amount = (float)($account['sum'] ?? 0);
+                $this->applyCurrencyFormatting($sheet, 'B' . $row, $amount, true);
+                
+                // Apply alternating row styling
+                $isOddRow = ($row - $startDataRow) % 2 === 0;
+                $this->styleAlternatingRows($sheet, 'A' . $row . ':C' . $row, $isOddRow);
+                
+                // Set default text color for non-currency columns
+                $this->setDefaultTextColor($sheet, 'A' . $row);
+                $this->setDefaultTextColor($sheet, 'C' . $row);
+                
+                $row++;
+            }
+            
+            // Add totals if we have sums data
+            if (isset($incomeData['sums']) && is_array($incomeData['sums'])) {
+                $row++; // Empty row separator
+                
+                // Calculate range for SUM formula - sum all income rows for this currency
+                $endDataRow = $row - 2; // Last data row before separator
+                $sumFormula = sprintf('=SUM(B%d:B%d)', $startDataRow, $endDataRow);
+                
+                foreach ($incomeData['sums'] as $currencyId => $sum) {
+                    $sheet->setCellValue('A' . $row, sprintf('TOTAL (%s)', $sum['currency_symbol'] ?? $sum['currency_code'] ?? ''));
+                    $sheet->setCellValue('B' . $row, $sumFormula); // Use SUM formula instead of hardcoded value
+                    $sheet->setCellValue('C' . $row, $sum['currency_symbol'] ?? '');
+                    
+                    // Apply professional total row styling
+                    $this->styleTotalRow($sheet, 'A' . $row . ':C' . $row);
+                    
+                    // Apply professional currency formatting for income
+                    $amount = (float)($sum['sum'] ?? 0);
+                    $this->applyCurrencyFormatting($sheet, 'B' . $row, $amount, true);
+                    
+                    $row++;
+                }
+            }
+        } else {
+            $sheet->setCellValue('A' . $row, 'No income data available');
+        }
+    }
+
+    /**
+     * Populate expenses data in the spreadsheet
+     */
+    private function populateExpensesData($sheet, array $expensesData): void
+    {
+        $row = 2;
+        
+        app('log')->info('Expenses data received for export', ['data' => $expensesData]);
+        
+        // Handle HTML data
+        if (isset($expensesData['html']) && is_string($expensesData['html'])) {
+            $this->parseExpensesDataFromHtml($sheet, $expensesData['html']);
+            return;
+        }
+        
+        // Handle structured data with professional styling
+        if (isset($expensesData['accounts']) && is_array($expensesData['accounts'])) {
+            $startDataRow = $row;
+            foreach ($expensesData['accounts'] as $accountKey => $account) {
+                $sheet->setCellValue('A' . $row, $account['name'] ?? 'N/A');
+                $sheet->setCellValue('B' . $row, $this->formatCurrency((float)($account['sum'] ?? 0)));
+                $sheet->setCellValue('C' . $row, $account['currency_symbol'] ?? '');
+                
+                // Apply professional styling and formatting
+                $amount = (float)($account['sum'] ?? 0);
+                $this->applyCurrencyFormatting($sheet, 'B' . $row, $amount, false, true);
+                
+                // Apply alternating row styling
+                $isOddRow = ($row - $startDataRow) % 2 === 0;
+                $this->styleAlternatingRows($sheet, 'A' . $row . ':C' . $row, $isOddRow);
+                
+                // Set default text color for non-currency columns
+                $this->setDefaultTextColor($sheet, 'A' . $row);
+                $this->setDefaultTextColor($sheet, 'C' . $row);
+                
+                $row++;
+            }
+            
+            // Add totals if we have sums data
+            if (isset($expensesData['sums']) && is_array($expensesData['sums'])) {
+                $row++; // Empty row separator
+                
+                // Calculate range for SUM formula - sum all expense rows for this currency
+                $endDataRow = $row - 2; // Last data row before separator
+                $sumFormula = sprintf('=SUM(B%d:B%d)', $startDataRow, $endDataRow);
+                
+                foreach ($expensesData['sums'] as $currencyId => $sum) {
+                    $sheet->setCellValue('A' . $row, sprintf('TOTAL (%s)', $sum['currency_symbol'] ?? $sum['currency_code'] ?? ''));
+                    $sheet->setCellValue('B' . $row, $sumFormula); // Use SUM formula instead of hardcoded value
+                    $sheet->setCellValue('C' . $row, $sum['currency_symbol'] ?? '');
+                    
+                    // Apply professional total row styling
+                    $this->styleTotalRow($sheet, 'A' . $row . ':C' . $row);
+                    
+                    // Apply professional currency formatting for expenses
+                    $amount = (float)($sum['sum'] ?? 0);
+                    $this->applyCurrencyFormatting($sheet, 'B' . $row, $amount, false, true);
+                    
+                    $row++;
+                }
+            }
+        } else {
+            $sheet->setCellValue('A' . $row, 'No expenses data available');
+        }
+    }
+
+    /**
+     * Parse income data from HTML response
+     */
+    private function parseIncomeDataFromHtml($sheet, string $html): void
+    {
+        $this->parseAccountOperationsFromHtml($sheet, $html, 'income');
+    }
+
+    /**
+     * Parse expenses data from HTML response
+     */
+    private function parseExpensesDataFromHtml($sheet, string $html): void
+    {
+        $this->parseAccountOperationsFromHtml($sheet, $html, 'expenses');
+    }
+
+    /**
+     * Parse account operations data from HTML
+     */
+    private function parseAccountOperationsFromHtml($sheet, string $html, string $type): void
+    {
+        $row = 2;
+        
+        // Try to extract data from HTML table
+        if (preg_match_all('/<tr.*?>(.*?)<\/tr>/s', $html, $matches)) {
+            foreach ($matches[1] as $tableRow) {
+                if (preg_match_all('/<td.*?>(.*?)<\/td>/s', $tableRow, $cellMatches)) {
+                    $cells = $cellMatches[1];
+                    if (count($cells) >= 2) {
+                        $accountName = strip_tags($cells[0]);
+                        if (!empty(trim($accountName)) && trim($accountName) !== 'Account' && trim($accountName) !== $type) {
+                            $sheet->setCellValue('A' . $row, trim($accountName));
+                            $sheet->setCellValue('B' . $row, 'See web report');
+                            $sheet->setCellValue('C' . $row, 'N/A');
+                            $row++;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if ($row === 2) {
+            $sheet->setCellValue('A' . $row, sprintf('No %s data parsed from HTML', $type));
+        }
+    }
+
+    /**
+     * Populate categories data in the spreadsheet
+     */
+    private function populateCategoriesData($sheet, array $categoriesData): void
+    {
+        $row = 2;
+        
+        app('log')->info('Categories data received for export', ['data' => $categoriesData]);
+        
+        // Handle structured data from CategoryReportGenerator with alternating styling
+        if (isset($categoriesData['categories']) && is_array($categoriesData['categories'])) {
+            $startDataRow = $row;
+            
+            foreach ($categoriesData['categories'] as $categoryKey => $category) {
+                // Handle both 'name' and 'title' fields, and provide proper fallback for no category
+                $categoryName = $category['name'] ?? $category['title'] ?? null;
+                if (empty($categoryName) || $categoryName === 'No category') {
+                    $categoryName = '(No category)';
+                }
+                
+                $sheet->setCellValue('A' . $row, $categoryName);
+                $sheet->setCellValue('B' . $row, $this->formatCurrency((float)($category['spent'] ?? 0)));
+                $sheet->setCellValue('C' . $row, $this->formatCurrency((float)($category['earned'] ?? 0)));
+                $sheet->setCellValue('D' . $row, $this->formatCurrency((float)($category['sum'] ?? 0)));
+                $sheet->setCellValue('E' . $row, $category['currency_symbol'] ?? '');
+                
+                // Apply alternating row styling
+                $isOddRow = ($row - $startDataRow) % 2 === 0;
+                $this->styleAlternatingRows($sheet, 'A' . $row . ':E' . $row, $isOddRow);
+                
+                // Apply currency formatting with color coding
+                $this->applyCurrencyFormatting($sheet, 'B' . $row, (float)($category['spent'] ?? 0), false, true); // Spent (expenses)
+                $this->applyCurrencyFormatting($sheet, 'C' . $row, (float)($category['earned'] ?? 0), true); // Earned (income)
+                $this->applyCurrencyFormatting($sheet, 'D' . $row, (float)($category['sum'] ?? 0), false); // Net sum
+                
+                // Set default text color for non-currency columns
+                $this->setDefaultTextColor($sheet, 'A' . $row);
+                $this->setDefaultTextColor($sheet, 'E' . $row);
+                
+                $row++;
+            }
+            
+            // Add totals if we have sums data
+            if (isset($categoriesData['sums']) && is_array($categoriesData['sums'])) {
+                $row++; // Empty separator row
+                
+                foreach ($categoriesData['sums'] as $currencyId => $sum) {
+                    $currency = $sum['currency_symbol'] ?? $sum['currency_code'] ?? '';
+                    $sheet->setCellValue('A' . $row, sprintf('TOTAL (%s)', $currency));
+                    $sheet->setCellValue('B' . $row, $this->formatCurrency((float)($sum['spent'] ?? 0)));
+                    $sheet->setCellValue('C' . $row, $this->formatCurrency((float)($sum['earned'] ?? 0)));
+                    $sheet->setCellValue('D' . $row, $this->formatCurrency((float)($sum['sum'] ?? 0)));
+                    $sheet->setCellValue('E' . $row, $currency);
+                    
+                    // Apply professional total row styling
+                    $this->styleTotalRow($sheet, 'A' . $row . ':E' . $row);
+                    
+                    // Apply currency formatting with color coding
+                    $this->applyCurrencyFormatting($sheet, 'B' . $row, (float)($sum['spent'] ?? 0), false, true);
+                    $this->applyCurrencyFormatting($sheet, 'C' . $row, (float)($sum['earned'] ?? 0), true);
+                    $this->applyCurrencyFormatting($sheet, 'D' . $row, (float)($sum['sum'] ?? 0), false);
+                    
+                    $row++;
+                }
+            }
+        } else {
+            $sheet->setCellValue('A' . $row, 'No categories data available');
+        }
+    }
+
+    /**
+     * Get monthly income vs expenses data for chart
+     */
+    private function getMonthlyIncomeExpensesData(): array
+    {
+        try {
+            $tasker = app(AccountTaskerInterface::class);
+            $tasker->setUser($this->user);
+            
+            $labels = [];
+            $incomeData = [];
+            $expenseData = [];
+            
+            // Create monthly intervals from start to end date
+            $current = $this->start->copy()->startOfMonth();
+            $end = $this->end->copy()->endOfMonth();
+            
+            while ($current <= $end) {
+                $monthStart = $current->copy()->startOfMonth();
+                $monthEnd = $current->copy()->endOfMonth();
+                
+                // Only process months that overlap with our date range
+                if ($monthEnd >= $this->start && $monthStart <= $this->end) {
+                    $actualStart = $monthStart < $this->start ? $this->start : $monthStart;
+                    $actualEnd = $monthEnd > $this->end ? $this->end : $monthEnd;
+                    
+                    $labels[] = $current->format('M Y');
+                    
+                    // Get income and expense totals for this month
+                    $incomes = $tasker->getIncomeReport($actualStart, $actualEnd, $this->accounts);
+                    $expenses = $tasker->getExpenseReport($actualStart, $actualEnd, $this->accounts);
+                    
+                    // Sum across all currencies (using first currency found for simplicity)
+                    $monthlyIncome = 0;
+                    $monthlyExpense = 0;
+                    
+                    foreach ($incomes['sums'] as $currencyData) {
+                        $monthlyIncome += (float)($currencyData['sum'] ?? 0);
+                    }
+                    
+                    foreach ($expenses['sums'] as $currencyData) {
+                        $monthlyExpense += abs((float)($currencyData['sum'] ?? 0)); // Make expenses positive
+                    }
+                    
+                    $incomeData[] = $monthlyIncome;
+                    $expenseData[] = $monthlyExpense;
+                }
+                
+                $current->addMonth();
+            }
+            
+            return [
+                'labels' => $labels,
+                'income' => $incomeData,
+                'expenses' => $expenseData
+            ];
+            
+        } catch (\Exception $e) {
+            app('log')->error(sprintf('Failed to get monthly income/expense data: %s', $e->getMessage()));
+            return ['labels' => [], 'income' => [], 'expenses' => []];
+        }
+    }
+    
+    /**
+     * Get properly quoted worksheet name for Excel formulas
+     */
+    private function getQuotedWorksheetName(string $worksheetName): string
+    {
+        // If the worksheet name contains spaces or special characters, wrap in single quotes
+        if (preg_match("/[\\s\\-]/", $worksheetName)) {
+            return "'" . str_replace("'", "''", $worksheetName) . "'";
+        }
+        return $worksheetName;
+    }
+    
+    /**
+     * Create monthly categories sheet with income and expense tables
+     */
+    private function createMonthlyCategoriesSheet($sheet): void
+    {
+        try {
+            // Get monthly category data
+            $monthlyData = $this->getMonthlyCategoryData();
+            
+            if (empty($monthlyData['months'])) {
+                $sheet->setCellValue('A1', 'Categories');
+                $sheet->setCellValue('A3', 'No category data available');
+                $this->styleHeader($sheet, 'A1:C1');
+                return;
+            }
+            
+            $row = 1;
+            
+            // Title
+            $sheet->setCellValue('A' . $row, 'Category Income and Expense Analysis');
+            $this->styleHeader($sheet, 'A' . $row . ':' . chr(65 + count($monthlyData['months'])) . $row);
+            $row += 2;
+            
+            // Income Table
+            $sheet->setCellValue('A' . $row, 'INCOME BY CATEGORY');
+            $this->styleHeader($sheet, 'A' . $row . ':' . chr(65 + count($monthlyData['months'])) . $row);
+            $row++;
+            
+            // Income table headers
+            $sheet->setCellValue('A' . $row, 'Category');
+            $col = 'B';
+            foreach ($monthlyData['months'] as $month) {
+                $sheet->setCellValue($col . $row, $month);
+                $col++;
+            }
+            $sheet->setCellValue($col . $row, 'Total');
+            $this->styleHeader($sheet, 'A' . $row . ':' . $col . $row);
+            $row++;
+            
+            // Income data rows with alternating styling
+            $incomeStartRow = $row;
+            foreach ($monthlyData['categories'] as $categoryName => $categoryData) {
+                if ($categoryData['total_income'] != 0) {
+                    $sheet->setCellValue('A' . $row, $categoryName);
+                    $col = 'B';
+                    $startCol = $col;
+                    foreach ($monthlyData['months'] as $month) {
+                        $amount = $categoryData['months'][$month]['income'] ?? 0;
+                        $sheet->setCellValue($col . $row, $this->formatCurrency($amount));
+                        $this->applyCurrencyFormatting($sheet, $col . $row, $amount, true);
+                        $col++;
+                    }
+                    // Use SUM formula for row total
+                    $endCol = chr(ord($col) - 1); // Previous column
+                    $sumFormula = sprintf('=SUM(%s%d:%s%d)', $startCol, $row, $endCol, $row);
+                    $sheet->setCellValue($col . $row, $sumFormula);
+                    $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet->getStyle($col . $row)->getFont()->setBold(true);
+                    
+                    // Apply alternating row styling
+                    $isOddRow = ($row - $incomeStartRow) % 2 === 0;
+                    $this->styleAlternatingRows($sheet, 'A' . $row . ':' . $col . $row, $isOddRow);
+                    
+                    // Set default text color for category name
+                    $this->setDefaultTextColor($sheet, 'A' . $row);
+                    
+                    $row++;
+                }
+            }
+            
+            // Income totals row with SUM formulas
+            $sheet->setCellValue('A' . $row, 'TOTAL INCOME');
+            $col = 'B';
+            $endDataRow = $row - 1; // Last data row
+            foreach ($monthlyData['months'] as $month) {
+                // Create SUM formula for each month column
+                $sumFormula = sprintf('=SUM(%s%d:%s%d)', $col, $incomeStartRow, $col, $endDataRow);
+                $sheet->setCellValue($col . $row, $sumFormula);
+                $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $col++;
+            }
+            // Total column - sum all monthly totals
+            $lastMonthCol = chr(65 + count($monthlyData['months'])); // Convert to column letter
+            $totalFormula = sprintf('=SUM(B%d:%s%d)', $row, $lastMonthCol, $row);
+            $sheet->setCellValue($col . $row, $totalFormula);
+            $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+            $this->styleTotalRow($sheet, 'A' . $row . ':' . $col . $row);
+            $row += 3;
+            
+            // Expense Table
+            $sheet->setCellValue('A' . $row, 'EXPENSES BY CATEGORY');
+            $this->styleHeader($sheet, 'A' . $row . ':' . chr(65 + count($monthlyData['months'])) . $row);
+            $row++;
+            
+            // Expense table headers
+            $sheet->setCellValue('A' . $row, 'Category');
+            $col = 'B';
+            foreach ($monthlyData['months'] as $month) {
+                $sheet->setCellValue($col . $row, $month);
+                $col++;
+            }
+            $sheet->setCellValue($col . $row, 'Total');
+            $this->styleHeader($sheet, 'A' . $row . ':' . $col . $row);
+            $row++;
+            
+            // Expense data rows with alternating styling
+            $expenseStartRow = $row;
+            foreach ($monthlyData['categories'] as $categoryName => $categoryData) {
+                if ($categoryData['total_expense'] != 0) {
+                    $sheet->setCellValue('A' . $row, $categoryName);
+                    $col = 'B';
+                    $startCol = $col;
+                    foreach ($monthlyData['months'] as $month) {
+                        $amount = $categoryData['months'][$month]['expense'] ?? 0;
+                        $sheet->setCellValue($col . $row, $this->formatCurrency(abs($amount))); // Show as positive
+                        $this->applyCurrencyFormatting($sheet, $col . $row, $amount, false, true); // Expenses should be red
+                        $col++;
+                    }
+                    // Use SUM formula for row total
+                    $endCol = chr(ord($col) - 1); // Previous column
+                    $sumFormula = sprintf('=SUM(%s%d:%s%d)', $startCol, $row, $endCol, $row);
+                    $sheet->setCellValue($col . $row, $sumFormula);
+                    $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet->getStyle($col . $row)->getFont()->setBold(true);
+                    
+                    // Apply alternating row styling
+                    $isOddRow = ($row - $expenseStartRow) % 2 === 0;
+                    $this->styleAlternatingRows($sheet, 'A' . $row . ':' . $col . $row, $isOddRow);
+                    
+                    // Set default text color for category name
+                    $this->setDefaultTextColor($sheet, 'A' . $row);
+                    
+                    $row++;
+                }
+            }
+            
+            // Expense totals row with SUM formulas
+            $sheet->setCellValue('A' . $row, 'TOTAL EXPENSES');
+            $col = 'B';
+            $endDataRow = $row - 1; // Last data row
+            foreach ($monthlyData['months'] as $month) {
+                // Create SUM formula for each month column
+                $sumFormula = sprintf('=SUM(%s%d:%s%d)', $col, $expenseStartRow, $col, $endDataRow);
+                $sheet->setCellValue($col . $row, $sumFormula);
+                $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $col++;
+            }
+            // Total column - sum all monthly totals
+            $lastMonthCol = chr(65 + count($monthlyData['months'])); // Convert to column letter
+            $totalFormula = sprintf('=SUM(B%d:%s%d)', $row, $lastMonthCol, $row);
+            $sheet->setCellValue($col . $row, $totalFormula);
+            $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+            $this->styleTotalRow($sheet, 'A' . $row . ':' . $col . $row);
+            
+            // Set column widths
+            $sheet->getColumnDimension('A')->setWidth(25);
+            for ($i = 1; $i <= count($monthlyData['months']) + 1; $i++) {
+                $sheet->getColumnDimension(chr(65 + $i))->setWidth(12);
+            }
+            
+        } catch (\Exception $e) {
+            app('log')->error(sprintf('Failed to create monthly categories sheet: %s', $e->getMessage()));
+            $sheet->setCellValue('A1', 'Categories');
+            $sheet->setCellValue('A3', 'Error creating category data: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Get monthly category data for detailed breakdown
+     */
+    private function getMonthlyCategoryData(): array
+    {
+        try {
+            $generator = app(CategoryReportGenerator::class);
+            $generator->setUser($this->user);
+            $generator->setAccounts($this->accounts);
+            
+            $months = [];
+            $categories = [];
+            $totals = ['income' => 0, 'expense' => 0];
+            
+            // Create monthly intervals from start to end date
+            $current = $this->start->copy()->startOfMonth();
+            $end = $this->end->copy()->endOfMonth();
+            
+            while ($current <= $end) {
+                $monthStart = $current->copy()->startOfMonth();
+                $monthEnd = $current->copy()->endOfMonth();
+                
+                // Only process months that overlap with our date range
+                if ($monthEnd >= $this->start && $monthStart <= $this->end) {
+                    $actualStart = $monthStart < $this->start ? $this->start : $monthStart;
+                    $actualEnd = $monthEnd > $this->end ? $this->end : $monthEnd;
+                    
+                    $monthLabel = $current->format('M Y');
+                    $months[] = $monthLabel;
+                    
+                    // Get category data for this month
+                    $generator->setStart($actualStart);
+                    $generator->setEnd($actualEnd);
+                    $generator->operations();
+                    $monthData = $generator->getReport();
+                    
+                    if (isset($monthData['categories'])) {
+                        foreach ($monthData['categories'] as $categoryKey => $categoryInfo) {
+                            $categoryName = $categoryInfo['name'] ?? $categoryInfo['title'] ?? '(No category)';
+                            
+                            if (!isset($categories[$categoryName])) {
+                                $categories[$categoryName] = [
+                                    'months' => [],
+                                    'total_income' => 0,
+                                    'total_expense' => 0
+                                ];
+                            }
+                            
+                            $income = max(0, (float)($categoryInfo['earned'] ?? 0));
+                            $expense = min(0, (float)($categoryInfo['spent'] ?? 0));
+                            
+                            $categories[$categoryName]['months'][$monthLabel] = [
+                                'income' => $income,
+                                'expense' => $expense
+                            ];
+                            
+                            $categories[$categoryName]['total_income'] += $income;
+                            $categories[$categoryName]['total_expense'] += abs($expense);
+                            
+                            $totals['income'] += $income;
+                            $totals['expense'] += abs($expense);
+                        }
+                    }
+                }
+                
+                $current->addMonth();
+            }
+            
+            // Fill in missing months for each category
+            foreach ($categories as &$categoryData) {
+                foreach ($months as $month) {
+                    if (!isset($categoryData['months'][$month])) {
+                        $categoryData['months'][$month] = [
+                            'income' => 0,
+                            'expense' => 0
+                        ];
+                    }
+                }
+            }
+            
+            return [
+                'months' => $months,
+                'categories' => $categories,
+                'totals' => $totals
+            ];
+            
+        } catch (\Exception $e) {
+            app('log')->error(sprintf('Failed to get monthly category data: %s', $e->getMessage()));
+            return ['months' => [], 'categories' => [], 'totals' => []];
         }
     }
 }

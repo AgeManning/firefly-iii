@@ -32,6 +32,7 @@ use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\Budget;
 use FireflyIII\Repositories\Budget\BudgetRepositoryInterface;
+use FireflyIII\Support\CacheProperties;
 use Illuminate\Support\Collection;
 
 /**
@@ -150,5 +151,97 @@ class BalanceController extends Controller
         }
 
         return $result;
+    }
+
+    /**
+     * Return income vs expenses data for Excel export.
+     * 
+     * @throws FireflyException
+     */
+    public function incomeVsExpenses(Collection $accounts, Carbon $start, Carbon $end)
+    {
+        // Chart properties for cache:
+        $cache = new CacheProperties();
+        $cache->addProperty($start);
+        $cache->addProperty($end);
+        $cache->addProperty('income-expenses-export');
+        $cache->addProperty($accounts->pluck('id')->toArray());
+        if ($cache->has()) {
+            return response()->json($cache->get());
+        }
+
+        // Collect income transactions (deposits)
+        /** @var GroupCollectorInterface $incomeCollector */
+        $incomeCollector = app(GroupCollectorInterface::class);
+        $incomeJournals = $incomeCollector
+            ->setRange($start, $end)
+            ->setAccounts($accounts)
+            ->setTypes([TransactionTypeEnum::DEPOSIT->value])
+            ->getExtractedJournals();
+
+        // Collect expense transactions (withdrawals)
+        /** @var GroupCollectorInterface $expenseCollector */
+        $expenseCollector = app(GroupCollectorInterface::class);
+        $expenseJournals = $expenseCollector
+            ->setRange($start, $end)
+            ->setAccounts($accounts)
+            ->setTypes([TransactionTypeEnum::WITHDRAWAL->value])
+            ->getExtractedJournals();
+
+        // Group by currency
+        $incomeByCurrency = $this->groupByCurrency($incomeJournals);
+        $expensesByCurrency = $this->groupByCurrency($expenseJournals);
+
+        // Combine results - for now, focus on the default currency
+        $totalIncome = 0;
+        $totalExpenses = 0;
+        $currencySymbol = '';
+
+        foreach ($incomeByCurrency as $currencyId => $data) {
+            $totalIncome += $data['sum'];
+            $currencySymbol = $data['currency_symbol'];
+        }
+
+        foreach ($expensesByCurrency as $currencyId => $data) {
+            $totalExpenses += abs($data['sum']); // expenses are usually negative, make positive
+        }
+
+        $exportData = [
+            'income' => $totalIncome,
+            'expenses' => $totalExpenses,
+            'difference' => $totalIncome - $totalExpenses,
+            'currency_symbol' => $currencySymbol
+        ];
+
+        $cache->store($exportData);
+
+        return response()->json($exportData);
+    }
+
+    /**
+     * Group journal data by currency
+     */
+    private function groupByCurrency(array $journals): array
+    {
+        $grouped = [];
+
+        foreach ($journals as $journal) {
+            $currencyId = $journal['currency_id'];
+
+            if (!isset($grouped[$currencyId])) {
+                $grouped[$currencyId] = [
+                    'currency_id' => $journal['currency_id'],
+                    'currency_code' => $journal['currency_code'],
+                    'currency_name' => $journal['currency_name'],
+                    'currency_symbol' => $journal['currency_symbol'],
+                    'currency_decimal_places' => $journal['currency_decimal_places'],
+                    'sum' => 0
+                ];
+            }
+
+            $grouped[$currencyId]['sum'] += (float)$journal['amount'];
+        }
+
+        return $grouped;
     }
 }

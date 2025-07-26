@@ -71,4 +71,44 @@ class AccountController extends Controller
 
         return $result;
     }
+
+    /**
+     * Return account data for Excel export.
+     * 
+     * @throws FireflyException
+     */
+    public function accounts(Collection $accounts, Carbon $start, Carbon $end)
+    {
+        // chart properties for cache:
+        $cache = new CacheProperties();
+        $cache->addProperty($start);
+        $cache->addProperty($end);
+        $cache->addProperty('account-export');
+        $cache->addProperty($accounts->pluck('id')->toArray());
+        if ($cache->has()) {
+            return response()->json($cache->get());
+        }
+
+        /** @var AccountTaskerInterface $accountTasker */
+        $accountTasker = app(AccountTaskerInterface::class);
+        $accountReport = $accountTasker->getAccountReport($accounts, $start, $end);
+
+        // Format data for Excel export
+        $exportData = [
+            'accounts' => []
+        ];
+
+        foreach ($accountReport['accounts'] ?? [] as $accountId => $accountData) {
+            $exportData['accounts'][] = [
+                'name' => $accountData['name'],
+                'start_balance' => (float)($accountData['start_balance'] ?? 0),
+                'end_balance' => (float)($accountData['end_balance'] ?? 0),
+                'currency_symbol' => $accountData['currency_symbol'] ?? ''
+            ];
+        }
+
+        $cache->store($exportData);
+
+        return response()->json($exportData);
+    }
 }
