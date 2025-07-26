@@ -1672,6 +1672,9 @@ return [
     'export_data_main_title'                                                    => 'Export data from Firefly III',
     'export_data_expl'                                                          => 'This link allows you to export all transactions + meta data from Firefly III. Please refer to the help (top right (?)-icon) for more information about the process.',
     'export_data_all_transactions'                                              => 'Export all transactions',
+    'export_report'                                                             => 'Export Report',
+    'export_excel'                                                              => 'Export to Excel',
+    'export_report_description'                                                 => 'Export this report as a formatted Excel spreadsheet containing all tables and charts for offline analysis',
     'export_data_advanced_expl'                                                 => 'If you need a more advanced or specific type of export, read the help on how to use the console command <code>php artisan help firefly-iii:export-data</code>.',
 
     // attachments
