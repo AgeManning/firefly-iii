@@ -910,6 +910,20 @@ Route::group(
     }
 );
 
+// Report Export Controller
+Route::group(
+    ['middleware' => 'user-full-auth', 'namespace' => 'FireflyIII\Http\Controllers', 'prefix' => 'reports/export', 'as' => 'reports.export.'],
+    static function (): void {
+        Route::get('status', ['uses' => 'ReportExportController@exportStatus', 'as' => 'status']);
+        Route::get('default/{accountList}/{start_date}/{end_date}', ['uses' => 'ReportExportController@defaultReport', 'as' => 'default'])->where(['start_date' => DATEFORMAT, 'end_date' => DATEFORMAT]);
+        Route::get('audit/{accountList}/{start_date}/{end_date}', ['uses' => 'ReportExportController@auditReport', 'as' => 'audit'])->where(['start_date' => DATEFORMAT, 'end_date' => DATEFORMAT]);
+        Route::get('budget/{accountList}/{budgetList}/{start_date}/{end_date}', ['uses' => 'ReportExportController@budgetReport', 'as' => 'budget'])->where(['start_date' => DATEFORMAT, 'end_date' => DATEFORMAT]);
+        Route::get('category/{accountList}/{categoryList}/{start_date}/{end_date}', ['uses' => 'ReportExportController@categoryReport', 'as' => 'category'])->where(['start_date' => DATEFORMAT, 'end_date' => DATEFORMAT]);
+        Route::get('tag/{accountList}/{tagList}/{start_date}/{end_date}', ['uses' => 'ReportExportController@tagReport', 'as' => 'tag'])->where(['start_date' => DATEFORMAT, 'end_date' => DATEFORMAT]);
+        Route::get('double/{accountList}/{doubleList}/{start_date}/{end_date}', ['uses' => 'ReportExportController@doubleReport', 'as' => 'double'])->where(['start_date' => DATEFORMAT, 'end_date' => DATEFORMAT]);
+    }
+);
+
 // Report Data AccountController.
 Route::group(
     ['middleware' => 'user-full-auth', 'namespace' => 'FireflyIII\Http\Controllers\Report', 'prefix' => 'report-data/account', 'as' => 'report-data.account.'],
