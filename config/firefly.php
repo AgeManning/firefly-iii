@@ -218,7 +218,7 @@ return [
     ],
     'available_dark_modes'         => ['light', 'dark', 'browser'],
     'bill_reminder_periods'        => [90, 30, 14, 7, 0],
-    'valid_view_ranges'            => ['1D', '1W', '1M', '3M', '6M', '1Y'],
+    'valid_view_ranges'            => ['1D', '1W', '1M', '3M', '6M', '1Y', 'FYC', 'FYP', 'FY3'],
     'valid_url_protocols'          => envNonEmpty('VALID_URL_PROTOCOLS', 'http,https,ftp,ftps,mailto'),
     'allowedMimes'                 => [
         // plain files

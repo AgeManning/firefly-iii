@@ -79,6 +79,18 @@
                             {{ __('firefly.year_to_date') }}
                         </a>
                         <div class="dropdown-divider"></div>
+                        <a href="#" class="dropdown-item daterange-fyc" @click="changeDateRange">
+                            {{ __('firefly.current_financial_year') }}
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a href="#" class="dropdown-item daterange-fyp" @click="changeDateRange">
+                            {{ __('firefly.previous_financial_year') }}
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a href="#" class="dropdown-item daterange-fy3" @click="changeDateRange">
+                            {{ __('firefly.financial_year_x', ['year' => '2022']) }}
+                        </a>
+                        <div class="dropdown-divider"></div>
                         <a href="#" class="dropdown-item dropdown-footer daterange-custom" @click="app.doCustomRange">
                             TODO {{ __('firefly.customRange') }}
                         </a>

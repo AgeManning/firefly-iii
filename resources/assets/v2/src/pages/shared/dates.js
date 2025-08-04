@@ -79,6 +79,9 @@ export default () => ({
         let last30 = this.lastDays(30);
         let mtd = this.mtd();
         let ytd = this.ytd();
+        let fyc = this.currentFinancialYear();
+        let fyp = this.previousFinancialYear();
+        let fy3 = this.thirdLastFinancialYear();
 
         // set the title:
         let element = document.getElementsByClassName('daterange-holder')[0];
@@ -123,6 +126,24 @@ export default () => ({
         element = document.getElementsByClassName('daterange-ytd')[0];
         element.setAttribute('data-start', format(ytd.start, 'yyyy-MM-dd'));
         element.setAttribute('data-end', format(ytd.end, 'yyyy-MM-dd'));
+
+        // Current Financial Year
+        element = document.getElementsByClassName('daterange-fyc')[0];
+        element.setAttribute('data-start', format(fyc.start, 'yyyy-MM-dd'));
+        element.setAttribute('data-end', format(fyc.end, 'yyyy-MM-dd'));
+        element.textContent = i18next.t('firefly.current_financial_year');
+
+        // Previous Financial Year
+        element = document.getElementsByClassName('daterange-fyp')[0];
+        element.setAttribute('data-start', format(fyp.start, 'yyyy-MM-dd'));
+        element.setAttribute('data-end', format(fyp.end, 'yyyy-MM-dd'));
+        element.textContent = i18next.t('firefly.previous_financial_year', {year: fyp.end.getFullYear()});
+
+        // Third Last Financial Year
+        element = document.getElementsByClassName('daterange-fy3')[0];
+        element.setAttribute('data-start', format(fy3.start, 'yyyy-MM-dd'));
+        element.setAttribute('data-end', format(fy3.end, 'yyyy-MM-dd'));
+        element.textContent = i18next.t('firefly.financial_year_x', {year: fy3.end.getFullYear()});
 
         // custom range.
         // console.log('MainApp: buildDateRange end');
@@ -174,6 +195,55 @@ export default () => ({
         window.store.set('end', end);
         //this.buildDateRange();
         return false;
+    },
+
+    currentFinancialYear() {
+        // Get fiscal year start preference from store
+        const fiscalYearStart = window.store.get('fiscalYearStart') || '01-01';
+        const useCustomFiscalYear = window.store.get('customFiscalYear') || false;
+        
+        let start, end;
+        if (useCustomFiscalYear) {
+            const [month, day] = fiscalYearStart.split('-');
+            start = new Date(new Date().getFullYear(), parseInt(month) - 1, parseInt(day));
+            
+            // If the fiscal year start is in the future, subtract a year
+            if (start > new Date()) {
+                start.setFullYear(start.getFullYear() - 1);
+            }
+            
+            end = new Date(start);
+            end.setFullYear(end.getFullYear() + 1);
+            end.setDate(end.getDate() - 1);
+        } else {
+            // Calendar year
+            start = startOfYear(new Date());
+            end = new Date(start.getFullYear(), 11, 31);
+        }
+        
+        return {start: start, end: end};
+    },
+
+    previousFinancialYear() {
+        const current = this.currentFinancialYear();
+        let start = new Date(current.start);
+        let end = new Date(current.end);
+        
+        start.setFullYear(start.getFullYear() - 1);
+        end.setFullYear(end.getFullYear() - 1);
+        
+        return {start: start, end: end};
+    },
+
+    thirdLastFinancialYear() {
+        const current = this.currentFinancialYear();
+        let start = new Date(current.start);
+        let end = new Date(current.end);
+        
+        start.setFullYear(start.getFullYear() - 2);
+        end.setFullYear(end.getFullYear() - 2);
+        
+        return {start: start, end: end};
     },
 
 });

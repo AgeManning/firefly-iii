@@ -156,6 +156,26 @@ trait GetConfigurationData
         $index          = (string) trans('firefly.year_to_date');
         $ranges[$index] = [$yearBegin, new Carbon()];
 
+        // current financial year:
+        $currentFYStart = app('navigation')->startOfPeriod(today(config('app.timezone')), 'FYC');
+        $currentFYEnd   = app('navigation')->endOfPeriod($currentFYStart, 'FYC');
+        $index          = (string) trans('firefly.current_financial_year');
+        $ranges[$index] = [$currentFYStart, $currentFYEnd];
+
+        // previous financial year:
+        $previousFYStart = app('navigation')->startOfPeriod(today(config('app.timezone')), 'FYP');
+        $previousFYEnd   = app('navigation')->endOfPeriod(today(config('app.timezone')), 'FYP');
+        $previousFYYear  = $previousFYEnd->year;
+        $index           = (string) trans('firefly.previous_financial_year', ['year' => $previousFYYear]);
+        $ranges[$index]  = [$previousFYStart, $previousFYEnd];
+
+        // third last financial year:
+        $thirdLastFYStart = app('navigation')->startOfPeriod(today(config('app.timezone')), 'FY3');
+        $thirdLastFYEnd   = app('navigation')->endOfPeriod(today(config('app.timezone')), 'FY3');
+        $thirdLastFYYear  = $thirdLastFYEnd->year;
+        $index            = (string) trans('firefly.financial_year_x', ['year' => $thirdLastFYYear]);
+        $ranges[$index]   = [$thirdLastFYStart, $thirdLastFYEnd];
+
         // everything
         $index          = (string) trans('firefly.everything');
         $ranges[$index] = [$first, new Carbon()];

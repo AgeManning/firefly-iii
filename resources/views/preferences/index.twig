@@ -284,6 +284,27 @@
                                                 {{ 'pref_last365'|_ }}
                                             </label>
                                         </div>
+                                        <div class="radio">
+                                            <label>
+                                                <input type="radio" name="viewRange"
+                                                       value="FYC" {% if viewRange == 'FYC' %} checked {% endif %}>
+                                                {{ 'pref_FYC'|_ }}
+                                            </label>
+                                        </div>
+                                        <div class="radio">
+                                            <label>
+                                                <input type="radio" name="viewRange"
+                                                       value="FYP" {% if viewRange == 'FYP' %} checked {% endif %}>
+                                                {{ 'pref_FYP'|_ }}
+                                            </label>
+                                        </div>
+                                        <div class="radio">
+                                            <label>
+                                                <input type="radio" name="viewRange"
+                                                       value="FY3" {% if viewRange == 'FY3' %} checked {% endif %}>
+                                                {{ 'pref_FY3'|_ }}
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
 
