@@ -1,3 +1,12 @@
+# This is a Fork of Firefly
+
+I'm currently maintaining this fork for personal use to add features that I
+required. Currently implemented extra features:
+- Financial Year navigation (can select across financial years for
+accounts/transactions)
+- Export Reports into excel formatted sheets
+
+
 [![Packagist][packagist-shield]][packagist-url]
 [![License][license-shield]][license-url]
 [![Stargazers][stars-shield]][stars-url]
