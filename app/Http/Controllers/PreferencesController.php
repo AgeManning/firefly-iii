@@ -277,11 +277,22 @@ class PreferencesController extends Controller
 
         // custom fiscal year
         $customFiscalYear  = 1 === (int) $request->get('customFiscalYear');
-        $string            = strtotime((string) $request->get('fiscalYearStart'));
-        if (false !== $string) {
-            $fiscalYearStart = Carbon::createFromTimestamp($string)->format('m-d');
-            Preferences::set('customFiscalYear', $customFiscalYear);
-            Preferences::set('fiscalYearStart', $fiscalYearStart);
+        $fiscalYearStartInput = (string) $request->get('fiscalYearStart');
+        if (!empty($fiscalYearStartInput)) {
+            try {
+                // Parse the date input directly without timezone conversion
+                $fiscalYearStart = Carbon::createFromFormat('Y-m-d', $fiscalYearStartInput)->format('m-d');
+                Preferences::set('customFiscalYear', $customFiscalYear);
+                Preferences::set('fiscalYearStart', $fiscalYearStart);
+            } catch (\Exception $e) {
+                // Fallback to original method if direct parsing fails
+                $string = strtotime($fiscalYearStartInput);
+                if (false !== $string) {
+                    $fiscalYearStart = Carbon::createFromTimestamp($string)->format('m-d');
+                    Preferences::set('customFiscalYear', $customFiscalYear);
+                    Preferences::set('fiscalYearStart', $fiscalYearStart);
+                }
+            }
         }
 
         // save page size:
