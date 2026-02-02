@@ -24,6 +24,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Support\Request;
 
+use Illuminate\Support\Facades\Log;
+
 /**
  * Trait AppendsLocationData
  */
@@ -33,8 +35,8 @@ trait AppendsLocationData
     {
         $return['store_location'] = false;
         if (true === $information['store_location']) {
-            $long = array_key_exists('longitude', $information) ? $information['longitude'] : null;
-            $lat  = array_key_exists('latitude', $information) ? $information['latitude'] : null;
+            $long = $information['longitude'] ?? null;
+            $lat  = $information['latitude'] ?? null;
             if (null !== $long && null !== $lat && $this->validLongitude($long) && $this->validLatitude($lat)) {
                 $return['store_location'] = true;
                 $return['longitude']      = $information['longitude'];
@@ -46,19 +48,17 @@ trait AppendsLocationData
         return $return;
     }
 
-    private function validLongitude(string $longitude): bool
-    {
-        $number = (float) $longitude;
-
-        return $number >= -180 && $number <= 180;
-    }
-
-    private function validLatitude(string $latitude): bool
-    {
-        $number = (float) $latitude;
-
-        return $number >= -90 && $number <= 90;
-    }
+    /**
+     * Abstract method stolen from "InteractsWithInput".
+     *
+     * @param bool       $default
+     * @param null|mixed $key
+     *
+     * @return mixed
+     *
+     * @SuppressWarnings("PHPMD.BooleanArgumentFlag")
+     */
+    abstract public function boolean($key = null, $default = false);
 
     /**
      * Abstract method.
@@ -70,11 +70,27 @@ trait AppendsLocationData
     abstract public function has($key);
 
     /**
+     * Abstract method.
+     *
+     * @return string
+     */
+    abstract public function method();
+
+    /**
+     * Abstract method.
+     *
+     * @param mixed ...$patterns
+     *
+     * @return mixed
+     */
+    abstract public function routeIs(...$patterns);
+
+    /**
      * Read the submitted Request data and add new or updated Location data to the array.
      */
     protected function appendLocationData(array $data, ?string $prefix): array
     {
-        app('log')->debug(sprintf('Now in appendLocationData("%s")', $prefix), $data);
+        Log::debug(sprintf('Now in appendLocationData("%s")', $prefix), $data);
         $data['store_location']  = false;
         $data['update_location'] = false;
         $data['remove_location'] = false;
@@ -91,7 +107,7 @@ trait AppendsLocationData
 
         // for a POST (store), all fields must be present and not NULL.
         if ($isValidPOST) {
-            app('log')->debug('Method is POST and all fields present and not NULL.');
+            Log::debug('Method is POST and all fields present and not NULL.');
             $data['store_location'] = true;
             $data['longitude']      = $this->convertString($longitudeKey);
             $data['latitude']       = $this->convertString($latitudeKey);
@@ -100,18 +116,18 @@ trait AppendsLocationData
 
         // for a PUT (api update) or POST update (UI)
         if ($isValidPUT) {
-            app('log')->debug('Method is PUT and all fields present and not NULL.');
+            Log::debug('Method is PUT and all fields present and not NULL.');
             $data['update_location'] = true;
             $data['longitude']       = $this->convertString($longitudeKey);
             $data['latitude']        = $this->convertString($latitudeKey);
             $data['zoom_level']      = $this->convertString($zoomLevelKey);
         }
         if ($isValidEmptyPUT) {
-            app('log')->debug('Method is PUT and all fields present and NULL.');
+            Log::debug('Method is PUT and all fields present and NULL.');
             $data['remove_location'] = true;
         }
-        app('log')->debug(sprintf('Returning longitude: "%s", latitude: "%s", zoom level: "%s"', $data['longitude'], $data['latitude'], $data['zoom_level']));
-        app('log')->debug(
+        Log::debug(sprintf('Returning longitude: "%s", latitude: "%s", zoom level: "%s"', $data['longitude'], $data['latitude'], $data['zoom_level']));
+        Log::debug(
             sprintf(
                 'Returning actions: store: %s, update: %s, delete: %s',
                 var_export($data['store_location'], true),
@@ -132,112 +148,6 @@ trait AppendsLocationData
         return sprintf('%s_%s', $prefix, $key);
     }
 
-    private function isValidPost(?string $prefix): bool
-    {
-        app('log')->debug('Now in isValidPost()');
-        $longitudeKey   = $this->getLocationKey($prefix, 'longitude');
-        $latitudeKey    = $this->getLocationKey($prefix, 'latitude');
-        $zoomLevelKey   = $this->getLocationKey($prefix, 'zoom_level');
-        $hasLocationKey = $this->getLocationKey($prefix, 'has_location');
-        // fields must not be null:
-        if (null !== $this->get($longitudeKey) && null !== $this->get($latitudeKey) && null !== $this->get($zoomLevelKey)) {
-            app('log')->debug('All fields present');
-            // if is POST and route contains API, this is enough:
-            if ('POST' === $this->method() && $this->routeIs('api.v1.*')) {
-                app('log')->debug('Is API location');
-
-                return true;
-            }
-            // if is POST and route does not contain API, must also have "has_location" = true
-            if ('POST' === $this->method() && $this->routeIs('*.store') && !$this->routeIs('api.v1.*') && '' !== $hasLocationKey) {
-                app('log')->debug('Is POST + store route.');
-                $hasLocation = $this->boolean($hasLocationKey);
-                if (true === $hasLocation) {
-                    app('log')->debug('Has form form location');
-
-                    return true;
-                }
-                app('log')->debug('Does not have form location');
-
-                return false;
-            }
-            app('log')->debug('Is not POST API or POST form');
-
-            return false;
-        }
-        app('log')->debug('Fields not present');
-
-        return false;
-    }
-
-    /**
-     * Abstract method.
-     *
-     * @return string
-     */
-    abstract public function method();
-
-    /**
-     * Abstract method.
-     *
-     * @param mixed ...$patterns
-     *
-     * @return mixed
-     */
-    abstract public function routeIs(...$patterns);
-
-    /**
-     * Abstract method stolen from "InteractsWithInput".
-     *
-     * @param null $key
-     * @param bool $default
-     *
-     * @return mixed
-     *
-     * @SuppressWarnings("PHPMD.BooleanArgumentFlag")
-     */
-    abstract public function boolean($key = null, $default = false);
-
-    private function isValidPUT(?string $prefix): bool
-    {
-        $longitudeKey   = $this->getLocationKey($prefix, 'longitude');
-        $latitudeKey    = $this->getLocationKey($prefix, 'latitude');
-        $zoomLevelKey   = $this->getLocationKey($prefix, 'zoom_level');
-        $hasLocationKey = $this->getLocationKey($prefix, 'has_location');
-        app('log')->debug('Now in isValidPUT()');
-
-        // all fields must be set:
-        if (null !== $this->get($longitudeKey) && null !== $this->get($latitudeKey) && null !== $this->get($zoomLevelKey)) {
-            app('log')->debug('All fields present.');
-            // must be PUT and API route:
-            if ('PUT' === $this->method() && $this->routeIs('api.v1.*')) {
-                app('log')->debug('Is API location');
-
-                return true;
-            }
-            // if POST and not API route, must also have "has_location"
-            // if is POST and route does not contain API, must also have "has_location" = true
-            if ('POST' === $this->method() && $this->routeIs('*.update') && !$this->routeIs('api.v1.*') && '' !== $hasLocationKey) {
-                app('log')->debug('Is POST + store route.');
-                $hasLocation = $this->boolean($hasLocationKey);
-                if (true === $hasLocation) {
-                    app('log')->debug('Has form location data + has_location');
-
-                    return true;
-                }
-                app('log')->debug('Does not have form location');
-
-                return false;
-            }
-            app('log')->debug('Is not POST API or POST form');
-
-            return false;
-        }
-        app('log')->debug('Fields not present');
-
-        return false;
-    }
-
     private function isValidEmptyPUT(?string $prefix): bool
     {
         $longitudeKey = $this->getLocationKey($prefix, 'longitude');
@@ -252,5 +162,97 @@ trait AppendsLocationData
                    'PUT' === $this->method()
                    || ('POST' === $this->method() && $this->routeIs('*.update'))
                );
+    }
+
+    private function isValidPUT(?string $prefix): bool
+    {
+        $longitudeKey   = $this->getLocationKey($prefix, 'longitude');
+        $latitudeKey    = $this->getLocationKey($prefix, 'latitude');
+        $zoomLevelKey   = $this->getLocationKey($prefix, 'zoom_level');
+        $hasLocationKey = $this->getLocationKey($prefix, 'has_location');
+        Log::debug('Now in isValidPUT()');
+
+        // all fields must be set:
+        if (!in_array(null, [$this->get($longitudeKey), $this->get($latitudeKey), $this->get($zoomLevelKey)], true)) {
+            Log::debug('All fields present.');
+            // must be PUT and API route:
+            if ('PUT' === $this->method() && $this->routeIs('api.v1.*')) {
+                Log::debug('Is API location');
+
+                return true;
+            }
+            // if POST and not API route, must also have "has_location"
+            // if is POST and route does not contain API, must also have "has_location" = true
+            if ('POST' === $this->method() && $this->routeIs('*.update') && !$this->routeIs('api.v1.*') && '' !== $hasLocationKey) {
+                Log::debug('Is POST + store route.');
+                $hasLocation = $this->boolean($hasLocationKey);
+                if (true === $hasLocation) {
+                    Log::debug('Has form location data + has_location');
+
+                    return true;
+                }
+                Log::debug('Does not have form location');
+
+                return false;
+            }
+            Log::debug('Is not POST API or POST form');
+
+            return false;
+        }
+        Log::debug('Fields not present');
+
+        return false;
+    }
+
+    private function isValidPost(?string $prefix): bool
+    {
+        Log::debug('Now in isValidPost()');
+        $longitudeKey   = $this->getLocationKey($prefix, 'longitude');
+        $latitudeKey    = $this->getLocationKey($prefix, 'latitude');
+        $zoomLevelKey   = $this->getLocationKey($prefix, 'zoom_level');
+        $hasLocationKey = $this->getLocationKey($prefix, 'has_location');
+        // fields must not be null:
+        if (!in_array(null, [$this->get($longitudeKey), $this->get($latitudeKey), $this->get($zoomLevelKey)], true)) {
+            Log::debug('All fields present');
+            // if is POST and route contains API, this is enough:
+            if ('POST' === $this->method() && $this->routeIs('api.v1.*')) {
+                Log::debug('Is API location');
+
+                return true;
+            }
+            // if is POST and route does not contain API, must also have "has_location" = true
+            if ('POST' === $this->method() && $this->routeIs('*.store') && !$this->routeIs('api.v1.*') && '' !== $hasLocationKey) {
+                Log::debug('Is POST + store route.');
+                $hasLocation = $this->boolean($hasLocationKey);
+                if (true === $hasLocation) {
+                    Log::debug('Has form form location');
+
+                    return true;
+                }
+                Log::debug('Does not have form location');
+
+                return false;
+            }
+            Log::debug('Is not POST API or POST form');
+
+            return false;
+        }
+        Log::debug('Fields not present');
+
+        return false;
+    }
+
+    private function validLatitude(string $latitude): bool
+    {
+        $number = (float)$latitude;
+
+        return $number >= -90 && $number <= 90;
+    }
+
+    private function validLongitude(string $longitude): bool
+    {
+        $number = (float)$longitude;
+
+        return $number >= -180 && $number <= 180;
     }
 }

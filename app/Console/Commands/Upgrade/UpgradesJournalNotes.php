@@ -28,6 +28,8 @@ use FireflyIII\Console\Commands\ShowsFriendlyMessages;
 use FireflyIII\Models\Note;
 use FireflyIII\Models\TransactionJournalMeta;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 class UpgradesJournalNotes extends Command
 {
@@ -66,7 +68,7 @@ class UpgradesJournalNotes extends Command
 
             $note->text = $meta->data;
             $note->save();
-            app('log')->debug(sprintf('Migrated meta note #%d to Note #%d', $meta->id, $note->id));
+            Log::debug(sprintf('Migrated meta note #%d to Note #%d', $meta->id, $note->id));
             $meta->delete();
 
             ++$count;
@@ -85,16 +87,14 @@ class UpgradesJournalNotes extends Command
 
     private function isExecuted(): bool
     {
-        $configVar = app('fireflyconfig')->get(self::CONFIG_NAME, false);
-        if (null !== $configVar) {
-            return (bool) $configVar->data;
-        }
+        $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
 
-        return false;
+        return (bool)$configVar?->data;
+
     }
 
     private function markAsExecuted(): void
     {
-        app('fireflyconfig')->set(self::CONFIG_NAME, true);
+        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 }

@@ -1,9 +1,9 @@
 <?php
 
-declare(strict_types=1);
+
 /*
  * ValidatesEnvironmentVariables.php
- * Copyright (c) 2025 james@firefly-iii.org.
+ * Copyright (c) 2025 james@firefly-iii.org
  *
  * This file is part of Firefly III (https://github.com/firefly-iii).
  *
@@ -18,8 +18,10 @@ declare(strict_types=1);
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see https://www.gnu.org/licenses/.
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
+declare(strict_types=1);
 
 namespace FireflyIII\Console\Commands\Integrity;
 
@@ -30,18 +32,7 @@ class ValidatesEnvironmentVariables extends Command
 {
     use ShowsFriendlyMessages;
 
-    /**
-     * The console command description.
-     *
-     * @var null|string
-     */
     protected $description = 'Makes sure you use the correct variables.';
-
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
     protected $signature   = 'integrity:validates-environment-variables';
 
     /**
@@ -49,14 +40,23 @@ class ValidatesEnvironmentVariables extends Command
      */
     public function handle(): int
     {
-        $this->validateLanguage();
-        $this->validateGuard();
-        $this->validateStaticToken();
+        $result = $this->validateLanguage();
+        if (false === $result) {
+            return Command::FAILURE;
+        }
+        $result = $this->validateGuard();
+        if (false === $result) {
+            return Command::FAILURE;
+        }
+        $result = $this->validateStaticToken();
+        if (false === $result) {
+            return Command::FAILURE;
+        }
 
         return Command::SUCCESS;
     }
 
-    private function validateLanguage(): void
+    private function validateLanguage(): bool
     {
         $language  = config('firefly.default_language');
         $locale    = config('firefly.default_locale');
@@ -67,7 +67,7 @@ class ValidatesEnvironmentVariables extends Command
             $this->friendlyError('Please check your .env file and make sure you use a valid setting.');
             $this->friendlyError(sprintf('Valid languages are: %s', implode(', ', $options)));
 
-            exit(1);
+            return false;
         }
         $options[] = 'equal';
         if (!in_array($locale, $options, true)) {
@@ -75,11 +75,13 @@ class ValidatesEnvironmentVariables extends Command
             $this->friendlyError('Please check your .env file and make sure you use a valid setting.');
             $this->friendlyError(sprintf('Valid locales are: %s', implode(', ', $options)));
 
-            exit(1);
+            return false;
         }
+
+        return true;
     }
 
-    private function validateGuard(): void
+    private function validateGuard(): bool
     {
         $guard = config('auth.defaults.guard');
         if ('web' !== $guard && 'remote_user_guard' !== $guard) {
@@ -87,18 +89,22 @@ class ValidatesEnvironmentVariables extends Command
             $this->friendlyError('Please check your .env file and make sure you use a valid setting.');
             $this->friendlyError('Valid guards are: web, remote_user_guard');
 
-            exit(1);
+            return false;
         }
+
+        return true;
     }
 
-    private function validateStaticToken(): void
+    private function validateStaticToken(): bool
     {
-        $token = (string) config('firefly.static_cron_token');
+        $token = (string)config('firefly.static_cron_token');
         if ('' !== $token && 32 !== strlen($token)) {
             $this->friendlyError('STATIC_CRON_TOKEN must be empty or a 32-character string.');
             $this->friendlyError('Please check your .env file and make sure you use a valid setting.');
 
-            exit(1);
+            return false;
         }
+
+        return true;
     }
 }

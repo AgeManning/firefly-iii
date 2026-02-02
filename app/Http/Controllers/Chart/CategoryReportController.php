@@ -23,11 +23,13 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Chart;
 
+use FireflyIII\Support\Facades\Navigation;
 use Carbon\Carbon;
 use FireflyIII\Generator\Chart\Basic\GeneratorInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Category;
 use FireflyIII\Repositories\Category\OperationsRepositoryInterface;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Controllers\AugumentData;
 use FireflyIII\Support\Http\Controllers\TransactionCalculation;
 use Illuminate\Http\JsonResponse;
@@ -82,8 +84,8 @@ class CategoryReportController extends Controller
                         'currency_symbol' => $currency['currency_symbol'],
                         'currency_code'   => $currency['currency_code'],
                     ];
-                    $amount                   = app('steam')->positive($journal['amount']);
-                    $result[$title]['amount'] = bcadd($result[$title]['amount'], (string) $amount);
+                    $amount                   = Steam::positive($journal['amount']);
+                    $result[$title]['amount'] = bcadd($result[$title]['amount'], $amount);
                 }
             }
         }
@@ -109,8 +111,8 @@ class CategoryReportController extends Controller
                     'currency_code'   => $currency['currency_code'],
                 ];
                 foreach ($category['transaction_journals'] as $journal) {
-                    $amount                   = app('steam')->positive($journal['amount']);
-                    $result[$title]['amount'] = bcadd($result[$title]['amount'], (string) $amount);
+                    $amount                   = Steam::positive($journal['amount']);
+                    $result[$title]['amount'] = bcadd($result[$title]['amount'], $amount);
                 }
             }
         }
@@ -137,8 +139,8 @@ class CategoryReportController extends Controller
                     'currency_code'   => $currency['currency_code'],
                 ];
                 foreach ($category['transaction_journals'] as $journal) {
-                    $amount                   = app('steam')->positive($journal['amount']);
-                    $result[$title]['amount'] = bcadd($result[$title]['amount'], (string) $amount);
+                    $amount                   = Steam::positive($journal['amount']);
+                    $result[$title]['amount'] = bcadd($result[$title]['amount'], $amount);
                 }
             }
         }
@@ -165,8 +167,8 @@ class CategoryReportController extends Controller
                         'currency_symbol' => $currency['currency_symbol'],
                         'currency_code'   => $currency['currency_code'],
                     ];
-                    $amount                   = app('steam')->positive($journal['amount']);
-                    $result[$title]['amount'] = bcadd($result[$title]['amount'], (string) $amount);
+                    $amount                   = Steam::positive($journal['amount']);
+                    $result[$title]['amount'] = bcadd($result[$title]['amount'], $amount);
                 }
             }
         }
@@ -193,8 +195,8 @@ class CategoryReportController extends Controller
                         'currency_symbol' => $currency['currency_symbol'],
                         'currency_code'   => $currency['currency_code'],
                     ];
-                    $amount                   = app('steam')->positive($journal['amount']);
-                    $result[$title]['amount'] = bcadd($result[$title]['amount'], (string) $amount);
+                    $amount                   = Steam::positive($journal['amount']);
+                    $result[$title]['amount'] = bcadd($result[$title]['amount'], $amount);
                 }
             }
         }
@@ -207,10 +209,9 @@ class CategoryReportController extends Controller
     public function mainChart(Collection $accounts, Category $category, Carbon $start, Carbon $end): JsonResponse
     {
         $chartData = [];
-        $spent     = $this->opsRepository->listExpenses($start, $end, $accounts, new Collection([$category]));
-        $earned    = $this->opsRepository->listIncome($start, $end, $accounts, new Collection([$category]));
-        $format    = app('navigation')->preferredCarbonLocalizedFormat($start, $end);
-
+        $spent     = $this->opsRepository->listExpenses($start, $end, $accounts, new Collection()->push($category));
+        $earned    = $this->opsRepository->listIncome($start, $end, $accounts, new Collection()->push($category));
+        $format    = Navigation::preferredCarbonLocalizedFormat($start, $end);
         // loop expenses.
         foreach ($spent as $currency) {
             // add things to chart Data for each currency:
@@ -231,9 +232,9 @@ class CategoryReportController extends Controller
             foreach ($currency['categories'] as $currentCategory) {
                 foreach ($currentCategory['transaction_journals'] as $journal) {
                     $key                                   = $journal['date']->isoFormat($format);
-                    $amount                                = app('steam')->positive($journal['amount']);
+                    $amount                                = Steam::positive($journal['amount']);
                     $chartData[$spentKey]['entries'][$key] ??= '0';
-                    $chartData[$spentKey]['entries'][$key] = bcadd($chartData[$spentKey]['entries'][$key], (string) $amount);
+                    $chartData[$spentKey]['entries'][$key] = bcadd($chartData[$spentKey]['entries'][$key], $amount);
                 }
             }
         }
@@ -258,9 +259,9 @@ class CategoryReportController extends Controller
             foreach ($currency['categories'] as $currentCategory) {
                 foreach ($currentCategory['transaction_journals'] as $journal) {
                     $key                                   = $journal['date']->isoFormat($format);
-                    $amount                                = app('steam')->positive($journal['amount']);
+                    $amount                                = Steam::positive($journal['amount']);
                     $chartData[$spentKey]['entries'][$key] ??= '0';
-                    $chartData[$spentKey]['entries'][$key] = bcadd($chartData[$spentKey]['entries'][$key], (string) $amount);
+                    $chartData[$spentKey]['entries'][$key] = bcadd($chartData[$spentKey]['entries'][$key], $amount);
                 }
             }
         }
@@ -276,11 +277,11 @@ class CategoryReportController extends Controller
     private function makeEntries(Carbon $start, Carbon $end): array
     {
         $return         = [];
-        $format         = app('navigation')->preferredCarbonLocalizedFormat($start, $end);
-        $preferredRange = app('navigation')->preferredRangeFormat($start, $end);
+        $format         = Navigation::preferredCarbonLocalizedFormat($start, $end);
+        $preferredRange = Navigation::preferredRangeFormat($start, $end);
         $currentStart   = clone $start;
         while ($currentStart <= $end) {
-            $currentEnd   = app('navigation')->endOfPeriod($currentStart, $preferredRange);
+            $currentEnd   = Navigation::endOfPeriod($currentStart, $preferredRange);
             $key          = $currentStart->isoFormat($format);
             $return[$key] = '0';
             $currentStart = clone $currentEnd;
@@ -307,8 +308,8 @@ class CategoryReportController extends Controller
                         'currency_symbol' => $currency['currency_symbol'],
                         'currency_code'   => $currency['currency_code'],
                     ];
-                    $amount                   = app('steam')->positive($journal['amount']);
-                    $result[$title]['amount'] = bcadd($result[$title]['amount'], (string) $amount);
+                    $amount                   = Steam::positive($journal['amount']);
+                    $result[$title]['amount'] = bcadd($result[$title]['amount'], $amount);
                 }
             }
         }
@@ -335,8 +336,8 @@ class CategoryReportController extends Controller
                         'currency_symbol' => $currency['currency_symbol'],
                         'currency_code'   => $currency['currency_code'],
                     ];
-                    $amount                   = app('steam')->positive($journal['amount']);
-                    $result[$title]['amount'] = bcadd($result[$title]['amount'], (string) $amount);
+                    $amount                   = Steam::positive($journal['amount']);
+                    $result[$title]['amount'] = bcadd($result[$title]['amount'], $amount);
                 }
             }
         }

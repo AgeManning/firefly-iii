@@ -29,7 +29,9 @@ use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\PiggyBank;
 use FireflyIII\Repositories\PiggyBank\PiggyBankRepositoryInterface;
+use FireflyIII\Support\JsonApi\Enrichments\PiggyBankEnrichment;
 use FireflyIII\Transformers\PiggyBankTransformer;
+use FireflyIII\User;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\ParameterBag;
@@ -67,13 +69,22 @@ class ShowController extends Controller
      *
      * @throws FireflyException
      */
-    public function show(PiggyBank $piggyBank)
+    public function show(PiggyBank $piggyBank): Factory|\Illuminate\Contracts\View\View
     {
         /** @var Carbon $end */
         $end         = session('end', today(config('app.timezone'))->endOfMonth());
         // transform piggies using the transformer:
         $parameters  = new ParameterBag();
         $parameters->set('end', $end);
+
+        // enrich
+        /** @var User $admin */
+        $admin       = auth()->user();
+        $enrichment  = new PiggyBankEnrichment();
+        $enrichment->setUser($admin);
+
+        /** @var PiggyBank $piggyBank */
+        $piggyBank   = $enrichment->enrichSingle($piggyBank);
 
         /** @var PiggyBankTransformer $transformer */
         $transformer = app(PiggyBankTransformer::class);
@@ -84,6 +95,6 @@ class ShowController extends Controller
         $attachments = $this->piggyRepos->getAttachments($piggyBank);
 
 
-        return view('piggy-banks.show', compact('piggyBank', 'events', 'subTitle', 'piggy', 'attachments'));
+        return view('piggy-banks.show', ['piggyBank' => $piggyBank, 'events' => $events, 'subTitle' => $subTitle, 'piggy' => $piggy, 'attachments' => $attachments]);
     }
 }

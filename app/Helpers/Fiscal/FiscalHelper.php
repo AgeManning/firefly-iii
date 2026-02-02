@@ -24,21 +24,23 @@ declare(strict_types=1);
 namespace FireflyIII\Helpers\Fiscal;
 
 use Carbon\Carbon;
+use FireflyIII\Support\Facades\Preferences;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 
 /**
  * Class FiscalHelper.
  */
 class FiscalHelper implements FiscalHelperInterface
 {
-    /** @var bool */
-    protected $useCustomFiscalYear;
+    protected bool $useCustomFiscalYear;
 
     /**
      * FiscalHelper constructor.
      */
     public function __construct()
     {
-        $this->useCustomFiscalYear = (bool) app('preferences')->get('customFiscalYear', false)->data;
+        $this->useCustomFiscalYear = (bool) Preferences::get('customFiscalYear', false)->data;
     }
 
     /**
@@ -46,9 +48,9 @@ class FiscalHelper implements FiscalHelperInterface
      */
     public function endOfFiscalYear(Carbon $date): Carbon
     {
-        // app('log')->debug(sprintf('Now in endOfFiscalYear(%s).', $date->format('Y-m-d')));
+        // Log::debug(sprintf('Now in endOfFiscalYear(%s).', $date->format('Y-m-d')));
         $endDate = $this->startOfFiscalYear($date);
-        if (true === $this->useCustomFiscalYear) {
+        if ($this->useCustomFiscalYear) {
             // add 1 year and sub 1 day
             $endDate->addYear();
             $endDate->subDay();
@@ -56,20 +58,23 @@ class FiscalHelper implements FiscalHelperInterface
         if (false === $this->useCustomFiscalYear) {
             $endDate->endOfYear();
         }
-        // app('log')->debug(sprintf('Result of endOfFiscalYear(%s) = %s', $date->format('Y-m-d'), $endDate->format('Y-m-d')));
+        // Log::debug(sprintf('Result of endOfFiscalYear(%s) = %s', $date->format('Y-m-d'), $endDate->format('Y-m-d')));
 
         return $endDate;
     }
 
     /**
      * @return Carbon date object
+     *
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
     public function startOfFiscalYear(Carbon $date): Carbon
     {
         // get start mm-dd. Then create a start date in the year passed.
         $startDate = clone $date;
-        if (true === $this->useCustomFiscalYear) {
-            $prefStartStr = app('preferences')->get('fiscalYearStart', '01-01')->data;
+        if ($this->useCustomFiscalYear) {
+            $prefStartStr = Preferences::get('fiscalYearStart', '01-01')->data;
             if (is_array($prefStartStr)) {
                 $prefStartStr = '01-01';
             }
@@ -86,7 +91,7 @@ class FiscalHelper implements FiscalHelperInterface
             $startDate->startOfYear();
         }
 
-        // app('log')->debug(sprintf('Result of startOfFiscalYear(%s) = %s', $date->format('Y-m-d'), $startDate->format('Y-m-d')));
+        // Log::debug(sprintf('Result of startOfFiscalYear(%s) = %s', $date->format('Y-m-d'), $startDate->format('Y-m-d')));
 
         return $startDate;
     }

@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Account;
 
+use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\Support\Facades\Navigation;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Enums\TransactionTypeEnum;
@@ -39,7 +42,7 @@ use FireflyIII\User;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Redirector;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 /**
@@ -77,7 +80,7 @@ class ReconcileController extends Controller
      *
      * @throws FireflyException
      *                                              */
-    public function reconcile(Account $account, ?Carbon $start = null, ?Carbon $end = null)
+    public function reconcile(Account $account, ?Carbon $start = null, ?Carbon $end = null): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
         if (!$this->isEditableAccount($account)) {
             return $this->redirectAccountToAccount($account);
@@ -87,23 +90,23 @@ class ReconcileController extends Controller
 
             return redirect(route('accounts.index', [config(sprintf('firefly.shortNamesByFullName.%s', $account->accountType->type))]));
         }
-        $currency        = $this->accountRepos->getAccountCurrency($account) ?? $this->defaultCurrency;
+        $currency        = $this->accountRepos->getAccountCurrency($account) ?? $this->primaryCurrency;
 
         // no start or end:
-        $range           = app('navigation')->getViewRange(false);
+        $range           = Navigation::getViewRange(false);
 
         // get start and end
 
         if (!$start instanceof Carbon && !$end instanceof Carbon) {
             /** @var Carbon $start */
-            $start = clone session('start', app('navigation')->startOfPeriod(new Carbon(), $range));
+            $start = clone session('start', Navigation::startOfPeriod(new Carbon(), $range));
 
             /** @var Carbon $end */
-            $end   = clone session('end', app('navigation')->endOfPeriod(new Carbon(), $range));
+            $end   = clone session('end', Navigation::endOfPeriod(new Carbon(), $range));
         }
         if (null === $end) {
             /** @var Carbon $end */
-            $end = app('navigation')->endOfPeriod($start, $range);
+            $end = Navigation::endOfPeriod($start, $range);
         }
 
         if ($end->lt($start)) {
@@ -113,13 +116,20 @@ class ReconcileController extends Controller
         $start->startOfDay();
         $end->endOfDay();
 
-        $startDate       = clone $start;
-        $startDate->subDay()->endOfDay(); // this is correct, subday endofday ends at 23:59:59
+        //        $startDate       = clone $start;
+        //        $startDate->subDay()->endOfDay(); // this is correct, subday endofday ends at 23:59:59
         // both are validated and are correct.
-        Log::debug(sprintf('reconcile: Call finalAccountBalance with date/time "%s"', $startDate->toIso8601String()));
-        Log::debug(sprintf('reconcile2: Call finalAccountBalance with date/time "%s"', $end->toIso8601String()));
-        $startBalance    = Steam::bcround(Steam::finalAccountBalance($account, $startDate)['balance'], $currency->decimal_places);
-        $endBalance      = Steam::bcround(Steam::finalAccountBalance($account, $end)['balance'], $currency->decimal_places);
+        //        Log::debug(sprintf('reconcile: Call finalAccountBalance with date/time "%s"', $startDate->toIso8601String()));
+        //        Log::debug(sprintf('reconcile2: Call finalAccountBalance with date/time "%s"', $end->toIso8601String()));
+        //        $startBalance    = Steam::bcround(Steam::finalAccountBalance($account, $startDate)['balance'], $currency->decimal_places);
+        //        $endBalance      = Steam::bcround(Steam::finalAccountBalance($account, $end)['balance'], $currency->decimal_places);
+
+        // 2025-10-08 replace with accountsBalancesOptimized
+        // no longer need to do subday->endofday on $start, set inclusive = false for the same effect.
+        $startBalance    = Steam::bcround(Steam::accountsBalancesOptimized(new Collection()->push($account), $start, convertToPrimary: null, inclusive: false)[$account->id]['balance'], $currency->decimal_places);
+        $endBalance      = Steam::bcround(Steam::accountsBalancesOptimized(new Collection()->push($account), $end)[$account->id]['balance'], $currency->decimal_places);
+
+
         $subTitleIcon    = config(sprintf('firefly.subIconsByIdentifier.%s', $account->accountType->type));
         $subTitle        = (string) trans('firefly.reconcile_account', ['account' => $account->name]);
 
@@ -131,44 +141,29 @@ class ReconcileController extends Controller
 
         return view(
             'accounts.reconcile.index',
-            compact(
-                'account',
-                'currency',
-                'objectType',
-                'subTitleIcon',
-                'start',
-                'end',
-                'subTitle',
-                'startBalance',
-                'endBalance',
-                'transactionsUrl',
-                'overviewUrl',
-                'indexUrl'
-            )
+            ['account' => $account, 'currency' => $currency, 'objectType' => $objectType, 'subTitleIcon' => $subTitleIcon, 'start' => $start, 'end' => $end, 'subTitle' => $subTitle, 'startBalance' => $startBalance, 'endBalance' => $endBalance, 'transactionsUrl' => $transactionsUrl, 'overviewUrl' => $overviewUrl, 'indexUrl' => $indexUrl]
         );
     }
 
     /**
      * Submit a new reconciliation.
      *
-     * @return Redirector|RedirectResponse
-     *
      * @throws DuplicateTransactionException
      */
-    public function submit(ReconciliationStoreRequest $request, Account $account, Carbon $start, Carbon $end)
+    public function submit(ReconciliationStoreRequest $request, Account $account, Carbon $start, Carbon $end): Redirector|RedirectResponse
     {
         if (!$this->isEditableAccount($account)) {
             return $this->redirectAccountToAccount($account);
         }
 
-        app('log')->debug('In ReconcileController::submit()');
+        Log::debug('In ReconcileController::submit()');
         $data   = $request->getAll();
 
         /** @var string $journalId */
         foreach ($data['journals'] as $journalId) {
             $this->repository->reconcileById((int) $journalId);
         }
-        app('log')->debug('Reconciled all transactions.');
+        Log::debug('Reconciled all transactions.');
 
         // switch dates if necessary
         if ($end->lt($start)) {
@@ -180,8 +175,8 @@ class ReconcileController extends Controller
         if ('create' === $data['reconcile']) {
             $result = $this->createReconciliation($account, $start, $end, $data['difference']);
         }
-        app('log')->debug('End of routine.');
-        app('preferences')->mark();
+        Log::debug('End of routine.');
+        Preferences::mark();
         if ('' === $result) {
             session()->flash('success', (string) trans('firefly.reconciliation_stored'));
         }
@@ -204,7 +199,7 @@ class ReconcileController extends Controller
         }
 
         $reconciliation = $this->accountRepos->getReconciliation($account);
-        $currency       = $this->accountRepos->getAccountCurrency($account) ?? $this->defaultCurrency;
+        $currency       = $this->accountRepos->getAccountCurrency($account) ?? $this->primaryCurrency;
         $source         = $reconciliation;
         $destination    = $account;
         if (1 === bccomp($difference, '0')) {

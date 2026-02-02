@@ -12,8 +12,11 @@
     {# Firefly III version #}
     <tr>
         <td>Firefly III</td>
-        <td>{% if FF_IS_DEVELOP %}<!-- .Z9JBCmw64Zkx1pQw -->{% endif %}{% if not FF_IS_DEVELOP %}v{% endif %}{{ FF_VERSION }} / <span>#</span>{{ system.db_version }} (expects <span>#</span>{{ config('firefly.db_version') }})
-        </td>
+        <td>{% if FF_IS_DEVELOP %}<!-- .Z9JBCmw64Zkx1pQw -->{% endif %}{% if not FF_IS_DEVELOP %}v{% endif %}{{ FF_VERSION }}</td>
+    </tr>
+    <tr>
+        <td>Build time</td>
+        <td>{{ system.build_time_nice }} ({{ system.build_time }})</td>
     </tr>
     {# PHP version + settings #}
     <tr>
@@ -116,11 +119,11 @@
     </tr>
     <tr>
         <td>Exchange rates</td>
-        <td>{% if config('cer.enabled') %}Enabled{% else %}Disabled{% endif %}, downloads {% if config('cer.download_enabled') %}enabled{% else %}disabled{% endif %}</td>
+        <td>{% if fireflyiiiconfig('enable_exchange_rates', true) %}Enabled{% else %}Disabled{% endif %}, downloads {% if FireflyConfig.get('enable_external_rates', config('cer.download_enabled')) %}enabled{% else %}disabled{% endif %}</td>
     </tr>
     <tr>
         <td>RB-column</td>
-        <td>{% if config('firefly.feature_flags.running_balance_column') %}Enabled{% else %}Disabled{% endif %}</td>
+        <td>{% if fireflyiiiconfig('use_running_balance', true) %}Enabled{% else %}Disabled{% endif %}</td>
     </tr>
     </tbody>
 </table>
@@ -145,12 +148,12 @@
         <td>{{ user.user_flags | raw }}</td>
     </tr>
     <tr>
-        <td>Native currency</td>
-        <td>{{ user.native.code }}</td>
+        <td>Primary currency</td>
+        <td>{{ user.primary.code }}</td>
     </tr>
     <tr>
-        <td>Convert to native currency?</td>
-        <td>{% if user.convert_to_native %}Enabled{% else %}Disabled{% endif %}</td>
+        <td>Convert to primary currency?</td>
+        <td>{% if user.convert_to_primary %}Enabled{% else %}Disabled{% endif %}</td>
     </tr>
     <tr>
         <td>Session start</td>

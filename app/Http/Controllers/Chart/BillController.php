@@ -31,6 +31,7 @@ use FireflyIII\Models\Bill;
 use FireflyIII\Repositories\Bill\BillRepositoryInterface;
 use FireflyIII\Support\CacheProperties;
 use Illuminate\Http\JsonResponse;
+use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class BillController.
@@ -109,11 +110,11 @@ class BillController extends Controller
         $cache      = new CacheProperties();
         $cache->addProperty('chart.bill.single');
         $cache->addProperty($bill->id);
-        $cache->addProperty($this->convertToNative);
+        $cache->addProperty($this->convertToPrimary);
         if ($cache->has()) {
             return response()->json($cache->get());
         }
-        $locale     = app('steam')->getLocale();
+        $locale     = Steam::getLocale();
 
         /** @var GroupCollectorInterface $collector */
         $collector  = app(GroupCollectorInterface::class);
@@ -122,7 +123,7 @@ class BillController extends Controller
         // sort the other way around:
         usort(
             $journals,
-            static function (array $left, array $right) {
+            static function (array $left, array $right): int {
                 if ($left['date']->gt($right['date'])) {
                     return 1;
                 }
@@ -134,8 +135,8 @@ class BillController extends Controller
             }
         );
         $currency   = $bill->transactionCurrency;
-        if ($this->convertToNative) {
-            $currency = $this->defaultCurrency;
+        if ($this->convertToPrimary) {
+            $currency = $this->primaryCurrency;
         }
 
         $chartData  = [
@@ -164,7 +165,7 @@ class BillController extends Controller
         $currencyId = $bill->transaction_currency_id;
         $amountMin  = $bill->amount_min;
         $amountMax  = $bill->amount_max;
-        if ($this->convertToNative && $currencyId !== $this->defaultCurrency->id) {
+        if ($this->convertToPrimary && $currencyId !== $this->primaryCurrency->id) {
             $amountMin = $bill->native_amount_min;
             $amountMax = $bill->native_amount_max;
         }
@@ -178,11 +179,11 @@ class BillController extends Controller
                 $chartData[2]['entries'][$date] = '0';
             }
             $amount                         = bcmul((string) $journal['amount'], '-1');
-            if ($this->convertToNative && $currencyId !== $journal['currency_id']) {
-                $amount = bcmul($journal['native_amount'] ?? '0', '-1');
+            if ($this->convertToPrimary && $currencyId !== $journal['currency_id']) {
+                $amount = bcmul($journal['pc_amount'] ?? '0', '-1');
             }
-            if ($this->convertToNative && $currencyId === $journal['foreign_currency_id']) {
-                $amount = bcmul((string) $journal['foreign_amount'], '-1');
+            if ($this->convertToPrimary && $currencyId === $journal['foreign_currency_id']) {
+                $amount = bcmul((string) $journal['pc_amount'], '-1');
             }
 
             $chartData[2]['entries'][$date] = bcadd($chartData[2]['entries'][$date], $amount);  // amount of journal

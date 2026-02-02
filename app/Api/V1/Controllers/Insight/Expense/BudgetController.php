@@ -63,10 +63,6 @@ class BudgetController extends Controller
         );
     }
 
-    /**
-     * This endpoint is documented at:
-     * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/insight/insightExpenseBudget
-     */
     public function budget(GenericRequest $request): JsonResponse
     {
         $start         = $request->getStart();
@@ -80,7 +76,7 @@ class BudgetController extends Controller
 
         /** @var Budget $budget */
         foreach ($budgets as $budget) {
-            $expenses = $this->opsRepository->sumExpenses($start, $end, $assetAccounts, new Collection([$budget]));
+            $expenses = $this->opsRepository->sumExpenses($start, $end, $assetAccounts, new Collection()->push($budget));
 
             /** @var array $expense */
             foreach ($expenses as $expense) {
@@ -98,10 +94,6 @@ class BudgetController extends Controller
         return response()->json($result);
     }
 
-    /**
-     * This endpoint is documented at:
-     * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/insight/insightExpenseNoBudget
-     */
     public function noBudget(GenericRequest $request): JsonResponse
     {
         $start         = $request->getStart();

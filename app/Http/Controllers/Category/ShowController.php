@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Category;
 
+use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
@@ -35,6 +36,8 @@ use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 
 /**
  * Class ShowController
@@ -70,9 +73,11 @@ class ShowController extends Controller
      *
      * @return Factory|View
      *
+     * @throws ContainerExceptionInterface
      * @throws FireflyException
+     * @throws NotFoundExceptionInterface
      */
-    public function show(Request $request, Category $category, ?Carbon $start = null, ?Carbon $end = null)
+    public function show(Request $request, Category $category, ?Carbon $start = null, ?Carbon $end = null): Factory|\Illuminate\Contracts\View\View
     {
         $start ??= session('start', today(config('app.timezone'))->startOfMonth());
         $end   ??= session('end', today(config('app.timezone'))->endOfMonth());
@@ -82,7 +87,7 @@ class ShowController extends Controller
         $subTitleIcon = 'fa-bookmark';
         $page         = (int) $request->get('page');
         $attachments  = $this->repository->getAttachments($category);
-        $pageSize     = (int) app('preferences')->get('listPageSize', 50)->data;
+        $pageSize     = (int) Preferences::get('listPageSize', 50)->data;
         $oldest       = $this->repository->firstUseDate($category) ?? today(config('app.timezone'))->startOfYear();
         $periods      = $this->getCategoryPeriodOverview($category, $oldest, $end);
         $path         = route('categories.show', [$category->id, $start->format('Y-m-d'), $end->format('Y-m-d')]);
@@ -105,20 +110,23 @@ class ShowController extends Controller
         $groups       = $collector->getPaginatedGroups();
         $groups->setPath($path);
 
-        return view('categories.show', compact('category', 'attachments', 'groups', 'periods', 'subTitle', 'subTitleIcon', 'start', 'end'));
+        return view('categories.show', ['category' => $category, 'attachments' => $attachments, 'groups' => $groups, 'periods' => $periods, 'subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'start' => $start, 'end' => $end]);
     }
 
     /**
      * Show all transactions within a category.
      *
      * @return Factory|View
+     *
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
-    public function showAll(Request $request, Category $category)
+    public function showAll(Request $request, Category $category): Factory|\Illuminate\Contracts\View\View
     {
         // default values:
         $subTitleIcon = 'fa-bookmark';
         $page         = (int) $request->get('page');
-        $pageSize     = (int) app('preferences')->get('listPageSize', 50)->data;
+        $pageSize     = (int) Preferences::get('listPageSize', 50)->data;
         $start        = null;
         $end          = null;
         $periods      = new Collection();
@@ -142,6 +150,6 @@ class ShowController extends Controller
         $groups       = $collector->getPaginatedGroups();
         $groups->setPath($path);
 
-        return view('categories.show', compact('category', 'attachments', 'groups', 'periods', 'subTitle', 'subTitleIcon', 'start', 'end'));
+        return view('categories.show', ['category' => $category, 'attachments' => $attachments, 'groups' => $groups, 'periods' => $periods, 'subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'start' => $start, 'end' => $end]);
     }
 }

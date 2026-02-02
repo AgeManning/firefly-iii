@@ -28,6 +28,7 @@ use FireflyIII\Enums\WebhookTrigger;
 use FireflyIII\Events\DestroyedTransactionGroup;
 use FireflyIII\Events\RequestedSendWebhookMessages;
 use FireflyIII\Generator\Webhook\MessageGeneratorInterface;
+use FireflyIII\Support\Facades\FireflyConfig;
 use FireflyIII\Support\Models\AccountBalanceCalculator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -45,22 +46,25 @@ class DestroyedGroupEventHandler
 
     private function triggerWebhooks(DestroyedTransactionGroup $destroyedGroupEvent): void
     {
-        app('log')->debug('DestroyedTransactionGroup:triggerWebhooks');
+        Log::debug('DestroyedTransactionGroup:triggerWebhooks');
         $group  = $destroyedGroupEvent->transactionGroup;
         $user   = $group->user;
 
         /** @var MessageGeneratorInterface $engine */
         $engine = app(MessageGeneratorInterface::class);
         $engine->setUser($user);
-        $engine->setObjects(new Collection([$group]));
-        $engine->setTrigger(WebhookTrigger::DESTROY_TRANSACTION->value);
+        $engine->setObjects(new Collection()->push($group));
+        $engine->setTrigger(WebhookTrigger::DESTROY_TRANSACTION);
         $engine->generateMessages();
-
+        Log::debug(sprintf('send event RequestedSendWebhookMessages from %s', __METHOD__));
         event(new RequestedSendWebhookMessages());
     }
 
     private function updateRunningBalance(DestroyedTransactionGroup $event): void
     {
+        if (false === FireflyConfig::get('use_running_balance', config('firefly.feature_flags.running_balance_column'))->data) {
+            return;
+        }
         Log::debug(__METHOD__);
         $group = $event->transactionGroup;
         foreach ($group->transactionJournals as $journal) {

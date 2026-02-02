@@ -27,6 +27,7 @@ namespace FireflyIII\Repositories\Category;
 use Carbon\Carbon;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Report\Summarizer\TransactionSummarizer;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupInterface;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupTrait;
@@ -77,7 +78,7 @@ class NoCategoryRepository implements NoCategoryRepositoryInterface, UserGroupIn
             $journalId  = (int) $journal['transaction_journal_id'];
             $array[$currencyId]['categories'][0]['transaction_journals'][$journalId]
                         = [
-                            'amount' => app('steam')->negative($journal['amount']),
+                            'amount' => Steam::negative($journal['amount']),
                             'date'   => $journal['date'],
                         ];
         }
@@ -123,7 +124,7 @@ class NoCategoryRepository implements NoCategoryRepositoryInterface, UserGroupIn
             $journalId  = (int) $journal['transaction_journal_id'];
             $array[$currencyId]['categories'][0]['transaction_journals'][$journalId]
                         = [
-                            'amount' => app('steam')->positive($journal['amount']),
+                            'amount' => Steam::positive($journal['amount']),
                             'date'   => $journal['date'],
                         ];
         }
@@ -174,7 +175,7 @@ class NoCategoryRepository implements NoCategoryRepositoryInterface, UserGroupIn
                 'currency_code'           => $journal['currency_code'],
                 'currency_decimal_places' => $journal['currency_decimal_places'],
             ];
-            $array[$currencyId]['sum'] = bcadd($array[$currencyId]['sum'], (string) app('steam')->positive($journal['amount']));
+            $array[$currencyId]['sum'] = bcadd($array[$currencyId]['sum'], Steam::positive($journal['amount']));
         }
 
         return $array;
@@ -202,7 +203,7 @@ class NoCategoryRepository implements NoCategoryRepositoryInterface, UserGroupIn
                 'currency_code'           => $journal['currency_code'],
                 'currency_decimal_places' => $journal['currency_decimal_places'],
             ];
-            $array[$currencyId]['sum'] = bcadd($array[$currencyId]['sum'], (string) app('steam')->positive($journal['amount']));
+            $array[$currencyId]['sum'] = bcadd($array[$currencyId]['sum'], Steam::positive($journal['amount']));
         }
 
         return $array;

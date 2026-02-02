@@ -30,6 +30,7 @@ use FireflyIII\Models\TransactionJournal;
 use Illuminate\Console\Command;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class RemovesEmptyJournals extends Command
 {
@@ -55,10 +56,7 @@ class RemovesEmptyJournals extends Command
      */
     private function deleteUnevenJournals(): void
     {
-        $set   = Transaction::whereNull('deleted_at')
-            ->groupBy('transactions.transaction_journal_id')
-            ->get([DB::raw('COUNT(transactions.transaction_journal_id) as the_count'), 'transaction_journal_id']) // @phpstan-ignore-line
-        ;
+        $set   = Transaction::whereNull('deleted_at')->groupBy('transactions.transaction_journal_id')->get([DB::raw('COUNT(transactions.transaction_journal_id) as the_count'), 'transaction_journal_id']);
         $total = 0;
 
         /** @var Transaction $row */
@@ -71,8 +69,8 @@ class RemovesEmptyJournals extends Command
                     $journal = TransactionJournal::find($row->transaction_journal_id);
                     $journal?->delete();
                 } catch (QueryException $e) {
-                    app('log')->info(sprintf('Could not delete journal: %s', $e->getMessage()));
-                    app('log')->error($e->getTraceAsString());
+                    Log::info(sprintf('Could not delete journal: %s', $e->getMessage()));
+                    Log::error($e->getTraceAsString());
                 }
 
                 Transaction::where('transaction_journal_id', $row->transaction_journal_id)->delete();
@@ -99,8 +97,8 @@ class RemovesEmptyJournals extends Command
                 $journal = TransactionJournal::find($entry->id);
                 $journal?->delete();
             } catch (QueryException $e) {
-                app('log')->info(sprintf('Could not delete entry: %s', $e->getMessage()));
-                app('log')->error($e->getTraceAsString());
+                Log::info(sprintf('Could not delete entry: %s', $e->getMessage()));
+                Log::error($e->getTraceAsString());
             }
 
             $this->friendlyInfo(sprintf('Deleted empty transaction journal #%d', $entry->id));

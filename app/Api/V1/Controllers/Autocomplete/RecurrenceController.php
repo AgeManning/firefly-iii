@@ -25,10 +25,12 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Autocomplete;
 
 use FireflyIII\Api\V1\Controllers\Controller;
-use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteRequest;
+use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteApiRequest;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Recurrence;
 use FireflyIII\Repositories\Recurring\RecurringRepositoryInterface;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * Class RecurrenceController
@@ -36,6 +38,7 @@ use Illuminate\Http\JsonResponse;
 class RecurrenceController extends Controller
 {
     private RecurringRepositoryInterface $repository;
+    protected array $acceptedRoles = [UserRoleEnum::READ_RECURRING];
 
     /**
      * RecurrenceController constructor.
@@ -43,25 +46,19 @@ class RecurrenceController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->repository = app(RecurringRepositoryInterface::class);
+        $this->middleware(function (Request $request, $next) {
+            $this->validateUserGroup($request);
+            $this->repository = app(RecurringRepositoryInterface::class);
+            $this->repository->setUser($this->user);
+            $this->repository->setUserGroup($this->userGroup);
 
-                $this->repository->setUser(auth()->user());
-
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
-    /**
-     * This endpoint is documented at:
-     * * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/autocomplete/getRecurringAC
-     */
-    public function recurring(AutocompleteRequest $request): JsonResponse
+    public function recurring(AutocompleteApiRequest $request): JsonResponse
     {
-        $data        = $request->getData();
-        $recurrences = $this->repository->searchRecurrence($data['query'], $this->parameters->get('limit'));
+        $recurrences = $this->repository->searchRecurrence($request->attributes->get('query'), $request->attributes->get('limit'));
         $response    = [];
 
         /** @var Recurrence $recurrence */
@@ -70,6 +67,7 @@ class RecurrenceController extends Controller
                 'id'          => (string) $recurrence->id,
                 'name'        => $recurrence->title,
                 'description' => $recurrence->description,
+                'active'      => $recurrence->active,
             ];
         }
 

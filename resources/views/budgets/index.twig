@@ -55,7 +55,7 @@
                 <div class="box">
                     <div class="box-header with-border">
                         <h3 class="box-title">
-                            {{ trans('firefly.total_available_budget_in_currency', {currency: defaultCurrency.name}) }}
+                            {{ trans('firefly.total_available_budget_in_currency', {currency: primaryCurrency.name}) }}
                             <br>
                             <small>{{ trans('firefly.between_dates_breadcrumb', {start: start.isoFormat(monthAndDayFormat), end: end.isoFormat(monthAndDayFormat)}) }}</small>
                         </h3>
@@ -65,8 +65,8 @@
                             {# info about the amount budgeted #}
                             <div class="col-lg-3 col-md-3 col-sm-3 col-xs-3">
                                 <small>{{ 'budgeted'|_ }} ({{ 'see_below'|_ }}):
-                                    <span class="budgeted_amount" data-value="{{ budgeted }}" data-id="0" data-currency="{{ defaultCurrency.id }}">
-                                        {{ formatAmountBySymbol(budgeted, defaultCurrency.symbol, defaultCurrency.decimal_places) }}
+                                    <span class="budgeted_amount" data-value="{{ budgeted }}" data-id="0" data-currency="{{ primaryCurrency.id }}">
+                                        {{ formatAmountBySymbol(budgeted, primaryCurrency.symbol, primaryCurrency.decimal_places) }}
                                     </span>
                                 </small>
                             </div>
@@ -75,8 +75,8 @@
                                 <small class="available_bar"
                                        data-id="0">{{ trans('firefly.available_between', {start: start.isoFormat(monthAndDayFormat), end: end.isoFormat(monthAndDayFormat) }) }}
                                     :
-                                    <span class="available_amount" data-id="0" data-value="0" data-currency="{{ defaultCurrency.id }}"
-                                          data-value="0">{{ formatAmountBySymbol(0, defaultCurrency.symbol, defaultCurrency.decimal_places, true) }}</span>
+                                    <span class="available_amount" data-id="0" data-value="0" data-currency="{{ primaryCurrency.id }}"
+                                          data-value="0">{{ formatAmountBySymbol(0, primaryCurrency.symbol, primaryCurrency.decimal_places, true) }}</span>
                                 </small>
                             </div>
                         </div>
@@ -84,7 +84,7 @@
                         <div class="row spentInfo" data-id="0" data-value="{{ spent }}">
                             <div class="col-lg-12 col-md-12 col-sm-12 col-xs-12">
                                 <small>{{ trans('firefly.spent_between', {start: start.isoFormat(monthAndDayFormat), end: end.isoFormat(monthAndDayFormat)}) }}
-                                    : {{ formatAmountBySymbol(spent, defaultCurrency.symbol, defaultCurrency.decimal_places) }} </small>
+                                    : {{ formatAmountBySymbol(spent, primaryCurrency.symbol, primaryCurrency.decimal_places) }} </small>
                             </div>
                         </div>
                     </div>
@@ -116,8 +116,8 @@
                                     <small>{{ 'budgeted'|_ }}:
                                         <span class="text-success money-positive budgeted_amount" data-id="{{ budget.id }}" data-currency="{{ budget.transaction_currency.id }}">
                                         {{ formatAmountBySymbol(budget.budgeted, budget.transaction_currency.symbol, budget.transaction_currency.decimal_places, false) }}
-                                            {% if null != budget.native_budgeted %}
-                                            ({{ formatAmountBySymbol(budget.native_budgeted, defaultCurrency.symbol, defaultCurrency.decimal_places, false) }})
+                                            {% if null != budget.pc_budgeted %}
+                                            ({{ formatAmountBySymbol(budget.pc_budgeted, primaryCurrency.symbol, primaryCurrency.decimal_places, false) }})
                                             {% endif %}
                                     </span>
                                     </small>
@@ -130,8 +130,8 @@
                                         <span class="available_amount" data-id="{{ budget.id }}" data-currency="{{ budget.transaction_currency.id }}"
                                               data-value="{{ budget.amount }}">
                                             {{ formatAmountBySymbol(budget.amount, budget.transaction_currency.symbol, budget.transaction_currency.decimal_places, true) }}
-                                            {% if(convertToNative and 0 != budget.native_amount) %}
-                                            ({{ formatAmountBySymbol(budget.native_amount, defaultCurrency.symbol, defaultCurrency.decimal_places, true) }})
+                                            {% if(convertToPrimary and 0 != budget.pc_amount) %}
+                                            ({{ formatAmountBySymbol(budget.pc_amount, primaryCurrency.symbol, primaryCurrency.decimal_places, true) }})
                                             {% endif %}
 
                                         </span>
@@ -265,11 +265,16 @@
                                     <td>
                                         {% if 0==budget.budgeted|length %}
                                             <div class="input-group">
-                                                <div class="input-group-addon">{{ defaultCurrency.symbol }}</div>
-                                                <input type="hidden" name="balance_currency_id" value="{{ defaultCurrency.id }}"/>
+                                                <div class="input-group-addon">{{ primaryCurrency.symbol }}</div>
+                                                <input type="hidden" name="balance_currency_id" value="{{ primaryCurrency.id }}"/>
+                                                {% if not anonymous %}
                                                 <input class="form-control budget_amount" data-original="0" data-id="{{ budget.id }}"
-                                                       data-currency="{{ defaultCurrency.id }}" data-limit="0" value="0" autocomplete="off" min="0" name="amount"
+                                                       data-currency="{{ primaryCurrency.id }}" data-limit="0" value="0" autocomplete="off" min="0" name="amount"
                                                        type="number">
+                                                {% endif %}
+                                                {% if anonymous %}
+                                                ---
+                                                {% endif %}
                                             </div>
                                             <span class="text-danger budget_warning" data-id="{{ budget.id }}" data-budgetLimit="{{ budgetLimit.id }}"
                                                   style="display:none;"></span>
@@ -283,10 +288,15 @@
                                                 {% endif %}
                                                 <div class="input-group bl_entry" data-budget-limit-id="{{ budgetLimit.id }}">
                                                     <div class="input-group-addon">{{ budgetLimit.currency_symbol }}</div>
+                                                    {% if not anonymous %}
                                                     <input class="form-control budget_amount" data-original="{{ budgetLimit.amount }}"
                                                            data-id="{{ budget.id }}" data-limit="{{ budgetLimit.id }}" value="{{ budgetLimit.amount }}"
                                                            autocomplete="off"
                                                            min="0" name="amount" type="number">
+                                                    {% endif %}
+                                                    {% if anonymous %}
+                                                        ---
+                                                    {% endif %}
                                                     <div class="input-group-btn">
                                                         <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true"
                                                                 aria-expanded="false"><span class="caret"></span></button>
@@ -356,16 +366,25 @@
                                                     </span>
                                                     <br/>
                                                 {% endif %}
+                                                {% if spentInfo.currency_id == budgetLimit.currency_id and not budgetLimit.in_range and 0.0 == budgetLimit.total_days %}
+                                        <span class="left_span" data-currency="{{ spentInfo.currency_id }}" data-limit="{{ budgetLimit.id }}"
+                                              data-value="{{ spentInfo.spent + budgetLimit.amount }}" class="amount_left">
+                                            {{ formatAmountBySymbol(spentInfo.spent + budgetLimit.amount, spentInfo.currency_symbol, spentInfo.currency_decimal_places) }}
+                                        </span>
+                                                    <span class="text-muted">({{ 'unknown'|_ }})</span>
+                                                {% endif %}
+                                                {% if spentInfo.currency_id == budgetLimit.currency_id and not budgetLimit.in_range and 0.0 != budgetLimit.total_days %}
+                                                    <span class="left_span" data-currency="{{ spentInfo.currency_id }}" data-limit="{{ budgetLimit.id }}"
+                                                          data-value="{{ spentInfo.spent + budgetLimit.amount }}" class="amount_left">
+                                            {{ formatAmountBySymbol(spentInfo.spent + budgetLimit.amount, spentInfo.currency_symbol, spentInfo.currency_decimal_places) }}
+                                        </span>
+                                                    ({{ formatAmountBySymbol((spentInfo.spent + budgetLimit.amount) / budgetLimit.total_days, spentInfo.currency_symbol, spentInfo.currency_decimal_places) }})
+                                                {% endif %}
+
                                             {% endfor %}
 
                                             {% if countLimit == 0 %}
-
-                                                {# this code is used for budget limits OUTSIDE the current view range. #}
-                                                <span class="left_span" data-id="{{ budget.id }}" data-currency="{{ spentInfo.currency_id }}" data-limit="0"
-                                                      class="amount_left" data-value="{{ spentInfo.spent }}">
-                                                    {{ formatAmountBySymbol(spentInfo.spent, spentInfo.currency_symbol, spentInfo.currency_decimal_places) }}
-                                                </span>
-                                                <br/>
+                                                {#  display nothing #}
                                             {% endif %}
                                         {% endfor %}
                                         {% for budgetLimit in budget.budgeted %}
@@ -454,11 +473,11 @@
 {% endblock %}
 
 {% block styles %}
-    <link href="v1/css/bootstrap-sortable.css?v={{ FF_VERSION }}" type="text/css" rel="stylesheet" media="all" nonce="{{ JS_NONCE }}">
+    <link href="v1/css/bootstrap-sortable.css?v={{ FF_BUILD_TIME }}" type="text/css" rel="stylesheet" media="all" nonce="{{ JS_NONCE }}">
 {% endblock %}
 
 {% block scripts %}
-    <script src="v1/js/lib/jquery-ui.min.js?v={{ FF_VERSION }}" type="text/javascript" nonce="{{ JS_NONCE }}"></script>
+    <script src="v1/js/lib/jquery-ui.min.js?v={{ FF_BUILD_TIME }}" type="text/javascript" nonce="{{ JS_NONCE }}"></script>
     <script type="text/javascript" nonce="{{ JS_NONCE }}">
 
         // index route.
@@ -477,6 +496,6 @@
         var periodStart = "{{ start.format('Y-m-d') }}";
         var periodEnd = "{{ end.format('Y-m-d') }}";
     </script>
-    <script type="text/javascript" src="v1/js/lib/bootstrap-sortable.js?v={{ FF_VERSION }}" nonce="{{ JS_NONCE }}"></script>
-    <script type="text/javascript" src="v1/js/ff/budgets/index.js?v={{ FF_VERSION }}" nonce="{{ JS_NONCE }}"></script>
+    <script type="text/javascript" src="v1/js/lib/bootstrap-sortable.js?v={{ FF_BUILD_TIME }}" nonce="{{ JS_NONCE }}"></script>
+    <script type="text/javascript" src="v1/js/ff/budgets/index.js?v={{ FF_BUILD_TIME }}" nonce="{{ JS_NONCE }}"></script>
 {% endblock %}

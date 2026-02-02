@@ -23,7 +23,10 @@ declare(strict_types=1);
 
 namespace FireflyIII\Repositories\User;
 
+use FireflyIII\Support\Facades\Preferences;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use Exception;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\BudgetLimit;
 use FireflyIII\Models\GroupMembership;
@@ -35,8 +38,8 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
-use Exception;
 use Override;
+use SensitiveParameter;
 
 /**
  * Class UserRepository.
@@ -56,12 +59,12 @@ class UserRepository implements UserRepositoryInterface
         $oldEmail           = $user->email;
 
         // save old email as pref
-        app('preferences')->setForUser($user, 'previous_email_latest', $oldEmail);
-        app('preferences')->setForUser($user, 'previous_email_'.Carbon::now()->format('Y-m-d-H-i-s'), $oldEmail);
+        Preferences::setForUser($user, 'previous_email_latest', $oldEmail);
+        Preferences::setForUser($user, 'previous_email_'.Carbon::now()->format('Y-m-d-H-i-s'), $oldEmail);
 
         // set undo and confirm token:
-        app('preferences')->setForUser($user, 'email_change_undo_token', bin2hex(random_bytes(16)));
-        app('preferences')->setForUser($user, 'email_change_confirm_token', bin2hex(random_bytes(16)));
+        Preferences::setForUser($user, 'email_change_undo_token', bin2hex(random_bytes(16)));
+        Preferences::setForUser($user, 'email_change_confirm_token', bin2hex(random_bytes(16)));
         // update user
 
         $user->email        = $newEmail;
@@ -72,7 +75,7 @@ class UserRepository implements UserRepositoryInterface
         return true;
     }
 
-    public function changePassword(User $user, string $password): bool
+    public function changePassword(User $user, #[SensitiveParameter] string $password): bool
     {
         $user->password = bcrypt($password);
         $user->save();
@@ -97,7 +100,7 @@ class UserRepository implements UserRepositoryInterface
 
     public function deleteInvite(InvitedUser $invite): void
     {
-        app('log')->debug(sprintf('Deleting invite #%d', $invite->id));
+        Log::debug(sprintf('Deleting invite #%d', $invite->id));
         $invite->delete();
     }
 
@@ -106,7 +109,7 @@ class UserRepository implements UserRepositoryInterface
      */
     public function destroy(User $user): bool
     {
-        app('log')->debug(sprintf('Calling delete() on user %d', $user->id));
+        Log::debug(sprintf('Calling delete() on user %d', $user->id));
 
         $user->groupMemberships()->delete();
         $user->delete();
@@ -123,7 +126,7 @@ class UserRepository implements UserRepositoryInterface
         foreach ($groups as $group) {
             $count = $group->groupMemberships()->count();
             if (0 === $count) {
-                app('log')->info(sprintf('Deleted empty group #%d ("%s")', $group->id, $group->title));
+                Log::info(sprintf('Deleted empty group #%d ("%s")', $group->id, $group->title));
                 $group->delete();
             }
         }
@@ -161,11 +164,9 @@ class UserRepository implements UserRepositoryInterface
     {
         /** @var null|Role $role */
         $role = $user->roles()->first();
-        if (null !== $role) {
-            return $role->name;
-        }
 
-        return null;
+        return $role?->name;
+
     }
 
     /**
@@ -200,36 +201,15 @@ class UserRepository implements UserRepositoryInterface
      */
     public function getUserData(User $user): array
     {
-        $return                        = [];
-
-        // two factor:
-        $return['has_2fa']             = null !== $user->mfa_secret;
-        $return['is_admin']            = $this->hasRole($user, 'owner');
-        $return['blocked']             = 1 === (int) $user->blocked;
-        $return['blocked_code']        = $user->blocked_code;
-        $return['accounts']            = $user->accounts()->count();
-        $return['journals']            = $user->transactionJournals()->count();
-        $return['transactions']        = $user->transactions()->count();
-        $return['attachments']         = $user->attachments()->count();
-        $return['attachments_size']    = $user->attachments()->sum('size');
-        $return['bills']               = $user->bills()->count();
-        $return['categories']          = $user->categories()->count();
-        $return['budgets']             = $user->budgets()->count();
-        $return['budgets_with_limits'] = BudgetLimit::distinct()
+        return ['has_2fa' => null !== $user->mfa_secret, 'is_admin' => $this->hasRole($user, 'owner'), 'blocked' => 1 === (int) $user->blocked, 'blocked_code' => $user->blocked_code, 'accounts' => $user->accounts()->count(), 'journals' => $user->transactionJournals()->count(), 'transactions' => $user->transactions()->count(), 'attachments' => $user->attachments()->count(), 'attachments_size' => $user->attachments()->sum('size'), 'bills' => $user->bills()->count(), 'categories' => $user->categories()->count(), 'budgets' => $user->budgets()->count(), 'budgets_with_limits' => BudgetLimit::distinct()
             ->leftJoin('budgets', 'budgets.id', '=', 'budget_limits.budget_id')
             ->where('amount', '>', 0)
             ->whereNull('budgets.deleted_at')
             ->where('budgets.user_id', $user->id)
-            ->count('budget_limits.budget_id')
-        ;
-        $return['rule_groups']         = $user->ruleGroups()->count();
-        $return['rules']               = $user->rules()->count();
-        $return['tags']                = $user->tags()->count();
-
-        return $return;
+            ->count('budget_limits.budget_id'), 'rule_groups' => $user->ruleGroups()->count(), 'rules' => $user->rules()->count(), 'tags' => $user->tags()->count()];
     }
 
-    public function hasRole(null|Authenticatable|User $user, string $role): bool
+    public function hasRole(Authenticatable|User|null $user, string $role): bool
     {
         if (!$user instanceof Authenticatable) {
             return false;
@@ -270,7 +250,7 @@ class UserRepository implements UserRepositoryInterface
         return $collection;
     }
 
-    public function inviteUser(null|Authenticatable|User $user, string $email): InvitedUser
+    public function inviteUser(Authenticatable|User|null $user, string $email): InvitedUser
     {
         if (!$user instanceof User) {
             throw new FireflyException('User is not a User object.');
@@ -329,7 +309,7 @@ class UserRepository implements UserRepositoryInterface
     {
         $roleObject = Role::where('name', $role)->first();
         if (null === $roleObject) {
-            app('log')->error(sprintf('Could not find role "%s" in attachRole()', $role));
+            Log::error(sprintf('Could not find role "%s" in attachRole()', $role));
 
             return false;
         }
@@ -338,7 +318,7 @@ class UserRepository implements UserRepositoryInterface
             $user->roles()->attach($roleObject);
         } catch (QueryException $e) {
             // don't care
-            app('log')->error(sprintf('Query exception when giving user a role: %s', $e->getMessage()));
+            Log::error(sprintf('Query exception when giving user a role: %s', $e->getMessage()));
         }
 
         return true;
@@ -379,8 +359,6 @@ class UserRepository implements UserRepositoryInterface
      * This updates the users email address. Same as changeEmail just without most logging. This makes sure that the
      * undo/confirm routine can't catch this one. The user is NOT blocked.
      *
-     * @throws FireflyException
-     *
      * @see changeEmail
      */
     public function updateEmail(User $user, string $newEmail): bool
@@ -391,8 +369,8 @@ class UserRepository implements UserRepositoryInterface
         $oldEmail    = $user->email;
 
         // save old email as pref
-        app('preferences')->setForUser($user, 'admin_previous_email_latest', $oldEmail);
-        app('preferences')->setForUser($user, 'admin_previous_email_'.Carbon::now()->format('Y-m-d-H-i-s'), $oldEmail);
+        Preferences::setForUser($user, 'admin_previous_email_latest', $oldEmail);
+        Preferences::setForUser($user, 'admin_previous_email_'.Carbon::now()->format('Y-m-d-H-i-s'), $oldEmail);
 
         $user->email = $newEmail;
         $user->save();

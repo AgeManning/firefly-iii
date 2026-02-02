@@ -42,6 +42,7 @@ use FireflyIII\Models\Rule;
 use FireflyIII\Models\RuleAction;
 use FireflyIII\Models\RuleTrigger;
 use FireflyIII\Models\Tag;
+use FireflyIII\Models\UserGroup;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\Bill\BillRepositoryInterface;
 use FireflyIII\Repositories\Budget\BudgetLimitRepositoryInterface;
@@ -61,6 +62,8 @@ use Illuminate\Support\Facades\Log;
 use League\Csv\CannotInsertRecord;
 use League\Csv\Exception;
 use League\Csv\Writer;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 
 /**
  * Class ExportDataGenerator
@@ -69,41 +72,37 @@ class ExportDataGenerator
 {
     use ConvertsDataTypes;
 
-    private const string ADD_RECORD_ERR = 'Could not add record to set: %s';
-    private const string EXPORT_ERR     = 'Could not export to string: %s';
+    private const string ADD_RECORD_ERR    = 'Could not add record to set: %s';
+    private const string EXPORT_ERR        = 'Could not export to string: %s';
     private Collection $accounts;
     private Carbon     $end;
-    private bool       $exportAccounts;
-    private bool       $exportBills;
-    private bool       $exportBudgets;
-    private bool       $exportCategories;
-    private bool       $exportPiggies;
-    private bool       $exportRecurring;
-    private bool       $exportRules;
-    private bool       $exportTags;
-    private bool       $exportTransactions;
+    private bool       $exportAccounts     = false;
+    private bool       $exportBills        = false;
+    private bool       $exportBudgets      = false;
+    private bool       $exportCategories   = false;
+    private bool       $exportPiggies      = false;
+    private bool       $exportRecurring    = false;
+    private bool       $exportRules        = false;
+    private bool       $exportTags         = false;
+    private bool       $exportTransactions = false;
     private Carbon     $start;
     private User       $user;
+    private UserGroup  $userGroup; // @phpstan-ignore-line
 
     public function __construct()
     {
-        $this->accounts           = new Collection();
-        $this->start              = today(config('app.timezone'));
+        $this->accounts = new Collection();
+        $this->start    = today(config('app.timezone'));
         $this->start->subYear();
-        $this->end                = today(config('app.timezone'));
-        $this->exportTransactions = false;
-        $this->exportAccounts     = false;
-        $this->exportBudgets      = false;
-        $this->exportCategories   = false;
-        $this->exportTags         = false;
-        $this->exportRecurring    = false;
-        $this->exportRules        = false;
-        $this->exportBills        = false;
-        $this->exportPiggies      = false;
+        $this->end      = today(config('app.timezone'));
     }
 
     /**
+     * @throws CannotInsertRecord
+     * @throws ContainerExceptionInterface
+     * @throws Exception
      * @throws FireflyException
+     * @throws NotFoundExceptionInterface
      */
     public function export(): array
     {
@@ -137,6 +136,92 @@ class ExportDataGenerator
         }
 
         return $return;
+    }
+
+    /**
+     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
+     */
+    public function get(string $key, mixed $default = null): mixed
+    {
+        return null;
+    }
+
+    /**
+     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
+     */
+    public function has(mixed $key): mixed
+    {
+        return null;
+    }
+
+    public function setAccounts(Collection $accounts): void
+    {
+        $this->accounts = $accounts;
+    }
+
+    public function setEnd(Carbon $end): void
+    {
+        $this->end = $end;
+    }
+
+    public function setExportAccounts(bool $exportAccounts): void
+    {
+        $this->exportAccounts = $exportAccounts;
+    }
+
+    public function setExportBills(bool $exportBills): void
+    {
+        $this->exportBills = $exportBills;
+    }
+
+    public function setExportBudgets(bool $exportBudgets): void
+    {
+        $this->exportBudgets = $exportBudgets;
+    }
+
+    public function setExportCategories(bool $exportCategories): void
+    {
+        $this->exportCategories = $exportCategories;
+    }
+
+    public function setExportPiggies(bool $exportPiggies): void
+    {
+        $this->exportPiggies = $exportPiggies;
+    }
+
+    public function setExportRecurring(bool $exportRecurring): void
+    {
+        $this->exportRecurring = $exportRecurring;
+    }
+
+    public function setExportRules(bool $exportRules): void
+    {
+        $this->exportRules = $exportRules;
+    }
+
+    public function setExportTags(bool $exportTags): void
+    {
+        $this->exportTags = $exportTags;
+    }
+
+    public function setExportTransactions(bool $exportTransactions): void
+    {
+        $this->exportTransactions = $exportTransactions;
+    }
+
+    public function setStart(Carbon $start): void
+    {
+        $this->start = $start;
+    }
+
+    public function setUser(User $user): void
+    {
+        $this->user = $user;
+    }
+
+    public function setUserGroup(UserGroup $userGroup): void
+    {
+        $this->userGroup = $userGroup;
     }
 
     /**
@@ -212,17 +297,12 @@ class ExportDataGenerator
         try {
             $string = $csv->toString();
         } catch (Exception $e) { // intentional generic exception
-            app('log')->error($e->getMessage());
+            Log::error($e->getMessage());
 
             throw new FireflyException(sprintf(self::EXPORT_ERR, $e->getMessage()), 0, $e);
         }
 
         return $string;
-    }
-
-    public function setUser(User $user): void
-    {
-        $this->user = $user;
     }
 
     /**
@@ -286,7 +366,7 @@ class ExportDataGenerator
         try {
             $string = $csv->toString();
         } catch (Exception $e) { // intentional generic exception
-            app('log')->error($e->getMessage());
+            Log::error($e->getMessage());
 
             throw new FireflyException(sprintf(self::EXPORT_ERR, $e->getMessage()), 0, $e);
         }
@@ -355,7 +435,7 @@ class ExportDataGenerator
         try {
             $string = $csv->toString();
         } catch (Exception $e) { // intentional generic exception
-            app('log')->error($e->getMessage());
+            Log::error($e->getMessage());
 
             throw new FireflyException(sprintf(self::EXPORT_ERR, $e->getMessage()), 0, $e);
         }
@@ -406,7 +486,7 @@ class ExportDataGenerator
         try {
             $string = $csv->toString();
         } catch (Exception $e) { // intentional generic exception
-            app('log')->error($e->getMessage());
+            Log::error($e->getMessage());
 
             throw new FireflyException(sprintf(self::EXPORT_ERR, $e->getMessage()), 0, $e);
         }
@@ -486,7 +566,7 @@ class ExportDataGenerator
         try {
             $string = $csv->toString();
         } catch (Exception $e) { // intentional generic exception
-            app('log')->error($e->getMessage());
+            Log::error($e->getMessage());
 
             throw new FireflyException(sprintf(self::EXPORT_ERR, $e->getMessage()), 0, $e);
         }
@@ -578,20 +658,12 @@ class ExportDataGenerator
         try {
             $string = $csv->toString();
         } catch (Exception $e) { // intentional generic exception
-            app('log')->error($e->getMessage());
+            Log::error($e->getMessage());
 
             throw new FireflyException(sprintf(self::EXPORT_ERR, $e->getMessage()), 0, $e);
         }
 
         return $string;
-    }
-
-    /**
-     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
-     */
-    public function get(string $key, mixed $default = null): mixed
-    {
-        return null;
     }
 
     /**
@@ -663,7 +735,7 @@ class ExportDataGenerator
         try {
             $string = $csv->toString();
         } catch (Exception $e) { // intentional generic exception
-            app('log')->error($e->getMessage());
+            Log::error($e->getMessage());
 
             throw new FireflyException(sprintf(self::EXPORT_ERR, $e->getMessage()), 0, $e);
         }
@@ -675,6 +747,8 @@ class ExportDataGenerator
      * @throws CannotInsertRecord
      * @throws Exception
      * @throws FireflyException
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
     private function exportTags(): string
     {
@@ -717,7 +791,7 @@ class ExportDataGenerator
         try {
             $string = $csv->toString();
         } catch (Exception $e) { // intentional generic exception
-            app('log')->error($e->getMessage());
+            Log::error($e->getMessage());
 
             throw new FireflyException(sprintf(self::EXPORT_ERR, $e->getMessage()), 0, $e);
         }
@@ -734,11 +808,11 @@ class ExportDataGenerator
     {
         Log::debug('Will now export transactions.');
         // TODO better place for keys?
-        $header     = ['user_id', 'group_id', 'journal_id', 'created_at', 'updated_at', 'group_title', 'type', 'currency_code', 'amount', 'foreign_currency_code', 'foreign_amount', 'native_currency_code', 'native_amount', 'native_foreign_amount', 'description', 'date', 'source_name', 'source_iban', 'source_type', 'destination_name', 'destination_iban', 'destination_type', 'reconciled', 'category', 'budget', 'bill', 'tags', 'notes'];
+        $header     = ['user_id', 'group_id', 'journal_id', 'created_at', 'updated_at', 'group_title', 'type', 'currency_code', 'amount', 'foreign_currency_code', 'foreign_amount', 'primary_currency_code', 'pc_amount', 'pc_foreign_amount', 'description', 'date', 'source_name', 'source_iban', 'source_type', 'destination_name', 'destination_iban', 'destination_type', 'reconciled', 'category', 'budget', 'bill', 'tags', 'notes'];
 
         $metaFields = config('firefly.journal_meta_fields');
         $header     = array_merge($header, $metaFields);
-        $default    = Amount::getNativeCurrency();
+        $primary    = Amount::getPrimaryCurrency();
 
         $collector  = app(GroupCollectorInterface::class);
         $collector->setUser($this->user);
@@ -757,31 +831,31 @@ class ExportDataGenerator
 
         /** @var array $journal */
         foreach ($journals as $journal) {
-            $metaData            = $repository->getMetaFields($journal['transaction_journal_id'], $metaFields);
-            $amount              = Steam::bcround(Steam::negative($journal['amount']), $journal['currency_decimal_places']);
-            $foreignAmount       = null === $journal['foreign_amount'] ? null : Steam::bcround(Steam::negative($journal['foreign_amount']), $journal['foreign_currency_decimal_places']);
-            $nativeAmount        = null === $journal['native_amount'] ? null : Steam::bcround(Steam::negative($journal['native_amount']), $default->decimal_places);
-            $nativeForeignAmount = null === $journal['native_foreign_amount'] ? null : Steam::bcround(Steam::negative($journal['native_foreign_amount']), $default->decimal_places);
+            $metaData        = $repository->getMetaFields($journal['transaction_journal_id'], $metaFields);
+            $amount          = Steam::bcround(Steam::negative($journal['amount']), $journal['currency_decimal_places']);
+            $foreignAmount   = null === $journal['foreign_amount'] ? null : Steam::bcround(Steam::negative($journal['foreign_amount']), $journal['foreign_currency_decimal_places']);
+            $pcAmount        = null === $journal['pc_amount'] ? null : Steam::bcround(Steam::negative($journal['pc_amount']), $primary->decimal_places);
+            $pcForeignAmount = null === $journal['pc_foreign_amount'] ? null : Steam::bcround(Steam::negative($journal['pc_foreign_amount']), $primary->decimal_places);
 
             if (TransactionTypeEnum::WITHDRAWAL->value !== $journal['transaction_type_type']) {
-                $amount              = Steam::bcround(Steam::positive($journal['amount']), $journal['currency_decimal_places']);
-                $foreignAmount       = null === $journal['foreign_amount'] ? null : Steam::bcround(Steam::positive($journal['foreign_amount']), $journal['foreign_currency_decimal_places']);
-                $nativeAmount        = null === $journal['native_amount'] ? null : Steam::bcround(Steam::positive($journal['native_amount']), $default->decimal_places);
-                $nativeForeignAmount = null === $journal['native_foreign_amount'] ? null : Steam::bcround(Steam::positive($journal['native_foreign_amount']), $default->decimal_places);
+                $amount          = Steam::bcround(Steam::positive($journal['amount']), $journal['currency_decimal_places']);
+                $foreignAmount   = null === $journal['foreign_amount'] ? null : Steam::bcround(Steam::positive($journal['foreign_amount']), $journal['foreign_currency_decimal_places']);
+                $pcAmount        = null === $journal['pc_amount'] ? null : Steam::bcround(Steam::positive($journal['pc_amount']), $primary->decimal_places);
+                $pcForeignAmount = null === $journal['pc_foreign_amount'] ? null : Steam::bcround(Steam::positive($journal['pc_foreign_amount']), $primary->decimal_places);
             }
 
             // opening balance depends on source account type.
             if (TransactionTypeEnum::OPENING_BALANCE->value === $journal['transaction_type_type'] && AccountTypeEnum::ASSET->value === $journal['source_account_type']) {
-                $amount              = Steam::bcround(Steam::negative($journal['amount']), $journal['currency_decimal_places']);
-                $foreignAmount       = null === $journal['foreign_amount'] ? null : Steam::bcround(Steam::negative($journal['foreign_amount']), $journal['foreign_currency_decimal_places']);
-                $nativeAmount        = null === $journal['native_amount'] ? null : Steam::bcround(Steam::negative($journal['native_amount']), $default->decimal_places);
-                $nativeForeignAmount = null === $journal['native_foreign_amount'] ? null : Steam::bcround(Steam::negative($journal['native_foreign_amount']), $default->decimal_places);
+                $amount          = Steam::bcround(Steam::negative($journal['amount']), $journal['currency_decimal_places']);
+                $foreignAmount   = null === $journal['foreign_amount'] ? null : Steam::bcround(Steam::negative($journal['foreign_amount']), $journal['foreign_currency_decimal_places']);
+                $pcAmount        = null === $journal['pc_amount'] ? null : Steam::bcround(Steam::negative($journal['pc_amount']), $primary->decimal_places);
+                $pcForeignAmount = null === $journal['pc_foreign_amount'] ? null : Steam::bcround(Steam::negative($journal['pc_foreign_amount']), $primary->decimal_places);
             }
 
-            $records[]           = [
+            $records[]       = [
                 $journal['user_id'], $journal['transaction_group_id'], $journal['transaction_journal_id'], $journal['created_at']->toAtomString(), $journal['updated_at']->toAtomString(), $journal['transaction_group_title'], $journal['transaction_type_type'],
                 // amounts and currencies
-                $journal['currency_code'], $amount, $journal['foreign_currency_code'], $foreignAmount, $default->code, $nativeAmount, $nativeForeignAmount,
+                $journal['currency_code'], $amount, $journal['foreign_currency_code'], $foreignAmount, $primary->code, $pcAmount, $pcForeignAmount,
 
                 // more fields
                 $journal['description'], $journal['date']->toAtomString(), $journal['source_account_name'], $journal['source_account_iban'], $journal['source_account_type'], $journal['destination_account_name'], $journal['destination_account_iban'], $journal['destination_account_type'], $journal['reconciled'], $journal['category_name'], $journal['budget_name'], $journal['bill_name'],
@@ -818,17 +892,12 @@ class ExportDataGenerator
         try {
             $string = $csv->toString();
         } catch (Exception $e) { // intentional generic exception
-            app('log')->error($e->getMessage());
+            Log::error($e->getMessage());
 
             throw new FireflyException(sprintf(self::EXPORT_ERR, $e->getMessage()), 0, $e);
         }
 
         return $string;
-    }
-
-    public function setAccounts(Collection $accounts): void
-    {
-        $this->accounts = $accounts;
     }
 
     private function mergeTags(array $tags): string
@@ -842,68 +911,5 @@ class ExportDataGenerator
         }
 
         return implode(',', $smol);
-    }
-
-    /**
-     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
-     */
-    public function has(mixed $key): mixed
-    {
-        return null;
-    }
-
-    public function setEnd(Carbon $end): void
-    {
-        $this->end = $end;
-    }
-
-    public function setExportAccounts(bool $exportAccounts): void
-    {
-        $this->exportAccounts = $exportAccounts;
-    }
-
-    public function setExportBills(bool $exportBills): void
-    {
-        $this->exportBills = $exportBills;
-    }
-
-    public function setExportBudgets(bool $exportBudgets): void
-    {
-        $this->exportBudgets = $exportBudgets;
-    }
-
-    public function setExportCategories(bool $exportCategories): void
-    {
-        $this->exportCategories = $exportCategories;
-    }
-
-    public function setExportPiggies(bool $exportPiggies): void
-    {
-        $this->exportPiggies = $exportPiggies;
-    }
-
-    public function setExportRecurring(bool $exportRecurring): void
-    {
-        $this->exportRecurring = $exportRecurring;
-    }
-
-    public function setExportRules(bool $exportRules): void
-    {
-        $this->exportRules = $exportRules;
-    }
-
-    public function setExportTags(bool $exportTags): void
-    {
-        $this->exportTags = $exportTags;
-    }
-
-    public function setExportTransactions(bool $exportTransactions): void
-    {
-        $this->exportTransactions = $exportTransactions;
-    }
-
-    public function setStart(Carbon $start): void
-    {
-        $this->start = $start;
     }
 }

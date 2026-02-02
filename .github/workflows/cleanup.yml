@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Prune cancelled/skipped runs
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -45,7 +45,7 @@ jobs:
             }
 
       - name: Prune runs older than 3 days
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -61,12 +61,11 @@ jobs:
               'cleanup.yml',
               'close-duplicates.yml',
               'closed-issues.yml',
-              'debug-info-actions.yml',
+              'issues-reply-old-versions.yml',
               'depsreview.yml',
               'label-actions.yml',
               'lock.yml',
               'release.yml',
-              'sonarcloud.yml',
               'stale.yml'
             ]
 

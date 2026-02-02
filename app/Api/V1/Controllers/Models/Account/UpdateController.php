@@ -28,6 +28,7 @@ use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Models\Account\UpdateRequest;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\JsonApi\Enrichments\AccountEnrichment;
 use FireflyIII\Transformers\AccountTransformer;
 use FireflyIII\User;
@@ -74,19 +75,18 @@ class UpdateController extends Controller
         $account      = $this->repository->update($account, $data);
         $manager      = $this->getManager();
         $account->refresh();
-        app('preferences')->mark();
+        Preferences::mark();
 
         // enrich
         /** @var User $admin */
         $admin        = auth()->user();
         $enrichment   = new AccountEnrichment();
+        $enrichment->setDate(null);
         $enrichment->setUser($admin);
-        $enrichment->setNative($this->nativeCurrency);
         $account      = $enrichment->enrichSingle($account);
 
         /** @var AccountTransformer $transformer */
         $transformer  = app(AccountTransformer::class);
-        $transformer->setParameters($this->parameters);
         $resource     = new Item($account, $transformer, self::RESOURCE_KEY);
 
         return response()->json($manager->createData($resource)->toArray())->header('Content-Type', self::CONTENT_TYPE);

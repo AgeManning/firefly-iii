@@ -25,10 +25,12 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Autocomplete;
 
 use FireflyIII\Api\V1\Controllers\Controller;
-use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteRequest;
+use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteApiRequest;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\TransactionType;
 use FireflyIII\Repositories\TransactionType\TransactionTypeRepositoryInterface;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * Class TransactionTypeController
@@ -36,6 +38,7 @@ use Illuminate\Http\JsonResponse;
 class TransactionTypeController extends Controller
 {
     private TransactionTypeRepositoryInterface $repository;
+    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY];
 
     /**
      * TransactionTypeController constructor.
@@ -43,33 +46,23 @@ class TransactionTypeController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->repository = app(TransactionTypeRepositoryInterface::class);
+        $this->middleware(function (Request $request, $next) {
+            $this->validateUserGroup($request);
+            $this->repository = app(TransactionTypeRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
-    /**
-     * This endpoint is documented at
-     * * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/autocomplete/getTransactionTypesAC
-     */
-    public function transactionTypes(AutocompleteRequest $request): JsonResponse
+    public function transactionTypes(AutocompleteApiRequest $request): JsonResponse
     {
-        $data  = $request->getData();
-        $types = $this->repository->searchTypes($data['query'], $this->parameters->get('limit'));
+        $types = $this->repository->searchTypes($request->attributes->get('query'), $request->attributes->get('limit'));
         $array = [];
 
         /** @var TransactionType $type */
         foreach ($types as $type) {
             // different key for consistency.
-            $array[] = [
-                'id'   => (string) $type->id,
-                'name' => $type->type,
-                'type' => $type->type,
-            ];
+            $array[] = ['id'   => (string) $type->id, 'name' => $type->type, 'type' => $type->type];
         }
 
         return response()->api($array);

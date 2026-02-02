@@ -23,17 +23,19 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers;
 
-use JsonException;
 use Carbon\Carbon;
 use FireflyIII\Enums\AccountTypeEnum;
-use FireflyIII\Events\Preferences\UserGroupChangedDefaultCurrency;
+use FireflyIII\Events\Preferences\UserGroupChangedPrimaryCurrency;
 use FireflyIII\Events\Test\UserTestNotificationChannel;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Requests\PreferencesRequest;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\Preference;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
+use FireflyIII\Support\Facades\Navigation;
 use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\Support\Facades\Steam;
+use FireflyIII\Support\Singleton\PreferencesSingleton;
 use FireflyIII\User;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
@@ -41,10 +43,11 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use JsonException;
+use Safe\Exceptions\FilesystemException;
 
-use function Safe\json_decode;
 use function Safe\file_get_contents;
-use function Safe\strtotime;
+use function Safe\json_decode;
 
 /**
  * Class PreferencesController.
@@ -60,7 +63,7 @@ class PreferencesController extends Controller
 
         $this->middleware(
             static function ($request, $next) {
-                app('view')->share('title', (string) trans('firefly.preferences'));
+                app('view')->share('title', (string)trans('firefly.preferences'));
                 app('view')->share('mainTitleIcon', 'fa-gear');
 
                 return $next($request);
@@ -74,8 +77,9 @@ class PreferencesController extends Controller
      * @return Factory|View
      *
      * @throws FireflyException
+     * @throws FilesystemException
      */
-    public function index(AccountRepositoryInterface $repository)
+    public function index(AccountRepositoryInterface $repository): Factory|\Illuminate\Contracts\View\View
     {
         $accounts                       = $repository->getAccountsByType([AccountTypeEnum::DEFAULT->value, AccountTypeEnum::ASSET->value, AccountTypeEnum::LOAN->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::MORTGAGE->value]);
         $isDocker                       = env('IS_DOCKER', false); // @phpstan-ignore-line
@@ -83,8 +87,8 @@ class PreferencesController extends Controller
 
         /** @var Account $account */
         foreach ($accounts as $account) {
-            $type                                                                        = $account->accountType->type;
-            $role                                                                        = sprintf('opt_group_%s', $repository->getMetaValue($account, 'account_role'));
+            $type                                                                       = $account->accountType->type;
+            $role                                                                       = sprintf('opt_group_%s', $repository->getMetaValue($account, 'account_role'));
 
             if (in_array($type, [AccountTypeEnum::MORTGAGE->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::LOAN->value], true)) {
                 $role = sprintf('opt_group_l_%s', $type);
@@ -93,44 +97,45 @@ class PreferencesController extends Controller
             if ('opt_group_' === $role) {
                 $role = 'opt_group_defaultAsset';
             }
-            $groupedAccounts[(string) trans(sprintf('firefly.%s', $role))][$account->id] = $account->name;
+            $groupedAccounts[(string)trans(sprintf('firefly.%s', $role))][$account->id] = $account->name;
         }
         ksort($groupedAccounts);
 
         /** @var array<int, int> $accountIds */
         $accountIds                     = $accounts->pluck('id')->toArray();
-        $viewRange                      = app('navigation')->getViewRange(false);
+        $viewRange                      = Navigation::getViewRange(false);
         $frontpageAccountsPref          = Preferences::get('frontpageAccounts', $accountIds);
         $frontpageAccounts              = $frontpageAccountsPref->data;
         if (!is_array($frontpageAccounts)) {
             $frontpageAccounts = $accountIds;
         }
-        $language                       = app('steam')->getLanguage();
+        $language                       = Steam::getLanguage();
         $languages                      = config('firefly.languages');
         $locale                         = Preferences::get('locale', config('firefly.default_locale', 'equal'))->data;
         $listPageSize                   = Preferences::get('listPageSize', 50)->data;
         $darkMode                       = Preferences::get('darkMode', 'browser')->data;
         $customFiscalYear               = Preferences::get('customFiscalYear', 0)->data;
         $fiscalYearStartStr             = Preferences::get('fiscalYearStart', '01-01')->data;
-        $convertToNative                = $this->convertToNative;
+        $convertToPrimary               = $this->convertToPrimary;
         if (is_array($fiscalYearStartStr)) {
             $fiscalYearStartStr = '01-01';
         }
-        $fiscalYearStart                = sprintf('%s-%s', Carbon::now()->format('Y'), (string) $fiscalYearStartStr);
+        $fiscalYearStart                = sprintf('%s-%s', Carbon::now()->format('Y'), (string)$fiscalYearStartStr);
         $tjOptionalFields               = Preferences::get('transaction_journal_optional_fields', [])->data;
         $availableDarkModes             = config('firefly.available_dark_modes');
 
         // notifications settings
         $slackUrl                       = Preferences::getEncrypted('slack_webhook_url', '')->data;
-        $pushoverAppToken               = (string) Preferences::getEncrypted('pushover_app_token', '')->data;
-        $pushoverUserToken              = (string) Preferences::getEncrypted('pushover_user_token', '')->data;
+        $pushoverAppToken               = (string)Preferences::getEncrypted('pushover_app_token', '')->data;
+        $pushoverUserToken              = (string)Preferences::getEncrypted('pushover_user_token', '')->data;
         $ntfyServer                     = Preferences::getEncrypted('ntfy_server', 'https://ntfy.sh')->data;
-        $ntfyTopic                      = (string) Preferences::getEncrypted('ntfy_topic', '')->data;
+        $ntfyTopic                      = (string)Preferences::getEncrypted('ntfy_topic', '')->data;
         $ntfyAuth                       = '1' === Preferences::get('ntfy_auth', false)->data;
         $ntfyUser                       = Preferences::getEncrypted('ntfy_user', '')->data;
-        $ntfyPass                       = (string) Preferences::getEncrypted('ntfy_pass', '')->data;
+        $ntfyPass                       = (string)Preferences::getEncrypted('ntfy_pass', '')->data;
         $channels                       = config('notifications.channels');
         $forcedAvailability             = [];
+        $anonymous                      = Steam::anonymous();
 
         // notification preferences
         $notifications                  = [];
@@ -155,12 +160,12 @@ class PreferencesController extends Controller
         // list of locales also has "equal" which makes it equal to whatever the language is.
 
         try {
-            $locales = json_decode((string) file_get_contents(resource_path(sprintf('locales/%s/locales.json', $language))), true, 512, JSON_THROW_ON_ERROR);
+            $locales = json_decode(file_get_contents(resource_path(sprintf('locales/%s/locales.json', $language))), true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
-            app('log')->error($e->getMessage());
+            Log::error($e->getMessage());
             $locales = [];
         }
-        $locales                        = ['equal' => (string) trans('firefly.equal_to_language')] + $locales;
+        $locales                        = ['equal' => (string)trans('firefly.equal_to_language')] + $locales;
         // an important fallback is that the frontPageAccount array gets refilled automatically
         // when it turns up empty.
         if (0 === count($frontpageAccounts)) {
@@ -180,54 +185,27 @@ class PreferencesController extends Controller
             $ntfyPass          = '';
         }
 
-        return view('preferences.index', compact(
-            'language',
-            'pushoverAppToken',
-            'pushoverUserToken',
-            'ntfyServer',
-            'ntfyTopic',
-            'ntfyAuth',
-            'channels',
-            'ntfyUser',
-            'forcedAvailability',
-            'ntfyPass',
-            'groupedAccounts',
-            'isDocker',
-            'frontpageAccounts',
-            'languages',
-            'darkMode',
-            'availableDarkModes',
-            'notifications',
-            'convertToNative',
-            'slackUrl',
-            'locales',
-            'locale',
-            'tjOptionalFields',
-            'viewRange',
-            'customFiscalYear',
-            'listPageSize',
-            'fiscalYearStart'
-        ));
+        return view('preferences.index', ['anonymous' => $anonymous, 'language' => $language, 'pushoverAppToken' => $pushoverAppToken, 'pushoverUserToken' => $pushoverUserToken, 'ntfyServer' => $ntfyServer, 'ntfyTopic' => $ntfyTopic, 'ntfyAuth' => $ntfyAuth, 'channels' => $channels, 'ntfyUser' => $ntfyUser, 'forcedAvailability' => $forcedAvailability, 'ntfyPass' => $ntfyPass, 'groupedAccounts' => $groupedAccounts, 'isDocker' => $isDocker, 'frontpageAccounts' => $frontpageAccounts, 'languages' => $languages, 'darkMode' => $darkMode, 'availableDarkModes' => $availableDarkModes, 'notifications' => $notifications, 'convertToPrimary' => $convertToPrimary, 'slackUrl' => $slackUrl, 'locales' => $locales, 'locale' => $locale, 'tjOptionalFields' => $tjOptionalFields, 'viewRange' => $viewRange, 'customFiscalYear' => $customFiscalYear, 'listPageSize' => $listPageSize, 'fiscalYearStart' => $fiscalYearStart]);
     }
 
     /**
      * Store new preferences.
-     *
-     * @return Redirector|RedirectResponse
      *
      * @throws FireflyException
      *
      * @SuppressWarnings("PHPMD.ExcessiveMethodLength")
      * @SuppressWarnings("PHPMD.NPathComplexity")
      */
-    public function postIndex(PreferencesRequest $request)
+    public function postIndex(PreferencesRequest $request): Redirector|RedirectResponse
     {
+        Log::debug('postIndex for preferences.');
         // front page accounts
         $frontpageAccounts = [];
         if (is_array($request->get('frontpageAccounts')) && count($request->get('frontpageAccounts')) > 0) {
             foreach ($request->get('frontpageAccounts') as $id) {
-                $frontpageAccounts[] = (int) $id;
+                $frontpageAccounts[] = (int)$id;
             }
+            Log::debug('Update frontpageAccounts', $frontpageAccounts);
             Preferences::set('frontpageAccounts', $frontpageAccounts);
         }
 
@@ -236,14 +214,17 @@ class PreferencesController extends Controller
         foreach (config('notifications.notifications.user') as $key => $info) {
             $key = sprintf('notification_%s', $key);
             if (array_key_exists($key, $all)) {
+                Log::debug(sprintf('update notification to true: %s', $key));
                 Preferences::set($key, true);
             }
             if (!array_key_exists($key, $all)) {
+                Log::debug(sprintf('update notification to false: %s', $key));
                 Preferences::set($key, false);
             }
         }
 
         // view range:
+        Log::debug(sprintf('Let viewRange to "%s"', $request->get('viewRange')));
         Preferences::set('viewRange', $request->get('viewRange'));
         // forget session values:
         session()->forget('start');
@@ -265,28 +246,30 @@ class PreferencesController extends Controller
             Preferences::set('ntfy_auth', $all['ntfy_auth'] ?? false);
         }
 
-        // convert native
-        $convertToNative   = 1 === (int) $request->get('convertToNative');
-        if ($convertToNative && !$this->convertToNative) {
+        // convert primary
+        $convertToPrimary  = 1 === (int)$request->get('convertToPrimary');
+        if ($convertToPrimary && !$this->convertToPrimary) {
             // set to true!
-            Log::debug('User sets convertToNative to true.');
-            Preferences::set('convert_to_native', $convertToNative);
-            event(new UserGroupChangedDefaultCurrency(auth()->user()->userGroup));
+            Log::debug('User sets convertToPrimary to true.');
+            Preferences::set('convert_to_primary', true);
+            $singleton = PreferencesSingleton::getInstance();
+            $singleton->resetPreferences();
+            event(new UserGroupChangedPrimaryCurrency(auth()->user()->userGroup));
         }
-        Preferences::set('convert_to_native', $convertToNative);
+        Preferences::set('convert_to_primary', $convertToPrimary);
 
         // custom fiscal year
-        $customFiscalYear  = 1 === (int) $request->get('customFiscalYear');
-        $string            = strtotime((string) $request->get('fiscalYearStart'));
-        if (false !== $string) {
-            $fiscalYearStart = Carbon::createFromTimestamp($string)->format('m-d');
-            Preferences::set('customFiscalYear', $customFiscalYear);
+        $customFiscalYear  = 1 === (int)$request->get('customFiscalYear');
+        Preferences::set('customFiscalYear', $customFiscalYear);
+        $fiscalYearString  = (string)$request->get('fiscalYearStart');
+        if ('' !== $fiscalYearString) {
+            $fiscalYearStart = Carbon::parse($fiscalYearString, config('app.timezone'))->format('m-d');
             Preferences::set('fiscalYearStart', $fiscalYearStart);
         }
 
         // save page size:
         Preferences::set('listPageSize', 50);
-        $listPageSize      = (int) $request->get('listPageSize');
+        $listPageSize      = (int)$request->get('listPageSize');
         if ($listPageSize > 0 && $listPageSize < 1337) {
             Preferences::set('listPageSize', $listPageSize);
         }
@@ -305,7 +288,7 @@ class PreferencesController extends Controller
 
         // same for locale:
         if (!auth()->user()->hasRole('demo')) {
-            $locale = (string) $request->get('locale');
+            $locale = (string)$request->get('locale');
             $locale = '' === $locale ? null : $locale;
             Preferences::set('locale', $locale);
         }
@@ -334,8 +317,14 @@ class PreferencesController extends Controller
             Preferences::set('darkMode', $darkMode);
         }
 
-        session()->flash('success', (string) trans('firefly.saved_preferences'));
+        // anonymous amounts?
+        $anonymous         = '1' === $request->get('anonymous');
+        Preferences::set('anonymous', $anonymous);
+
+        // save and continue
+        session()->flash('success', (string)trans('firefly.saved_preferences'));
         Preferences::mark();
+        Log::debug('Done saving settings.');
 
         return redirect(route('preferences.index'));
     }
@@ -348,7 +337,7 @@ class PreferencesController extends Controller
 
         switch ($channel) {
             default:
-                session()->flash('error', (string) trans('firefly.notification_test_failed', ['channel' => $channel]));
+                session()->flash('error', (string)trans('firefly.notification_test_failed', ['channel' => $channel]));
 
                 break;
 
@@ -358,9 +347,9 @@ class PreferencesController extends Controller
             case 'ntfy':
                 /** @var User $user */
                 $user = auth()->user();
-                app('log')->debug(sprintf('Now in testNotification("%s") controller.', $channel));
+                Log::debug(sprintf('Now in testNotification("%s") controller.', $channel));
                 event(new UserTestNotificationChannel($channel, $user));
-                session()->flash('success', (string) trans('firefly.notification_test_executed', ['channel' => $channel]));
+                session()->flash('success', (string)trans('firefly.notification_test_executed', ['channel' => $channel]));
         }
 
         return '';

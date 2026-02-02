@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Helpers\Report;
 
+use FireflyIII\Support\Facades\Navigation;
 use Carbon\Carbon;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Helpers\Fiscal\FiscalHelperInterface;
@@ -36,16 +37,13 @@ use Illuminate\Support\Collection;
  */
 class ReportHelper implements ReportHelperInterface
 {
-    /** @var BudgetRepositoryInterface The budget repository */
-    protected $budgetRepository;
-
     /**
      * ReportHelper constructor.
      */
-    public function __construct(BudgetRepositoryInterface $budgetRepository)
-    {
-        $this->budgetRepository = $budgetRepository;
-    }
+    public function __construct(
+        /** @var BudgetRepositoryInterface The budget repository */
+        protected BudgetRepositoryInterface $budgetRepository
+    ) {}
 
     /**
      * This method generates a full report for the given period on all
@@ -84,7 +82,7 @@ class ReportHelper implements ReportHelperInterface
 
             /** @var Carbon $expectedStart */
             foreach ($expectedDates as $expectedStart) {
-                $expectedEnd               = app('navigation')->endOfX($expectedStart, $bill->repeat_freq, null);
+                $expectedEnd               = Navigation::endOfX($expectedStart, $bill->repeat_freq, null);
 
                 // is paid in this period maybe?
                 /** @var GroupCollectorInterface $collector */

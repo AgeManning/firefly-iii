@@ -24,8 +24,6 @@ declare(strict_types=1);
 namespace FireflyIII\Http\Controllers\Auth;
 
 use Carbon\Carbon;
-use FireflyIII\User;
-use Illuminate\Support\Facades\Cookie;
 use FireflyIII\Events\ActuallyLoggedIn;
 use FireflyIII\Events\Security\UnknownUserAttemptedLogin;
 use FireflyIII\Events\Security\UserAttemptedLogin;
@@ -33,6 +31,8 @@ use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Providers\RouteServiceProvider;
 use FireflyIII\Repositories\User\UserRepositoryInterface;
+use FireflyIII\Support\Facades\Steam;
+use FireflyIII\User;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
@@ -43,10 +43,14 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Redirector;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 /**
  * Class LoginController
@@ -66,7 +70,7 @@ class LoginController extends Controller
     protected string                $redirectTo = RouteServiceProvider::HOME;
     private UserRepositoryInterface $repository;
 
-    private string $username;
+    private string $username                    = 'email';
 
     /**
      * Create a new controller instance.
@@ -74,7 +78,6 @@ class LoginController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->username   = 'email';
         $this->middleware('guest')->except('logout');
         $this->repository = app(UserRepositoryInterface::class);
     }
@@ -88,7 +91,7 @@ class LoginController extends Controller
     {
         $username = $request->get($this->username());
         Log::channel('audit')->info(sprintf('User is trying to login using "%s"', $username));
-        app('log')->debug('User is trying to login.');
+        Log::debug('User is trying to login.');
 
         try {
             $this->validateLogin($request);
@@ -105,7 +108,7 @@ class LoginController extends Controller
                 ->onlyInput($this->username)
             ;
         }
-        app('log')->debug('Login data is present.');
+        Log::debug('Login data is present.');
 
         // Copied directly from AuthenticatesUsers, but with logging added:
         // If the class is using the ThrottlesLogins trait, we can automatically throttle
@@ -113,14 +116,14 @@ class LoginController extends Controller
         // the IP address of the client making these requests into this application.
         if ($this->hasTooManyLoginAttempts($request)) {
             Log::channel('audit')->warning(sprintf('Login for user "%s" was locked out.', $request->get($this->username())));
-            app('log')->error(sprintf('Login for user "%s" was locked out.', $request->get($this->username())));
+            Log::error(sprintf('Login for user "%s" was locked out.', $request->get($this->username())));
             $this->fireLockoutEvent($request);
             $this->sendLockoutResponse($request);
         }
         // Copied directly from AuthenticatesUsers, but with logging added:
         if ($this->attemptLogin($request)) {
             Log::channel('audit')->info(sprintf('User "%s" has been logged in.', $request->get($this->username())));
-            app('log')->debug(sprintf('Redirect after login is %s.', $this->redirectPath()));
+            Log::debug(sprintf('Redirect after login is %s.', $this->redirectPath()));
 
             // if you just logged in, it can't be that you have a valid 2FA cookie.
 
@@ -130,8 +133,8 @@ class LoginController extends Controller
 
             return $this->sendLoginResponse($request);
         }
-        app('log')->warning('Login attempt failed.');
-        $username = (string) $request->get($this->username());
+        Log::warning('Login attempt failed.');
+        $username = (string)$request->get($this->username());
         $user     = $this->repository->findByEmail($username);
         if (!$user instanceof User) {
             // send event to owner.
@@ -151,15 +154,13 @@ class LoginController extends Controller
         $this->sendFailedLoginResponse($request);
 
         // @noinspection PhpUnreachableStatementInspection
-        return response()->json([]);
+        return response()->json();
     }
 
     /**
      * Get the login username to be used by the controller.
-     *
-     * @return string
      */
-    public function username()
+    public function username(): string
     {
         return $this->username;
     }
@@ -185,10 +186,8 @@ class LoginController extends Controller
 
     /**
      * Log the user out of the application.
-     *
-     * @return Redirector|RedirectResponse|Response
      */
-    public function logout(Request $request)
+    public function logout(Request $request): Redirector|RedirectResponse|Response
     {
         $authGuard  = config('firefly.authentication_guard');
         $logoutUrl  = config('firefly.custom_logout_url');
@@ -222,21 +221,23 @@ class LoginController extends Controller
      * @return Application|Factory|Redirector|RedirectResponse|View
      *
      * @throws FireflyException
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
-    public function showLoginForm(Request $request)
+    public function showLoginForm(Request $request): Factory|Redirector|RedirectResponse|View
     {
         Log::channel('audit')->info('Show login form (1.1).');
 
         $count             = DB::table('users')->count();
         $guard             = config('auth.defaults.guard');
-        $title             = (string) trans('firefly.login_page_title');
+        $title             = (string)trans('firefly.login_page_title');
 
         if (0 === $count && 'web' === $guard) {
             return redirect(route('register'));
         }
 
         // is allowed to register, etc.
-        $singleUserMode    = app('fireflyconfig')->get('single_user_mode', config('firefly.configuration.single_user_mode'))->data;
+        $singleUserMode    = FireflyConfig::get('single_user_mode', config('firefly.configuration.single_user_mode'))->data;
         $allowRegistration = true;
         $allowReset        = true;
         if (true === $singleUserMode && $count > 0) {
@@ -249,8 +250,8 @@ class LoginController extends Controller
             $allowReset        = false;
         }
 
-        $email             = $request?->old('email');
-        $remember          = $request?->old('remember');
+        $email             = $request->old('email');
+        $remember          = $request->old('remember');
 
         $storeInCookie     = config('google2fa.store_in_cookie', false);
         if (false !== $storeInCookie) {
@@ -259,6 +260,25 @@ class LoginController extends Controller
         }
         $usernameField     = $this->username();
 
-        return view('auth.login', compact('allowRegistration', 'email', 'remember', 'allowReset', 'title', 'usernameField'));
+        return view('auth.login', ['allowRegistration' => $allowRegistration, 'email' => $email, 'remember' => $remember, 'allowReset' => $allowReset, 'title' => $title, 'usernameField' => $usernameField]);
+    }
+
+    /**
+     * Send the response after the user was authenticated.
+     *
+     * @return JsonResponse|RedirectResponse
+     */
+    protected function sendLoginResponse(Request $request)
+    {
+        $request->session()->regenerate();
+        $this->clearLoginAttempts($request);
+
+        if ($response = $this->authenticated($request, $this->guard()->user())) {
+            return $response;
+        }
+        $path = Steam::getSafeUrl(session()->pull('url.intended', route('index')), route('index'));
+        Log::debug(sprintf('SafeURL is %s', $path));
+
+        return $request->wantsJson() ? new JsonResponse([], 204) : redirect()->to($path);
     }
 }

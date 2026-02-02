@@ -24,7 +24,9 @@ declare(strict_types=1);
 namespace FireflyIII\Handlers\Observer;
 
 use FireflyIII\Models\Transaction;
+use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Support\Facades\Amount;
+use FireflyIII\Support\Facades\FireflyConfig;
 use FireflyIII\Support\Http\Api\ExchangeRateConverter;
 use FireflyIII\Support\Models\AccountBalanceCalculator;
 use Illuminate\Support\Facades\Log;
@@ -39,25 +41,29 @@ class TransactionObserver
     public function created(Transaction $transaction): void
     {
         Log::debug('Observe "created" of a transaction.');
-        if (true === config('firefly.feature_flags.running_balance_column')) {
-            if (1 === bccomp($transaction->amount, '0') && true === self::$recalculate) {
-                Log::debug('Trigger recalculateForJournal');
-                AccountBalanceCalculator::recalculateForJournal($transaction->transactionJournal);
+        if (true === FireflyConfig::get('use_running_balance', config('firefly.feature_flags.running_balance_column'))->data && (1 === bccomp($transaction->amount, '0') && self::$recalculate)) {
+            Log::debug('Trigger recalculateForJournal');
+            $journal = $transaction->transactionJournal;
+            if ($journal instanceof TransactionJournal) {
+                AccountBalanceCalculator::recalculateForJournal($journal);
             }
         }
-        $this->updateNativeAmount($transaction);
+        $this->updatePrimaryCurrencyAmount($transaction);
     }
 
-    private function updateNativeAmount(Transaction $transaction): void
+    private function updatePrimaryCurrencyAmount(Transaction $transaction): void
     {
-        if (!Amount::convertToNative($transaction->transactionJournal->user)) {
+        if (!Amount::convertToPrimary($transaction->transactionJournal->user)) {
             return;
         }
-        $userCurrency                       = app('amount')->getNativeCurrencyByUserGroup($transaction->transactionJournal->user->userGroup);
+        $userCurrency                       = Amount::getPrimaryCurrencyByUserGroup($transaction->transactionJournal->user->userGroup);
         $transaction->native_amount         = null;
         $transaction->native_foreign_amount = null;
         // first normal amount
-        if ($transaction->transactionCurrency->id !== $userCurrency->id && (null === $transaction->foreign_currency_id || (null !== $transaction->foreign_currency_id && $transaction->foreign_currency_id !== $userCurrency->id))) {
+        if ($transaction->transactionCurrency->id !== $userCurrency->id
+            && (null === $transaction->foreign_currency_id
+             || (null !== $transaction->foreign_currency_id
+              && $transaction->foreign_currency_id !== $userCurrency->id))) {
             $converter                  = new ExchangeRateConverter();
             $converter->setUserGroup($transaction->transactionJournal->user->userGroup);
             $converter->setIgnoreSettings(true);
@@ -72,24 +78,22 @@ class TransactionObserver
         }
 
         $transaction->saveQuietly();
-        Log::debug('Transaction native amounts are updated.');
+        Log::debug(sprintf('Transaction #%d primary currency amounts are updated.', $transaction->id));
     }
 
     public function deleting(?Transaction $transaction): void
     {
-        app('log')->debug('Observe "deleting" of a transaction.');
+        Log::debug('Observe "deleting" of a transaction.');
         $transaction?->transactionJournal?->delete();
     }
 
     public function updated(Transaction $transaction): void
     {
         //        Log::debug('Observe "updated" of a transaction.');
-        if (true === config('firefly.feature_flags.running_balance_column') && true === self::$recalculate) {
-            if (1 === bccomp($transaction->amount, '0')) {
-                Log::debug('Trigger recalculateForJournal');
-                AccountBalanceCalculator::recalculateForJournal($transaction->transactionJournal);
-            }
+        if (true === FireflyConfig::get('use_running_balance', config('firefly.feature_flags.running_balance_column'))->data && self::$recalculate && 1 === bccomp($transaction->amount, '0')) {
+            Log::debug('Trigger recalculateForJournal');
+            AccountBalanceCalculator::recalculateForJournal($transaction->transactionJournal);
         }
-        $this->updateNativeAmount($transaction);
+        $this->updatePrimaryCurrencyAmount($transaction);
     }
 }

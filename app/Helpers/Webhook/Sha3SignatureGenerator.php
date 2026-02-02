@@ -28,6 +28,7 @@ use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\WebhookMessage;
 use JsonException;
+use Illuminate\Support\Facades\Log;
 
 use function Safe\json_encode;
 
@@ -52,10 +53,10 @@ class Sha3SignatureGenerator implements SignatureGeneratorInterface
         try {
             $json = json_encode($message->message, JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
-            app('log')->error('Could not generate hash.');
-            app('log')->error(sprintf('JSON value: %s', $json));
-            app('log')->error($e->getMessage());
-            app('log')->error($e->getTraceAsString());
+            Log::error('Could not generate hash.');
+            Log::error(sprintf('JSON value: %s', $json));
+            Log::error($e->getMessage());
+            Log::error($e->getTraceAsString());
 
             throw new FireflyException('Could not generate JSON for SHA3 hash.', 0, $e);
         }
@@ -68,7 +69,7 @@ class Sha3SignatureGenerator implements SignatureGeneratorInterface
         // The actual JSON payload (i.e., the request body)
         $timestamp = Carbon::now()->getTimestamp();
         $payload   = sprintf('%s.%s', $timestamp, $json);
-        $signature = hash_hmac('sha3-256', $payload, (string) $message->webhook->secret, false);
+        $signature = hash_hmac('sha3-256', $payload, (string) $message->webhook->secret);
 
         // signature string:
         // header included in each signed event contains a timestamp and one or more signatures.

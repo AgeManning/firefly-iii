@@ -29,7 +29,9 @@ use FireflyIII\Events\TriggeredAuditLog;
 use FireflyIII\Models\RuleAction;
 use FireflyIII\Models\Transaction;
 use FireflyIII\Models\TransactionJournal;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\TransactionRules\Traits\RefreshNotesTrait;
+use Illuminate\Support\Facades\Log;
 
 class SetAmount implements ActionInterface
 {
@@ -47,7 +49,7 @@ class SetAmount implements ActionInterface
         // not on slpit transactions
         $groupCount = TransactionJournal::where('transaction_group_id', $journal['transaction_group_id'])->count();
         if ($groupCount > 1) {
-            app('log')->error(sprintf('Group #%d has more than one transaction in it, cannot convert to transfer.', $journal['transaction_group_id']));
+            Log::error(sprintf('Group #%d has more than one transaction in it, cannot convert to transfer.', $journal['transaction_group_id']));
             event(new RuleActionFailedOnArray($this->action, $journal, trans('rules.split_group')));
 
             return false;
@@ -56,7 +58,7 @@ class SetAmount implements ActionInterface
         $value      = $this->action->getValue($journal);
 
         if (!is_numeric($value) || 0 === bccomp($value, '0')) {
-            app('log')->debug(sprintf('RuleAction SetAmount, amount "%s" is not a number or is zero, will not continue.', $value));
+            Log::debug(sprintf('RuleAction SetAmount, amount "%s" is not a number or is zero, will not continue.', $value));
             event(new RuleActionFailedOnArray($this->action, $journal, trans('rules.journal_invalid_amount', ['amount' => $value])));
 
             return false;
@@ -65,29 +67,31 @@ class SetAmount implements ActionInterface
         /** @var TransactionJournal $object */
         $object     = TransactionJournal::where('user_id', $journal['user_id'])->find($journal['transaction_journal_id']);
 
-        $positive   = app('steam')->positive($value);
-        $negative   = app('steam')->negative($value);
+        $positive   = Steam::positive($value);
+        $negative   = Steam::negative($value);
 
         $this->updatePositive($object, $positive);
         $this->updateNegative($object, $negative);
         $object->transactionGroup->touch();
 
         // event for audit log entry
-        event(new TriggeredAuditLog(
-            $this->action->rule,
-            $object,
-            'update_amount',
-            [
-                'currency_symbol' => $object->transactionCurrency->symbol,
-                'decimal_places'  => $object->transactionCurrency->decimal_places,
-                'amount'          => $journal['amount'],
-            ],
-            [
-                'currency_symbol' => $object->transactionCurrency->symbol,
-                'decimal_places'  => $object->transactionCurrency->decimal_places,
-                'amount'          => $value,
-            ]
-        ));
+        if (0 !== bccomp($journal['amount'], $value)) {
+            event(new TriggeredAuditLog(
+                $this->action->rule,
+                $object,
+                'update_amount',
+                [
+                    'currency_symbol' => $object->transactionCurrency->symbol,
+                    'decimal_places'  => $object->transactionCurrency->decimal_places,
+                    'amount'          => $journal['amount'],
+                ],
+                [
+                    'currency_symbol' => $object->transactionCurrency->symbol,
+                    'decimal_places'  => $object->transactionCurrency->decimal_places,
+                    'amount'          => $value,
+                ]
+            ));
+        }
 
         return true;
     }

@@ -24,15 +24,18 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\System;
 
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Cache;
+use FireflyIII\Support\Facades\Preferences;
 use Exception;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
+use FireflyIII\Support\Facades\FireflyConfig;
 use FireflyIII\Support\Http\Controllers\GetConfigurationData;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Laravel\Passport\Passport;
 use phpseclib3\Crypt\RSA;
@@ -49,8 +52,17 @@ class InstallController extends Controller
     public const string BASEDIR_ERROR   = 'Firefly III cannot execute the upgrade commands. It is not allowed to because of an open_basedir restriction.';
     public const string FORBIDDEN_ERROR = 'Internal PHP function "proc_close" is disabled for your installation. Auto-migration is not possible.';
     public const string OTHER_ERROR     = 'An unknown error prevented Firefly III from executing the upgrade commands. Sorry.';
-    private string $lastError;
-    private array  $upgradeCommands;
+    private string $lastError           = '';
+    // empty on purpose.
+    private array  $upgradeCommands     = [
+        // there are 5 initial commands
+        // Check 4 places: InstallController, Docker image, UpgradeDatabase, composer.json
+        'migrate'                            => ['--seed' => true, '--force' => true],
+        'generate-keys'                      => [], // an exception :(
+        'firefly-iii:upgrade-database'       => [],
+        'firefly-iii:set-latest-version'     => ['--james-is-cool' => true],
+        'firefly-iii:verify-security-alerts' => [],
+    ];
 
     /**
      * InstallController constructor.
@@ -58,18 +70,6 @@ class InstallController extends Controller
     public function __construct()
     {
         parent::__construct();
-        // empty on purpose.
-        $this->upgradeCommands = [
-            // there are 5 initial commands
-            // Check 4 places: InstallController, Docker image, UpgradeDatabase, composer.json
-            'migrate'                            => ['--seed' => true, '--force' => true],
-            'generate-keys'                      => [], // an exception :(
-            'firefly-iii:upgrade-database'       => [],
-            'firefly-iii:set-latest-version'     => ['--james-is-cool' => true],
-            'firefly-iii:verify-security-alerts' => [],
-        ];
-
-        $this->lastError       = '';
     }
 
     /**
@@ -77,14 +77,13 @@ class InstallController extends Controller
      *
      * @return Factory|View
      */
-    public function index()
+    public function index(): Factory|\Illuminate\Contracts\View\View
     {
         app('view')->share('FF_VERSION', config('firefly.version'));
-        // index will set FF3 version.
-        app('fireflyconfig')->set('ff3_version', (string) config('firefly.version'));
 
-        // set new DB version.
-        app('fireflyconfig')->set('db_version', (int) config('firefly.db_version'));
+        // index will set FF3 version.
+        FireflyConfig::set('ff3_version', (string) config('firefly.version'));
+        FireflyConfig::set('ff3_build_time', (int) config('firefly.build_time'));
 
         return view('install.index');
     }
@@ -100,18 +99,18 @@ class InstallController extends Controller
             'errorMessage'   => null,
         ];
 
-        app('log')->debug(sprintf('Will now run commands. Request index is %d', $requestIndex));
+        Log::debug(sprintf('Will now run commands. Request index is %d', $requestIndex));
         $indexes      = array_keys($this->upgradeCommands);
         if (array_key_exists($requestIndex, $indexes)) {
             $command                    = $indexes[$requestIndex];
             $parameters                 = $this->upgradeCommands[$command];
-            app('log')->debug(sprintf('Will now execute command "%s" with parameters', $command), $parameters);
+            Log::debug(sprintf('Will now execute command "%s" with parameters', $command), $parameters);
 
             try {
                 $result = $this->executeCommand($command, $parameters);
             } catch (FireflyException $e) {
-                app('log')->error($e->getMessage());
-                app('log')->error($e->getTraceAsString());
+                Log::error($e->getMessage());
+                Log::error($e->getTraceAsString());
                 if (str_contains($e->getMessage(), 'open_basedir restriction in effect')) {
                     $this->lastError = self::BASEDIR_ERROR;
                 }
@@ -136,7 +135,7 @@ class InstallController extends Controller
      */
     private function executeCommand(string $command, array $args): bool
     {
-        app('log')->debug(sprintf('Will now call command %s with args.', $command), $args);
+        Log::debug(sprintf('Will now call command %s with args.', $command), $args);
 
         try {
             if ('generate-keys' === $command) {
@@ -144,14 +143,14 @@ class InstallController extends Controller
             }
             if ('generate-keys' !== $command) {
                 Artisan::call($command, $args);
-                app('log')->debug(Artisan::output());
+                Log::debug(Artisan::output());
             }
         } catch (Exception $e) { // intentional generic exception
             throw new FireflyException($e->getMessage(), 0, $e);
         }
         // clear cache as well.
         Cache::clear();
-        app('preferences')->mark();
+        Preferences::mark();
 
         return true;
     }

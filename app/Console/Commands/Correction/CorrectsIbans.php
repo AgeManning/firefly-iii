@@ -29,6 +29,7 @@ use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Models\Account;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
+use FireflyIII\Support\Facades\Steam;
 
 class CorrectsIbans extends Command
 {
@@ -55,7 +56,7 @@ class CorrectsIbans extends Command
         /** @var Account $account */
         foreach ($accounts as $account) {
             $iban          = (string) $account->iban;
-            $newIban       = app('steam')->filterSpaces($iban);
+            $newIban       = Steam::filterSpaces($iban);
             if ('' !== $iban && $iban !== $newIban) {
                 $account->iban = $newIban;
                 $account->save();
@@ -66,7 +67,7 @@ class CorrectsIbans extends Command
             $accountNumber = $account->accountMeta->where('name', 'account_number')->first();
             if (null !== $accountNumber) {
                 $number    = (string) $accountNumber->value;
-                $newNumber = app('steam')->filterSpaces($number);
+                $newNumber = Steam::filterSpaces($number);
                 if ('' !== $number && $number !== $newNumber) {
                     $accountNumber->value = $newNumber;
                     $accountNumber->save();
@@ -93,25 +94,20 @@ class CorrectsIbans extends Command
             if (in_array($type, [AccountTypeEnum::LOAN->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::MORTGAGE->value], true)) {
                 $type = 'liabilities';
             }
-            if (array_key_exists($iban, $set[$userId])) {
-                // iban already in use! two exceptions exist:
-                if (
-                    !(AccountTypeEnum::EXPENSE->value === $set[$userId][$iban] && AccountTypeEnum::REVENUE->value === $type) // allowed combination
-                    && !(AccountTypeEnum::REVENUE->value === $set[$userId][$iban] && AccountTypeEnum::EXPENSE->value === $type) // also allowed combination.
-                ) {
-                    $this->friendlyWarning(
-                        sprintf(
-                            'IBAN "%s" is used more than once and will be removed from %s #%d ("%s")',
-                            $iban,
-                            $account->accountType->type,
-                            $account->id,
-                            $account->name
-                        )
-                    );
-                    $account->iban = null;
-                    $account->save();
-                    ++$this->count;
-                }
+            // iban already in use! two exceptions exist:
+            if (array_key_exists($iban, $set[$userId]) && (!AccountTypeEnum::EXPENSE->value === $set[$userId][$iban] && AccountTypeEnum::REVENUE->value === $type && !(AccountTypeEnum::REVENUE->value === $set[$userId][$iban] && AccountTypeEnum::EXPENSE->value === $type))) {
+                $this->friendlyWarning(
+                    sprintf(
+                        'IBAN "%s" is used more than once and will be removed from %s #%d ("%s")',
+                        $iban,
+                        $account->accountType->type,
+                        $account->id,
+                        $account->name
+                    )
+                );
+                $account->iban = null;
+                $account->save();
+                ++$this->count;
             }
 
             if (!array_key_exists($iban, $set[$userId])) {

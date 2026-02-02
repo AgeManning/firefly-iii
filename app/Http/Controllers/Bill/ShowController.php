@@ -24,15 +24,18 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Bill;
 
+use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\Support\Facades\Navigation;
 use Carbon\Carbon;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Http\Controllers\Controller;
-use FireflyIII\Models\Attachment;
 use FireflyIII\Models\Bill;
 use FireflyIII\Repositories\Bill\BillRepositoryInterface;
+use FireflyIII\Support\JsonApi\Enrichments\SubscriptionEnrichment;
 use FireflyIII\TransactionRules\Engine\RuleEngineInterface;
 use FireflyIII\Transformers\AttachmentTransformer;
 use FireflyIII\Transformers\BillTransformer;
+use FireflyIII\User;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -42,6 +45,8 @@ use Illuminate\View\View;
 use League\Fractal\Manager;
 use League\Fractal\Resource\Item;
 use League\Fractal\Serializer\DataArraySerializer;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 use Symfony\Component\HttpFoundation\ParameterBag;
 
 /**
@@ -73,10 +78,8 @@ class ShowController extends Controller
 
     /**
      * Rescan bills for transactions.
-     *
-     * @return Redirector|RedirectResponse
      */
-    public function rescan(Request $request, Bill $bill)
+    public function rescan(Request $request, Bill $bill): Redirector|RedirectResponse
     {
         $total      = 0;
         if (false === $bill->active) {
@@ -103,7 +106,7 @@ class ShowController extends Controller
         $ruleEngine->fire();
 
         $request->session()->flash('success', trans_choice('firefly.rescanned_bill', $total));
-        app('preferences')->mark();
+        Preferences::mark();
 
         return redirect(route('bills.show', [$bill->id]));
     }
@@ -112,9 +115,13 @@ class ShowController extends Controller
      * Show a bill.
      *
      * @return Factory|View
+     *
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
-    public function show(Request $request, Bill $bill)
+    public function show(Request $request, Bill $bill): Factory|\Illuminate\Contracts\View\View
     {
+        $this->repository->correctTransfers();
         // add info about rules:
         $rules                      = $this->repository->getRulesForBill($bill);
         $subTitle                   = $bill->name;
@@ -126,7 +133,7 @@ class ShowController extends Controller
         $end                        = session('end');
         $year                       = $start->year;
         $page                       = (int) $request->get('page');
-        $pageSize                   = (int) app('preferences')->get('listPageSize', 50)->data;
+        $pageSize                   = (int) Preferences::get('listPageSize', 50)->data;
         $yearAverage                = $this->repository->getYearAverage($bill, $start);
         $overallAverage             = $this->repository->getOverallAverage($bill);
         $manager                    = new Manager();
@@ -134,13 +141,24 @@ class ShowController extends Controller
         $manager->parseIncludes(['attachments', 'notes']);
 
         // add another period to end, could fix 8163
-        $range                      = app('navigation')->getViewRange(true);
-        $end                        = app('navigation')->addPeriod($end, $range);
+        $range                      = Navigation::getViewRange(true);
+        $end                        = Navigation::addPeriod($end, $range);
 
         // Make a resource out of the data and
         $parameters                 = new ParameterBag();
         $parameters->set('start', $start);
         $parameters->set('end', $end);
+
+        // enrich
+        /** @var User $admin */
+        $admin                      = auth()->user();
+        $enrichment                 = new SubscriptionEnrichment();
+        $enrichment->setUser($admin);
+        $enrichment->setStart($start);
+        $enrichment->setEnd($end);
+
+        /** @var Bill $bill */
+        $bill                       = $enrichment->enrichSingle($bill);
 
         /** @var BillTransformer $transformer */
         $transformer                = app(BillTransformer::class);
@@ -166,10 +184,10 @@ class ShowController extends Controller
             /** @var AttachmentTransformer $transformer */
             $transformer = app(AttachmentTransformer::class);
             $attachments = $collection->each(
-                static fn (Attachment $attachment) => $transformer->transform($attachment)
+                $transformer->transform(...)
             );
         }
 
-        return view('bills.show', compact('attachments', 'groups', 'rules', 'yearAverage', 'overallAverage', 'year', 'object', 'bill', 'subTitle'));
+        return view('bills.show', ['attachments' => $attachments, 'groups' => $groups, 'rules' => $rules, 'yearAverage' => $yearAverage, 'overallAverage' => $overallAverage, 'year' => $year, 'object' => $object, 'bill' => $bill, 'subTitle' => $subTitle]);
     }
 }

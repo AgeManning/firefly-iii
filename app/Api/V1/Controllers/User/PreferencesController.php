@@ -29,6 +29,7 @@ use FireflyIII\Api\V1\Requests\User\PreferenceStoreRequest;
 use FireflyIII\Api\V1\Requests\User\PreferenceUpdateRequest;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Preference;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Transformers\PreferenceTransformer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -49,12 +50,10 @@ class PreferencesController extends Controller
      * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/preferences/listPreference
      *
      * List all of them.
-     *
-     * @throws FireflyException
      */
     public function index(): JsonResponse
     {
-        $collection  = app('preferences')->all();
+        $collection  = Preferences::all();
         $manager     = $this->getManager();
         $count       = $collection->count();
         $pageSize    = $this->parameters->get('limit');
@@ -85,7 +84,7 @@ class PreferencesController extends Controller
         $manager     = $this->getManager();
 
         if ('currencyPreference' === $preference->name) {
-            throw new FireflyException('Please use api/v1/currencies/native instead.');
+            throw new FireflyException('Please use api/v1/currencies/primary instead.');
         }
 
         /** @var PreferenceTransformer $transformer */
@@ -112,7 +111,7 @@ class PreferencesController extends Controller
             throw new FireflyException('Please use api/v1/currencies/default instead.');
         }
 
-        $pref        = app('preferences')->set($data['name'], $data['data']);
+        $pref        = Preferences::set($data['name'], $data['data']);
 
         /** @var PreferenceTransformer $transformer */
         $transformer = app(PreferenceTransformer::class);
@@ -132,12 +131,12 @@ class PreferencesController extends Controller
     public function update(PreferenceUpdateRequest $request, Preference $preference): JsonResponse
     {
         if ('currencyPreference' === $preference->name) {
-            throw new FireflyException('Please use api/v1/currencies/native instead.');
+            throw new FireflyException('Please use api/v1/currencies/primary instead.');
         }
 
         $manager     = $this->getManager();
         $data        = $request->getAll();
-        $pref        = app('preferences')->set($preference->name, $data['data']);
+        $pref        = Preferences::set($preference->name, $data['data']);
 
         /** @var PreferenceTransformer $transformer */
         $transformer = app(PreferenceTransformer::class);

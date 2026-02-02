@@ -25,10 +25,10 @@ declare(strict_types=1);
 
 namespace FireflyIII\Rules;
 
+use Closure;
 use FireflyIII\Support\Validation\ValidatesAmountsTrait;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Support\Facades\Log;
-use Closure;
 
 class IsValidZeroOrMoreAmount implements ValidationRule
 {
@@ -41,7 +41,7 @@ class IsValidZeroOrMoreAmount implements ValidationRule
      */
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
-        if (true === $this->nullable && null === $value) {
+        if ($this->nullable && null === $value) {
             return;
         }
         $value = (string) $value;

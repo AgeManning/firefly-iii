@@ -29,6 +29,7 @@ use FireflyIII\Models\Recurrence;
 use FireflyIII\Models\RecurrenceMeta;
 use FireflyIII\Models\RecurrenceTransactionMeta;
 use Illuminate\Console\Command;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 use function Safe\json_encode;
 
@@ -65,12 +66,10 @@ class UpgradesRecurrenceMetaData extends Command
 
     private function isExecuted(): bool
     {
-        $configVar = app('fireflyconfig')->get(self::CONFIG_NAME, false);
-        if (null !== $configVar) {
-            return (bool) $configVar->data;
-        }
+        $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
 
-        return false;
+        return (bool)$configVar?->data;
+
     }
 
     private function migrateMetaData(): int
@@ -119,6 +118,6 @@ class UpgradesRecurrenceMetaData extends Command
 
     private function markAsExecuted(): void
     {
-        app('fireflyconfig')->set(self::CONFIG_NAME, true);
+        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 }

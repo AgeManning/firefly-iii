@@ -30,6 +30,7 @@ use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Middleware\IsDemoUser;
+use FireflyIII\Models\PeriodStatistic;
 use FireflyIII\Models\TransactionType;
 use FireflyIII\Repositories\PiggyBank\PiggyBankRepositoryInterface;
 use FireflyIII\Support\Facades\Amount;
@@ -48,7 +49,9 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\View;
 use Monolog\Handler\RotatingFileHandler;
+use Safe\Exceptions\FilesystemException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 use function Safe\file_get_contents;
 use function Safe\ini_get;
@@ -79,11 +82,11 @@ class DebugController extends Controller
      */
     public function displayError(): void
     {
-        app('log')->debug('This is a test message at the DEBUG level.');
-        app('log')->info('This is a test message at the INFO level.');
+        Log::debug('This is a test message at the DEBUG level.');
+        Log::info('This is a test message at the INFO level.');
         Log::notice('This is a test message at the NOTICE level.');
-        app('log')->warning('This is a test message at the WARNING level.');
-        app('log')->error('This is a test message at the ERROR level.');
+        Log::warning('This is a test message at the WARNING level.');
+        Log::error('This is a test message at the ERROR level.');
         Log::critical('This is a test message at the CRITICAL level.');
         Log::alert('This is a test message at the ALERT level.');
         Log::emergency('This is a test message at the EMERGENCY level.');
@@ -94,11 +97,9 @@ class DebugController extends Controller
     /**
      * Clear log and session.
      *
-     * @return Redirector|RedirectResponse
-     *
      * @throws FireflyException
      */
-    public function flush(Request $request)
+    public function flush(Request $request): Redirector|RedirectResponse
     {
         Preferences::mark();
         $request->session()->forget(['start', 'end', '_previous', 'viewRange', 'range', 'is_custom_range', 'temp-mfa-secret', 'temp-mfa-codes']);
@@ -108,9 +109,13 @@ class DebugController extends Controller
         Artisan::call('route:clear');
         Artisan::call('view:clear');
 
+        PeriodStatistic::where('id', '>', 0)->delete();
+
         // also do some recalculations.
         Artisan::call('correction:recalculates-liabilities');
-        AccountBalanceCalculator::recalculateAll(false);
+        if (true === FireflyConfig::get('use_running_balance', config('firefly.feature_flags.running_balance_column'))->data) {
+            AccountBalanceCalculator::recalculateAll(false);
+        }
 
         try {
             Artisan::call('twig:clean');
@@ -128,9 +133,9 @@ class DebugController extends Controller
      *
      * @return Factory|View
      *
-     * @throws FireflyException
+     * @throws FilesystemException
      */
-    public function index()
+    public function index(): Factory|\Illuminate\Contracts\View\View
     {
         $table      = $this->generateTable();
         $table      = str_replace(["\n", "\t", '  '], '', $table);
@@ -151,10 +156,15 @@ class DebugController extends Controller
         }
         if ('' !== $logContent) {
             // last few lines
-            $logContent = 'Truncated from this point <----|'.substr((string) $logContent, -16384);
+            $logContent = 'Truncated from this point <----|'.substr($logContent, -16384);
         }
 
-        return view('debug', compact('table', 'now', 'logContent'));
+        return view('debug', ['table' => $table, 'now' => $now, 'logContent' => $logContent]);
+    }
+
+    public function apiTest(): View
+    {
+        return view('test.api-test');
     }
 
     private function generateTable(): string
@@ -165,20 +175,21 @@ class DebugController extends Controller
         $app    = $this->getAppInfo();
         $user   = $this->getUserInfo();
 
-        return (string) view('partials.debug-table', compact('system', 'docker', 'app', 'user'));
+        return (string) view('partials.debug-table', ['system' => $system, 'docker' => $docker, 'app' => $app, 'user' => $user]);
     }
 
     private function getSystemInformation(): array
     {
-        $maxFileSize   = Steam::phpBytes((string) ini_get('upload_max_filesize'));
-        $maxPostSize   = Steam::phpBytes((string) ini_get('post_max_size'));
+        $maxFileSize   = Steam::phpBytes(ini_get('upload_max_filesize'));
+        $maxPostSize   = Steam::phpBytes(ini_get('post_max_size'));
         $drivers       = DB::availableDrivers();
         $currentDriver = DB::getDriverName();
 
         return [
-            'db_version'      => app('fireflyconfig')->get('db_version', 1)->data,
             'php_version'     => PHP_VERSION,
             'php_os'          => PHP_OS,
+            'build_time'      => config('firefly.build_time'),
+            'build_time_nice' => Carbon::parse(config('firefly.build_time'), 'Europe/Amsterdam')->setTimezone('Europe/Amsterdam')->format('Y-m-d H:i:s e'),
             'uname'           => php_uname('m'),
             'interface'       => PHP_SAPI,
             'bits'            => PHP_INT_SIZE * 8,
@@ -203,21 +214,21 @@ class DebugController extends Controller
 
         try {
             if (file_exists('/var/www/counter-main.txt')) {
-                $return['build'] = trim((string) file_get_contents('/var/www/counter-main.txt'));
-                app('log')->debug(sprintf('build is now "%s"', $return['build']));
+                $return['build'] = trim(file_get_contents('/var/www/counter-main.txt'));
+                Log::debug(sprintf('build is now "%s"', $return['build']));
             }
         } catch (Exception $e) {
-            app('log')->debug('Could not check build counter, but thats ok.');
-            app('log')->warning($e->getMessage());
+            Log::debug('Could not check build counter, but thats ok.');
+            Log::warning($e->getMessage());
         }
 
         try {
             if (file_exists('/var/www/build-date-main.txt')) {
-                $return['build_date'] = trim((string) file_get_contents('/var/www/build-date-main.txt'));
+                $return['build_date'] = trim(file_get_contents('/var/www/build-date-main.txt'));
             }
         } catch (Exception $e) {
-            app('log')->debug('Could not check build date, but thats ok.');
-            app('log')->warning($e->getMessage());
+            Log::debug('Could not check build date, but thats ok.');
+            Log::warning($e->getMessage());
         }
         if ('' !== (string) env('BASE_IMAGE_BUILD')) {       // @phpstan-ignore-line
             $return['base_build'] = env('BASE_IMAGE_BUILD'); // @phpstan-ignore-line
@@ -233,7 +244,7 @@ class DebugController extends Controller
     {
         $userGuard      = config('auth.defaults.guard');
 
-        $config         = app('fireflyconfig')->get('last_rt_job', 0);
+        $config         = FireflyConfig::get('last_rt_job', 0);
         $lastTime       = (int) $config->data;
         $lastCronjob    = 'never';
         $lastCronjobAgo = 'never';
@@ -274,23 +285,23 @@ class DebugController extends Controller
         $parts          = Steam::getLocaleArray(Steam::getLocale());
         foreach ($parts as $code) {
             $code                  = trim($code);
-            app('log')->debug(sprintf('Trying to set %s', $code));
+            Log::debug(sprintf('Trying to set %s', $code));
             $result                = setlocale(LC_ALL, $code);
             $localeAttempts[$code] = $result === $code;
         }
         setlocale(LC_ALL, (string) $original);
 
         return [
-            'user_id'           => auth()->user()->id,
-            'user_count'        => User::count(),
-            'user_flags'        => $userFlags,
-            'user_agent'        => $userAgent,
-            'native'            => Amount::getNativeCurrency(),
-            'convert_to_native' => Amount::convertToNative(),
-            'locale_attempts'   => $localeAttempts,
-            'locale'            => Steam::getLocale(),
-            'language'          => Steam::getLanguage(),
-            'view_range'        => Preferences::get('viewRange', '1M')->data,
+            'user_id'            => auth()->user()->id,
+            'user_count'         => User::count(),
+            'user_flags'         => $userFlags,
+            'user_agent'         => $userAgent,
+            'primary'            => Amount::getPrimaryCurrency(),
+            'convert_to_primary' => Amount::convertToPrimary(),
+            'locale_attempts'    => $localeAttempts,
+            'locale'             => Steam::getLocale(),
+            'language'           => Steam::getLanguage(),
+            'view_range'         => Preferences::get('viewRange', '1M')->data,
         ];
     }
 
@@ -464,31 +475,55 @@ class DebugController extends Controller
                 return 'asset';
 
             case 'account':
+
+            case 'attachment':
+
+            case 'bill':
+
+            case 'budget':
+
+            case 'budgetLimit':
+
+            case 'category':
+
+            case 'currency':
+
+            case 'tag':
+
+            case 'piggyBank':
+
+            case 'objectGroup':
+
+            case 'recurrence':
+
+            case 'tj':
+
+            case 'ruleGroup':
+
+            case 'rule':
+
+            case 'tagOrId':
+
+            case 'transactionGroup':
+
+            case 'journalLink':
+
+            case 'webhook':
+
+            case 'user':
+
+            case 'linkType':
+
+            case 'userGroup':
                 return '1';
 
             case 'start_date':
+
+            case 'date':
                 return '20241201';
 
             case 'end_date':
                 return '20241231';
-
-            case 'attachment':
-                return '1';
-
-            case 'bill':
-                return '1';
-
-            case 'budget':
-                return '1';
-
-            case 'budgetLimit':
-                return '1';
-
-            case 'category':
-                return '1';
-
-            case 'currency':
-                return '1';
 
             case 'fromCurrencyCode':
                 return 'EUR';
@@ -500,25 +535,11 @@ class DebugController extends Controller
                 return '1,6';
 
             case 'budgetList':
-                return '1,2';
-
             case 'categoryList':
-                return '1,2';
-
             case 'doubleList':
-                return '1,2';
-
             case 'tagList':
+            case 'journalList':
                 return '1,2';
-
-            case 'tag':
-                return '1';
-
-            case 'piggyBank':
-                return '1';
-
-            case 'objectGroup':
-                return '1';
 
             case 'route':
                 return 'accounts';
@@ -526,60 +547,19 @@ class DebugController extends Controller
             case 'specificPage':
                 return 'show';
 
-            case 'recurrence':
-                return '1';
-
-            case 'tj':
-                return '1';
-
             case 'reportType':
                 return 'default';
 
-            case 'ruleGroup':
-                return '1';
-
-            case 'rule':
-                return '1';
-
-            case 'tagOrId':
-                return '1';
-
-            case 'transactionGroup':
-                return '1';
-
-            case 'journalList':
-                return '1,2';
-
             case 'transactionType':
                 return 'withdrawal';
-
-            case 'journalLink':
-                return '1';
-
-            case 'webhook':
-                return '1';
-
-            case 'user':
-                return '1';
-
-            case 'linkType':
-                return '1';
-
-            case 'userGroup':
-                return '1';
-
-            case 'date':
-                return '20241201';
 
         }
     }
 
     /**
      * Flash all types of messages.
-     *
-     * @return Redirector|RedirectResponse
      */
-    public function testFlash(Request $request)
+    public function testFlash(Request $request): Redirector|RedirectResponse
     {
         $request->session()->flash('success', 'This is a success message.');
         $request->session()->flash('info', 'This is an info message.');

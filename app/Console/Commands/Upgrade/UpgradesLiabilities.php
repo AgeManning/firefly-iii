@@ -33,6 +33,7 @@ use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Services\Internal\Support\CreditRecalculateService;
 use FireflyIII\User;
 use Illuminate\Console\Command;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 class UpgradesLiabilities extends Command
 {
@@ -61,12 +62,10 @@ class UpgradesLiabilities extends Command
 
     private function isExecuted(): bool
     {
-        $configVar = app('fireflyconfig')->get(self::CONFIG_NAME, false);
-        if (null !== $configVar) {
-            return (bool) $configVar->data;
-        }
+        $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
 
-        return false;
+        return (bool)$configVar?->data;
+
     }
 
     private function upgradeLiabilities(): void
@@ -150,6 +149,6 @@ class UpgradesLiabilities extends Command
 
     private function markAsExecuted(): void
     {
-        app('fireflyconfig')->set(self::CONFIG_NAME, true);
+        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 }

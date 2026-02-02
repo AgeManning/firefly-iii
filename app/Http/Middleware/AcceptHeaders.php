@@ -27,6 +27,7 @@ namespace FireflyIII\Http\Middleware;
 use FireflyIII\Exceptions\BadHttpHeaderException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Safe\Exceptions\PcreException;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 use function Safe\preg_match;
@@ -39,6 +40,7 @@ class AcceptHeaders
      * @return Response
      *
      * @throws BadHttpHeaderException
+     * @throws PcreException
      */
     public function handle(Request $request, callable $next): mixed
     {
@@ -56,6 +58,7 @@ class AcceptHeaders
         // some routes are exempt from this.
         $exempt       = [
             'api.v1.data.bulk.transactions',
+            'api.v1.attachments.upload',
         ];
 
         if (('POST' === $method || 'PUT' === $method) && !$request->hasHeader('Content-Type') && !in_array($request->route()->getName(), $exempt, true)) {

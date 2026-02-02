@@ -35,6 +35,7 @@ use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\Journal\JournalCLIRepositoryInterface;
 use FireflyIII\Repositories\Journal\JournalRepositoryInterface;
 use Illuminate\Console\Command;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 class UpgradesVariousCurrencyInformation extends Command
 {
@@ -86,12 +87,10 @@ class UpgradesVariousCurrencyInformation extends Command
 
     private function isExecuted(): bool
     {
-        $configVar = app('fireflyconfig')->get(self::CONFIG_NAME, false);
-        if (null !== $configVar) {
-            return (bool) $configVar->data;
-        }
+        $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
 
-        return false;
+        return (bool)$configVar?->data;
+
     }
 
     /**
@@ -213,7 +212,6 @@ class UpgradesVariousCurrencyInformation extends Command
                 break;
         }
 
-        /** @var null|Transaction */
         return $lead;
     }
 
@@ -249,6 +247,6 @@ class UpgradesVariousCurrencyInformation extends Command
 
     private function markAsExecuted(): void
     {
-        app('fireflyconfig')->set(self::CONFIG_NAME, true);
+        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 }

@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Transaction;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
@@ -34,6 +35,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Redirector;
 use Illuminate\View\View;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
+use Safe\Exceptions\UrlException;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 use function Safe\parse_url;
 
@@ -66,10 +71,14 @@ class EditController extends Controller
 
     /**
      * @return Factory|Redirector|RedirectResponse|View
+     *
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
+     * @throws UrlException
      */
-    public function edit(TransactionGroup $transactionGroup)
+    public function edit(TransactionGroup $transactionGroup): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
-        app('preferences')->mark();
+        Preferences::mark();
 
         if (!$this->isEditableGroup($transactionGroup)) {
             return $this->redirectGroupToAccount($transactionGroup);
@@ -84,7 +93,6 @@ class EditController extends Controller
         $title                      = $transactionGroup->transactionJournals()->count() > 1 ? $transactionGroup->title : $transactionGroup->transactionJournals()->first()->description;
         $subTitle                   = (string) trans('firefly.edit_transaction_title', ['description' => $title]);
         $subTitleIcon               = 'fa-plus';
-        $defaultCurrency            = $this->defaultCurrency;
         $cash                       = $repository->getCashAccount();
         $previousUrl                = $this->rememberPreviousUrl('transactions.edit.url');
         $parts                      = parse_url((string) $previousUrl);
@@ -92,7 +100,7 @@ class EditController extends Controller
         $previousUrl                = str_replace($search, '', $previousUrl);
 
         // settings necessary for v2
-        $optionalFields             = app('preferences')->get('transaction_journal_optional_fields', [])->data;
+        $optionalFields             = Preferences::get('transaction_journal_optional_fields', [])->data;
         if (!is_array($optionalFields)) {
             $optionalFields = [];
         }
@@ -107,33 +115,14 @@ class EditController extends Controller
         ];
         $optionalFields['external_url'] ??= false;
         $optionalFields['location']     ??= false;
-        $optionalFields['location'] = $optionalFields['location'] && true === config('firefly.enable_external_map');
+        $optionalFields['location'] = $optionalFields['location'] && true === FireflyConfig::get('enable_external_map', config('firefly.enable_external_map'))->data;
 
         // map info voor v2:
         $longitude                  = config('firefly.default_location.longitude');
         $latitude                   = config('firefly.default_location.latitude');
         $zoomLevel                  = config('firefly.default_location.zoom_level');
 
-        return view(
-            'transactions.edit',
-            compact(
-                'cash',
-                'allowedSourceDests',
-                'expectedSourceTypes',
-                'optionalDateFields',
-                'longitude',
-                'latitude',
-                'zoomLevel',
-                'optionalFields',
-                'subTitle',
-                'subTitleIcon',
-                'transactionGroup',
-                'allowedOpposingTypes',
-                'accountToTypes',
-                'defaultCurrency',
-                'previousUrl'
-            )
-        );
+        return view('transactions.edit', ['cash' => $cash, 'allowedSourceDests' => $allowedSourceDests, 'expectedSourceTypes' => $expectedSourceTypes, 'optionalDateFields' => $optionalDateFields, 'longitude' => $longitude, 'latitude' => $latitude, 'zoomLevel' => $zoomLevel, 'optionalFields' => $optionalFields, 'subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'transactionGroup' => $transactionGroup, 'allowedOpposingTypes' => $allowedOpposingTypes, 'accountToTypes' => $accountToTypes, 'previousUrl' => $previousUrl]);
     }
 
     public function unreconcile(TransactionJournal $journal): JsonResponse

@@ -126,7 +126,7 @@ class RecurrenceFormRequest extends FormRequest
             $return['transactions'][0]['source_id']      = $this->convertInteger('source_id');
             $return['transactions'][0]['destination_id'] = $this->convertInteger('destination_id');
         }
-        if (true === $throwError) {
+        if ($throwError) {
             throw new FireflyException(sprintf('Cannot handle transaction type "%s"', $this->convertString('transaction_type')));
         }
 
@@ -138,7 +138,7 @@ class RecurrenceFormRequest extends FormRequest
          * @var int   $index
          * @var array $transaction
          */
-        foreach ($return['transactions'] as $index => $transaction) {
+        foreach ($return['transactions'] as $index => $transaction) { // @phpstan-ignore-line
             $categoryName = $transaction['category_name'] ?? null;
             if (null !== $categoryName) {
                 $category = $factory->findOrCreate(null, $categoryName);
@@ -292,7 +292,7 @@ class RecurrenceFormRequest extends FormRequest
      */
     public function validateAccountInformation(Validator $validator): void
     {
-        app('log')->debug('Now in validateAccountInformation (RecurrenceFormRequest)()');
+        Log::debug('Now in validateAccountInformation (RecurrenceFormRequest)()');
 
         /** @var AccountValidator $accountValidator */
         $accountValidator = app(AccountValidator::class);
@@ -324,7 +324,7 @@ class RecurrenceFormRequest extends FormRequest
             $sourceId      = (int) $data['source_id'];
             $destinationId = (int) ($data['destination_id'] ?? 0);
         }
-        if (true === $throwError) {
+        if ($throwError) {
             throw new FireflyException(sprintf('Cannot handle transaction type "%s"', $this->convertString('transaction_type')));
         }
 

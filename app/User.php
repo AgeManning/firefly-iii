@@ -25,6 +25,7 @@ declare(strict_types=1);
 namespace FireflyIII;
 
 use Deprecated;
+use Exception;
 use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Events\RequestedNewPassword;
 use FireflyIII\Exceptions\FireflyException;
@@ -53,6 +54,8 @@ use FireflyIII\Models\UserRole;
 use FireflyIII\Models\Webhook;
 use FireflyIII\Notifications\Admin\UserRegistration;
 use FireflyIII\Notifications\Admin\VersionCheckResult;
+use FireflyIII\Support\Facades\FireflyConfig;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Models\ReturnsIntegerIdTrait;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -62,19 +65,21 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Str;
 use Laravel\Passport\HasApiTokens;
 use NotificationChannels\Pushover\PushoverReceiver;
+use SensitiveParameter;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Exception;
 
 class User extends Authenticatable
 {
     use HasApiTokens;
     use Notifiable;
     use ReturnsIntegerIdTrait;
-    protected $fillable = ['email', 'password', 'blocked', 'blocked_code'];
+
+    protected $fillable = ['email', 'password', 'blocked', 'blocked_code', 'user_group_id'];
     protected $hidden   = ['password', 'remember_token'];
     protected $table    = 'users';
 
@@ -198,11 +203,9 @@ class User extends Authenticatable
 
     /**
      * Get the database column name of the domain.
-     *
-     * @return string
      */
     #[Deprecated]
-    public function getLdapDomainColumn()
+    public function getLdapDomainColumn(): string
     {
         return 'domain';
     }
@@ -220,11 +223,9 @@ class User extends Authenticatable
 
     /**
      * Get the models LDAP GUID database column name.
-     *
-     * @return string
      */
     #[Deprecated]
-    public function getLdapGuidColumn()
+    public function getLdapGuidColumn(): string
     {
         return 'objectguid';
     }
@@ -247,22 +248,26 @@ class User extends Authenticatable
      */
     private function hasAnyRoleInGroup(UserGroup $userGroup, array $roles): bool
     {
-        app('log')->debug(sprintf('in hasAnyRoleInGroup(%s)', implode(', ', $roles)));
+        Log::debug(sprintf('in hasAnyRoleInGroup(%s)', implode(', ', $roles)));
 
         /** @var Collection $dbRoles */
         $dbRoles          = UserRole::whereIn('title', $roles)->get();
         if (0 === $dbRoles->count()) {
-            app('log')->error(sprintf('Could not find role(s): %s. Probably migration mishap.', implode(', ', $roles)));
+            Log::error(sprintf('Could not find role(s): %s. Probably migration mishap.', implode(', ', $roles)));
 
             return false;
         }
         $dbRolesIds       = $dbRoles->pluck('id')->toArray();
         $dbRolesTitles    = $dbRoles->pluck('title')->toArray();
 
-        /** @var Collection $groupMemberships */
-        $groupMemberships = $this->groupMemberships()->whereIn('user_role_id', $dbRolesIds)->where('user_group_id', $userGroup->id)->get();
+        $groupMemberships = $this
+            ->groupMemberships()
+            ->whereIn('user_role_id', $dbRolesIds)
+            ->where('user_group_id', $userGroup->id)
+            ->get()
+        ;
         if (0 === $groupMemberships->count()) {
-            app('log')->error(sprintf(
+            Log::error(sprintf(
                 'User #%d "%s" does not have roles %s in user group #%d "%s"',
                 $this->id,
                 $this->email,
@@ -274,7 +279,7 @@ class User extends Authenticatable
             return false;
         }
         foreach ($groupMemberships as $membership) {
-            app('log')->debug(sprintf(
+            Log::debug(sprintf(
                 'User #%d "%s" has role "%s" in user group #%d "%s"',
                 $this->id,
                 $this->email,
@@ -283,12 +288,12 @@ class User extends Authenticatable
                 $userGroup->title
             ));
             if (in_array($membership->userRole->title, $dbRolesTitles, true)) {
-                app('log')->debug(sprintf('Return true, found role "%s"', $membership->userRole->title));
+                Log::debug(sprintf('Return true, found role "%s"', $membership->userRole->title));
 
                 return true;
             }
         }
-        app('log')->error(sprintf(
+        Log::error(sprintf(
             'User #%d "%s" does not have roles %s in user group #%d "%s"',
             $this->id,
             $this->email,
@@ -361,7 +366,7 @@ class User extends Authenticatable
         }
         $email  = $this->email;
         // see if user has alternative email address:
-        $pref   = app('preferences')->getForUser($this, 'remote_guard_alt_email');
+        $pref   = Preferences::getForUser($this, 'remote_guard_alt_email');
         if (null !== $pref) {
             $email = $pref->data;
         }
@@ -372,7 +377,7 @@ class User extends Authenticatable
 
         return match ($driver) {
             'mail'  => $email,
-            default => null,
+            default => null
         };
     }
 
@@ -394,8 +399,8 @@ class User extends Authenticatable
 
     public function routeNotificationForPushover(): PushoverReceiver
     {
-        $appToken  = (string) app('preferences')->getEncrypted('pushover_app_token', '')->data;
-        $userToken = (string) app('preferences')->getEncrypted('pushover_user_token', '')->data;
+        $appToken  = (string) Preferences::getEncrypted('pushover_app_token', '')->data;
+        $userToken = (string) Preferences::getEncrypted('pushover_user_token', '')->data;
 
         return PushoverReceiver::withUserKey($userToken)->withApplicationToken($appToken);
     }
@@ -406,7 +411,7 @@ class User extends Authenticatable
     public function routeNotificationForSlack(Notification $notification): ?string
     {
         // this check does not validate if the user is owner, Should be done by notification itself.
-        $res  = app('fireflyconfig')->getEncrypted('slack_webhook_url', '')->data;
+        $res  = FireflyConfig::getEncrypted('slack_webhook_url', '')->data;
         if (is_array($res)) {
             $res = '';
         }
@@ -423,7 +428,7 @@ class User extends Authenticatable
         if ($notification instanceof VersionCheckResult) {
             return $res;
         }
-        $pref = app('preferences')->getEncryptedForUser($this, 'slack_webhook_url', '')->data;
+        $pref = Preferences::getEncryptedForUser($this, 'slack_webhook_url', '')->data;
         if (is_array($pref)) {
             return '';
         }
@@ -454,7 +459,7 @@ class User extends Authenticatable
      *
      * @param string $token
      */
-    public function sendPasswordResetNotification($token): void
+    public function sendPasswordResetNotification(#[SensitiveParameter] $token): void
     {
         $ipAddress = Request::ip();
 
@@ -530,10 +535,6 @@ class User extends Authenticatable
 
     protected function casts(): array
     {
-        return [
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-            'blocked'    => 'boolean',
-        ];
+        return ['created_at' => 'datetime', 'updated_at' => 'datetime', 'blocked'    => 'boolean'];
     }
 }

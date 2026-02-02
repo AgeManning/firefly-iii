@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\RuleGroup;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\RuleGroupFormRequest;
 use FireflyIII\Repositories\RuleGroup\RuleGroupRepositoryInterface;
@@ -64,7 +65,7 @@ class CreateController extends Controller
      *
      * @return Factory|View
      */
-    public function create()
+    public function create(): Factory|\Illuminate\Contracts\View\View
     {
         $subTitleIcon = 'fa-clone';
         $subTitle     = (string) trans('firefly.make_new_rule_group');
@@ -75,7 +76,7 @@ class CreateController extends Controller
         }
         session()->forget('rule-groups.create.fromStore');
 
-        return view('rules.rule-group.create', compact('subTitleIcon', 'subTitle'));
+        return view('rules.rule-group.create', ['subTitleIcon' => $subTitleIcon, 'subTitle' => $subTitle]);
     }
 
     /**
@@ -89,7 +90,7 @@ class CreateController extends Controller
         $ruleGroup = $this->repository->store($data);
 
         session()->flash('success', (string) trans('firefly.created_new_rule_group', ['title' => $ruleGroup->title]));
-        app('preferences')->mark();
+        Preferences::mark();
 
         $redirect  = redirect($this->getPreviousUrl('rule-groups.create.url'));
         if (1 === (int) $request->get('create_another')) {

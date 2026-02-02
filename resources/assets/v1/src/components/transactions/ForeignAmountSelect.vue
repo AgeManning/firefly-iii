@@ -68,8 +68,8 @@ export default {
     props: ['source', 'destination', 'transactionType', 'value', 'error', 'no_currency', 'title',],
     mounted() {
         this.liability = false;
-        // console.log('I am mounted with a ' + this.transactionType + ' transaction type and currency id!');
-        // console.log(this.value);
+        console.log('ForeignAmountSelect is mounted with a ' + this.transactionType + ' transaction type and currency id!');
+        console.log(this.value);
         this.loadCurrencies();
     },
     data() {
@@ -112,12 +112,10 @@ export default {
                 amount: this.$refs.amount.value,
                 currency_id: this.$refs.currency_select.value,
             };
-            // console.log(obj);
-            this.$emit('input', obj
-            );
+            this.$emit('input', obj);
         },
         changeData: function () {
-            // console.log('ForeignAmountSelect changeData');
+            console.log('ForeignAmountSelect changeData');
             this.enabledCurrencies = [];
             let destType = this.destination.type ? this.destination.type.toLowerCase() : 'invalid';
             let srcType = this.source.type ? this.source.type.toLowerCase() : 'invalid';
@@ -126,23 +124,25 @@ export default {
             let sourceIsLiability = liabilities.indexOf(srcType) !== -1;
             let destIsLiability = liabilities.indexOf(destType) !== -1;
 
+
             // console.log(srcType + ' (source) is a liability: ' + sourceIsLiability);
             // console.log(destType + ' (dest) is a liability: ' + destIsLiability);
             // console.log('tType: ' + tType);
             if (tType === 'transfer' || destIsLiability || sourceIsLiability) {
-                // console.log('Source is liability OR dest is liability, OR transfer. Lock list on currency of destination.');
+                console.log('Source or dest is a liability.')
+                console.log('Source is liability OR dest is liability, OR transfer. Lock list on currency of destination.');
                 // console.log('Length of currencies is ' + this.currencies.length);
                 // console.log(this.currencies);
                 this.liability = true;
-                // lock dropdown list on currencyID of destination.
+                // lock dropdown list on currencyID of destination UNLESS dest is not liab
                 for (const key in this.currencies) {
                     if (this.currencies.hasOwnProperty(key) && /^0$|^[1-9]\d*$/.test(key) && key <= 4294967294) {
                         if (
-                            parseInt(this.currencies[key].id) === parseInt(this.destination.currency_id)
+                            parseInt(this.currencies[key].id) === parseInt(this.destination.currency_id) || !destIsLiability
                         ) {
-                            // console.log('Enable currency!!');
+                            console.log('Enable currency!!');
+                            console.log(this.currencies[key]);
                             // console.log(this.destination);
-                            // console.log(this.currencies[key]);
                             this.enabledCurrencies.push(this.currencies[key]);
                         }
                     }
@@ -153,6 +153,7 @@ export default {
 
             // if type is withdrawal, list all but skip the source account ID.
             if (tType === 'withdrawal' && this.source && false === sourceIsLiability) {
+                console.log('Type is withdrawal, there is a source, it is not a liability.')
                 for (const key in this.currencies) {
                     if (this.currencies.hasOwnProperty(key) && /^0$|^[1-9]\d*$/.test(key) && key <= 4294967294) {
                         if (this.source.currency_id !== this.currencies[key].id) {
@@ -160,6 +161,7 @@ export default {
                         }
                     }
                 }
+                this.checkSelection();
                 return;
             }
 
@@ -172,12 +174,30 @@ export default {
                         }
                     }
                 }
+                this.checkSelection();
                 return;
             }
             for (const key in this.currencies) {
                 if (this.currencies.hasOwnProperty(key) && /^0$|^[1-9]\d*$/.test(key) && key <= 4294967294) {
                     this.enabledCurrencies.push(this.currencies[key]);
                 }
+            }
+        },
+        checkSelection: function () {
+            let selectedCurrency = this.$refs.currency_select.value;
+            let hasSelected = false;
+            for(const key in this.enabledCurrencies) {
+                if(parseInt(this.enabledCurrencies[key].id) === parseInt(selectedCurrency)) {
+                    hasSelected = true;
+                }
+            }
+            if(false === hasSelected) {
+                let obj = {
+                    amount: '',
+                    currency_id: null,
+                };
+                this.$emit('input', obj);
+                console.warn('Reset foreign amount.');
             }
         },
         loadCurrencies: function () {

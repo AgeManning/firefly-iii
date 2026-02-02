@@ -31,6 +31,7 @@ use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 /**
  * Class ShowController
@@ -61,9 +62,9 @@ class ShowController extends Controller
      *
      * @return Application|Factory|View
      */
-    public function index(Webhook $webhook)
+    public function index(Webhook $webhook): Factory|View
     {
-        if (false === config('firefly.allow_webhooks')) {
+        if (false === FireflyConfig::get('allow_webhooks', config('firefly.allow_webhooks'))->data) {
             Log::channel('audit')->warning(sprintf('User visits webhook #%d page, but webhooks are DISABLED.', $webhook->id));
 
             throw new NotFoundHttpException('Webhooks are not enabled.');
@@ -71,6 +72,6 @@ class ShowController extends Controller
         Log::channel('audit')->info(sprintf('User visits webhook #%d page.', $webhook->id));
         $subTitle = (string) trans('firefly.show_webhook', ['title' => $webhook->title]);
 
-        return view('webhooks.show', compact('webhook', 'subTitle'));
+        return view('webhooks.show', ['webhook' => $webhook, 'subTitle' => $subTitle]);
     }
 }

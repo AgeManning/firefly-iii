@@ -26,10 +26,11 @@ namespace FireflyIII\Api\V1\Controllers;
 
 use Carbon\Carbon;
 use Carbon\Exceptions\InvalidFormatException;
+use Deprecated;
 use FireflyIII\Exceptions\BadHttpHeaderException;
-use FireflyIII\Models\Preference;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Support\Facades\Amount;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Api\ValidatesUserGroupTrait;
 use FireflyIII\Transformers\AbstractTransformer;
@@ -62,15 +63,16 @@ abstract class Controller extends BaseController
     use ValidatesRequests;
     use ValidatesUserGroupTrait;
 
-    protected const string CONTENT_TYPE            = 'application/vnd.api+json';
-    protected const string JSON_CONTENT_TYPE       = 'application/json';
-    protected array               $accepts         = ['application/json', 'application/vnd.api+json'];
+    protected const string CONTENT_TYPE      = 'application/vnd.api+json';
+    protected const string JSON_CONTENT_TYPE = 'application/json';
 
-    /** @var array<int, string> */
-    protected array               $allowedSort;
-    protected bool                $convertToNative = false;
-    protected TransactionCurrency $nativeCurrency;
-    protected ParameterBag        $parameters;
+    protected array $accepts                 = ['application/json', 'application/vnd.api+json'];
+
+    protected bool $convertToPrimary         = false;
+    protected TransactionCurrency $primaryCurrency;
+
+    /** @deprecated use Request classes */
+    protected ParameterBag $parameters;
 
     /**
      * Controller constructor.
@@ -78,42 +80,33 @@ abstract class Controller extends BaseController
     public function __construct()
     {
         // get global parameters
-        $this->allowedSort = config('firefly.allowed_sort_parameters');
-        $this->middleware(
-            function ($request, $next) {
-                $this->parameters = $this->getParameters();
-                if (auth()->check()) {
-                    $language              = Steam::getLanguage();
-                    $this->convertToNative = Amount::convertToNative();
-                    $this->nativeCurrency  = Amount::getNativeCurrency();
-                    app()->setLocale($language);
-                }
-
-
-                // filter down what this endpoint accepts.
-                if (!$request->accepts($this->accepts)) {
-                    throw new BadHttpHeaderException(sprintf('Sorry, Accept header "%s" is not something this endpoint can provide.', $request->header('Accept')));
-                }
-
-
-                return $next($request);
+        $this->middleware(function ($request, $next) {
+            $this->parameters = $this->getParameters();
+            if (auth()->check()) {
+                $language               = Steam::getLanguage();
+                $this->convertToPrimary = Amount::convertToPrimary();
+                $this->primaryCurrency  = Amount::getPrimaryCurrency();
+                app()->setLocale($language);
             }
-        );
+
+            // filter down what this endpoint accepts.
+            if (!$request->accepts($this->accepts)) {
+                throw new BadHttpHeaderException(sprintf('Sorry, Accept header "%s" is not something this endpoint can provide.', $request->header('Accept')));
+            }
+
+            return $next($request);
+        });
     }
 
-    /**
-     * Method to grab all parameters from the URL.
-     */
+    #[Deprecated(message: <<<'TXT'
+        use Request classes
+         Method to grab all parameters from the URL
+        TXT)]
     private function getParameters(): ParameterBag
     {
         $bag      = new ParameterBag();
         $page     = (int) request()->get('page');
-        if ($page < 1) {
-            $page = 1;
-        }
-        if ($page > 2 ** 16) {
-            $page = 2 ** 16;
-        }
+        $page     = min(max(1, $page), 2 ** 16);
         $bag->set('page', $page);
 
         // some date fields:
@@ -131,19 +124,15 @@ abstract class Controller extends BaseController
             $obj  = null;
             if (null !== $date) {
                 try {
-                    $obj = Carbon::parse((string) $date);
+                    $obj = Carbon::parse((string) $date, config('app.timezone'));
                 } catch (InvalidFormatException $e) {
                     // don't care
-                    Log::warning(
-                        sprintf(
-                            'Ignored invalid date "%s" in API controller parameter check: %s',
-                            substr((string) $date, 0, 20),
-                            $e->getMessage()
-                        )
-                    );
+                    Log::warning(sprintf('Ignored invalid date "%s" in API controller parameter check: %s', substr((string) $date, 0, 20), $e->getMessage()));
                 }
             }
-            $bag->set($field, $obj);
+            if ($obj instanceof Carbon) {
+                $bag->set($field, $obj);
+            }
         }
 
         // integer fields:
@@ -159,62 +148,27 @@ abstract class Controller extends BaseController
             }
             if (null !== $value) {
                 $value = (int) $value;
-                if ($value < 1) {
-                    $value = 1;
-                }
-                if ($value > 2 ** 16) {
-                    $value = 2 ** 16;
-                }
-
+                $value = min(max(1, $value), 2 ** 16);
                 $bag->set($integer, $value);
             }
-            if (null === $value
+            if (
+                null === $value
                 && 'limit' === $integer // @phpstan-ignore-line
-                && auth()->check()) {
+                && auth()->check()
+            ) {
                 // set default for user:
                 /** @var User $user */
                 $user     = auth()->user();
 
-                /** @var Preference $pageSize */
-                $pageSize = (int) app('preferences')->getForUser($user, 'listPageSize', 50)->data;
+                $pageSize = (int) Preferences::getForUser($user, 'listPageSize', 50)->data;
                 $bag->set($integer, $pageSize);
             }
         }
 
         // sort fields:
-        return $this->getSortParameters($bag);
-    }
-
-    private function getSortParameters(ParameterBag $bag): ParameterBag
-    {
-        $sortParameters = [];
-
-        try {
-            $param = (string) request()->query->get('sort');
-        } catch (BadRequestException $e) {
-            Log::error('Request field "sort" contains a non-scalar value. Value set to NULL.');
-            Log::error($e->getMessage());
-            Log::error($e->getTraceAsString());
-            $param = '';
-        }
-        if ('' === $param) {
-            return $bag;
-        }
-        $parts          = explode(',', $param);
-        foreach ($parts as $part) {
-            $part      = trim($part);
-            $direction = 'asc';
-            if ('-' === $part[0]) {
-                $part      = substr($part, 1);
-                $direction = 'desc';
-            }
-            if (in_array($part, $this->allowedSort, true)) {
-                $sortParameters[] = [$part, $direction];
-            }
-        }
-        $bag->set('sort', $sortParameters);
-
         return $bag;
+
+        // return $this->getSortParameters($bag);
     }
 
     /**
@@ -282,8 +236,6 @@ abstract class Controller extends BaseController
         $manager  = new Manager();
         $baseUrl  = sprintf('%s/api/v1', request()->getSchemeAndHttpHost());
         $manager->setSerializer(new JsonApiSerializer($baseUrl));
-
-        // $transformer->collectMetaData(new Collection([$object]));
 
         $resource = new Item($object, $transformer, $key);
 

@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Repositories\Budget;
 
+use FireflyIII\Support\Facades\Navigation;
 use Carbon\Carbon;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
@@ -32,6 +33,8 @@ use FireflyIII\Support\Report\Summarizer\TransactionSummarizer;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupInterface;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupTrait;
 use Illuminate\Support\Collection;
+use Override;
+use Deprecated;
 
 /**
  * Class NoBudgetRepository
@@ -40,9 +43,10 @@ class NoBudgetRepository implements NoBudgetRepositoryInterface, UserGroupInterf
 {
     use UserGroupTrait;
 
+    #[Deprecated]
     public function getNoBudgetPeriodReport(Collection $accounts, Carbon $start, Carbon $end): array
     {
-        $carbonFormat = app('navigation')->preferredCarbonFormat($start, $end);
+        $carbonFormat = Navigation::preferredCarbonFormat($start, $end);
 
         /** @var GroupCollectorInterface $collector */
         $collector    = app(GroupCollectorInterface::class);
@@ -97,5 +101,24 @@ class NoBudgetRepository implements NoBudgetRepositoryInterface, UserGroupInterf
         $summarizer = new TransactionSummarizer($this->user);
 
         return $summarizer->groupByCurrencyId($journals);
+    }
+
+    #[Override]
+    public function collectExpenses(Carbon $start, Carbon $end, ?Collection $accounts = null, ?TransactionCurrency $currency = null): array
+    {
+        /** @var GroupCollectorInterface $collector */
+        $collector = app(GroupCollectorInterface::class);
+        $collector->setUser($this->user)->setRange($start, $end)->setTypes([TransactionTypeEnum::WITHDRAWAL->value]);
+
+        if ($accounts instanceof Collection && $accounts->count() > 0) {
+            $collector->setAccounts($accounts);
+        }
+        if ($currency instanceof TransactionCurrency) {
+            $collector->setCurrency($currency);
+        }
+        $collector->withoutBudget();
+        $collector->withBudgetInformation();
+
+        return $collector->getExtractedJournals();
     }
 }

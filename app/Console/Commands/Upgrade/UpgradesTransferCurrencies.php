@@ -33,6 +33,8 @@ use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\Journal\JournalCLIRepositoryInterface;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 class UpgradesTransferCurrencies extends Command
 {
@@ -104,12 +106,10 @@ class UpgradesTransferCurrencies extends Command
 
     private function isExecuted(): bool
     {
-        $configVar = app('fireflyconfig')->get(self::CONFIG_NAME, false);
-        if (null !== $configVar) {
-            return (bool) $configVar->data;
-        }
+        $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
 
-        return false;
+        return (bool)$configVar?->data;
+
     }
 
     /**
@@ -262,7 +262,7 @@ class UpgradesTransferCurrencies extends Command
         // source account must have a currency preference.
         if (!$this->sourceCurrency instanceof TransactionCurrency) {
             $message = sprintf('Account #%d ("%s") must have currency preference but has none.', $this->sourceAccount->id, $this->sourceAccount->name);
-            app('log')->error($message);
+            Log::error($message);
             $this->friendlyError($message);
 
             return true;
@@ -275,7 +275,7 @@ class UpgradesTransferCurrencies extends Command
                 $this->destinationAccount->id,
                 $this->destinationAccount->name
             );
-            app('log')->error($message);
+            Log::error($message);
             $this->friendlyError($message);
 
             return true;
@@ -481,6 +481,6 @@ class UpgradesTransferCurrencies extends Command
 
     private function markAsExecuted(): void
     {
-        app('fireflyconfig')->set(self::CONFIG_NAME, true);
+        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 }

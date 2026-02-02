@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\TransactionCurrency;
 
+use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Repositories\Currency\CurrencyRepositoryInterface;
@@ -67,8 +68,10 @@ class DeleteController extends Controller
      * Deletes a currency.
      *
      * @return Factory|Redirector|RedirectResponse|View
+     *
+     * @throws FireflyException
      */
-    public function delete(Request $request, TransactionCurrency $currency)
+    public function delete(Request $request, TransactionCurrency $currency): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
         /** @var User $user */
         $user     = auth()->user();
@@ -93,15 +96,15 @@ class DeleteController extends Controller
         $subTitle = (string) trans('form.delete_currency', ['name' => $currency->name]);
         Log::channel('audit')->info(sprintf('Visit page to delete currency %s.', $currency->code));
 
-        return view('currencies.delete', compact('currency', 'subTitle'));
+        return view('currencies.delete', ['currency' => $currency, 'subTitle' => $subTitle]);
     }
 
     /**
      * Destroys a currency.
      *
-     * @return Redirector|RedirectResponse
+     * @throws FireflyException
      */
-    public function destroy(Request $request, TransactionCurrency $currency)
+    public function destroy(Request $request, TransactionCurrency $currency): Redirector|RedirectResponse
     {
         /** @var User $user */
         $user = auth()->user();

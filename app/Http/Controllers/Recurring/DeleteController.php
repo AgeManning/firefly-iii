@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Recurring;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Recurrence;
 use FireflyIII\Repositories\Recurring\RecurringRepositoryInterface;
@@ -38,8 +39,7 @@ use Illuminate\View\View;
  */
 class DeleteController extends Controller
 {
-    /** @var RecurringRepositoryInterface Recurring repository */
-    private $recurring;
+    private RecurringRepositoryInterface $repository;
 
     /**
      * DeleteController constructor.
@@ -54,7 +54,7 @@ class DeleteController extends Controller
                 app('view')->share('mainTitleIcon', 'fa-paint-brush');
                 app('view')->share('title', (string) trans('firefly.recurrences'));
 
-                $this->recurring = app(RecurringRepositoryInterface::class);
+                $this->repository = app(RecurringRepositoryInterface::class);
 
                 return $next($request);
             }
@@ -66,27 +66,25 @@ class DeleteController extends Controller
      *
      * @return Factory|View
      */
-    public function delete(Recurrence $recurrence)
+    public function delete(Recurrence $recurrence): Factory|\Illuminate\Contracts\View\View
     {
         $subTitle        = (string) trans('firefly.delete_recurring', ['title' => $recurrence->title]);
         // put previous url in session
         $this->rememberPreviousUrl('recurrences.delete.url');
 
-        $journalsCreated = $this->recurring->getTransactions($recurrence)->count();
+        $journalsCreated = $this->repository->getTransactions($recurrence)->count();
 
-        return view('recurring.delete', compact('recurrence', 'subTitle', 'journalsCreated'));
+        return view('recurring.delete', ['recurrence' => $recurrence, 'subTitle' => $subTitle, 'journalsCreated' => $journalsCreated]);
     }
 
     /**
      * Destroy the recurring transaction.
-     *
-     * @return Redirector|RedirectResponse
      */
-    public function destroy(RecurringRepositoryInterface $repository, Request $request, Recurrence $recurrence)
+    public function destroy(RecurringRepositoryInterface $repository, Request $request, Recurrence $recurrence): Redirector|RedirectResponse
     {
         $repository->destroy($recurrence);
         $request->session()->flash('success', (string) trans('firefly.recurrence_deleted', ['title' => $recurrence->title]));
-        app('preferences')->mark();
+        Preferences::mark();
 
         return redirect($this->getPreviousUrl('recurrences.delete.url'));
     }

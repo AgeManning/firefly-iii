@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Support\Http\Controllers;
 
+use FireflyIII\Support\Facades\Navigation;
 use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Support\Facades\FireflyConfig;
@@ -48,7 +49,7 @@ trait GetConfigurationData
             E_COMPILE_ERROR | E_RECOVERABLE_ERROR | E_ERROR | E_CORE_ERROR => 'E_COMPILE_ERROR|E_RECOVERABLE_ERROR|E_ERROR|E_CORE_ERROR',
         ];
 
-        return $array[$value] ?? (string) $value;
+        return $array[$value] ?? (string)$value;
     }
 
     /**
@@ -64,13 +65,13 @@ trait GetConfigurationData
                 $currentStep          = $options;
 
                 // get the text:
-                $currentStep['intro'] = (string) trans('intro.'.$route.'_'.$key);
+                $currentStep['intro'] = (string)trans('intro.'.$route.'_'.$key);
 
                 // save in array:
                 $steps[]              = $currentStep;
             }
         }
-        app('log')->debug(sprintf('Total basic steps for %s is %d', $routeKey, count($steps)));
+        Log::debug(sprintf('Total basic steps for %s is %d', $routeKey, count($steps)));
 
         return $steps;
     }
@@ -82,7 +83,7 @@ trait GetConfigurationData
      */
     protected function getDateRangeConfig(): array // get configuration + get preferences.
     {
-        $viewRange      = app('navigation')->getViewRange(false);
+        $viewRange      = Navigation::getViewRange(false);
 
         Log::debug(sprintf('dateRange: the view range is "%s"', $viewRange));
 
@@ -105,55 +106,55 @@ trait GetConfigurationData
 
         // when current range is a custom range, add the current period as the next range.
         if ($isCustom) {
-            $index             = app('navigation')->periodShow($start, $viewRange);
-            $customPeriodStart = app('navigation')->startOfPeriod($start, $viewRange);
-            $customPeriodEnd   = app('navigation')->endOfPeriod($customPeriodStart, $viewRange);
+            $index             = Navigation::periodShow($start, $viewRange);
+            $customPeriodStart = Navigation::startOfPeriod($start, $viewRange);
+            $customPeriodEnd   = Navigation::endOfPeriod($customPeriodStart, $viewRange);
             $ranges[$index]    = [$customPeriodStart, $customPeriodEnd];
         }
         // then add previous range and next range, but skip this for the lastX and YTD stuff.
         if (!in_array($viewRange, config('firefly.dynamic_date_ranges', []), true)) {
-            $previousDate   = app('navigation')->subtractPeriod($start, $viewRange);
-            $index          = app('navigation')->periodShow($previousDate, $viewRange);
-            $previousStart  = app('navigation')->startOfPeriod($previousDate, $viewRange);
-            $previousEnd    = app('navigation')->endOfPeriod($previousStart, $viewRange);
+            $previousDate   = Navigation::subtractPeriod($start, $viewRange);
+            $index          = Navigation::periodShow($previousDate, $viewRange);
+            $previousStart  = Navigation::startOfPeriod($previousDate, $viewRange);
+            $previousEnd    = Navigation::endOfPeriod($previousStart, $viewRange);
             $ranges[$index] = [$previousStart, $previousEnd];
 
-            $nextDate       = app('navigation')->addPeriod($start, $viewRange, 0);
-            $index          = app('navigation')->periodShow($nextDate, $viewRange);
-            $nextStart      = app('navigation')->startOfPeriod($nextDate, $viewRange);
-            $nextEnd        = app('navigation')->endOfPeriod($nextStart, $viewRange);
+            $nextDate       = Navigation::addPeriod($start, $viewRange);
+            $index          = Navigation::periodShow($nextDate, $viewRange);
+            $nextStart      = Navigation::startOfPeriod($nextDate, $viewRange);
+            $nextEnd        = Navigation::endOfPeriod($nextStart, $viewRange);
             $ranges[$index] = [$nextStart, $nextEnd];
         }
 
         // today:
         /** @var Carbon $todayStart */
-        $todayStart     = app('navigation')->startOfPeriod($today, $viewRange);
+        $todayStart     = Navigation::startOfPeriod($today, $viewRange);
 
         /** @var Carbon $todayEnd */
-        $todayEnd       = app('navigation')->endOfPeriod($todayStart, $viewRange);
+        $todayEnd       = Navigation::endOfPeriod($todayStart, $viewRange);
 
         if ($todayStart->ne($start) || $todayEnd->ne($end)) {
-            $ranges[ucfirst((string) trans('firefly.today'))] = [$todayStart, $todayEnd];
+            $ranges[ucfirst((string)trans('firefly.today'))] = [$todayStart, $todayEnd];
         }
 
         // last seven days:
         $seven          = today(config('app.timezone'))->subDays(7);
-        $index          = (string) trans('firefly.last_seven_days');
+        $index          = (string)trans('firefly.last_seven_days');
         $ranges[$index] = [$seven, new Carbon()];
 
         // last 30 days:
         $thirty         = today(config('app.timezone'))->subDays(30);
-        $index          = (string) trans('firefly.last_thirty_days');
+        $index          = (string)trans('firefly.last_thirty_days');
         $ranges[$index] = [$thirty, new Carbon()];
 
         // month to date:
         $monthBegin     = today(config('app.timezone'))->startOfMonth();
-        $index          = (string) trans('firefly.month_to_date');
+        $index          = (string)trans('firefly.month_to_date');
         $ranges[$index] = [$monthBegin, new Carbon()];
 
         // year to date:
         $yearBegin      = today(config('app.timezone'))->startOfYear();
-        $index          = (string) trans('firefly.year_to_date');
+        $index          = (string)trans('firefly.year_to_date');
         $ranges[$index] = [$yearBegin, new Carbon()];
 
         // current financial year:
@@ -175,19 +176,23 @@ trait GetConfigurationData
         $thirdLastFYYear  = $thirdLastFYEnd->year;
         $index            = (string) trans('firefly.financial_year_x', ['year' => $thirdLastFYYear]);
         $ranges[$index]   = [$thirdLastFYStart, $thirdLastFYEnd];
+        // previous year:
+        $yearBegin      = today(config('app.timezone'))->subYear()->startOfYear();
+        $index          = (string)trans('firefly.previous_year', ['year' => $yearBegin->year]);
+        $ranges[$index] = [$yearBegin, $yearBegin->clone()->endOfYear()];
 
         // everything
-        $index          = (string) trans('firefly.everything');
+        $index          = (string)trans('firefly.everything');
         $ranges[$index] = [$first, new Carbon()];
 
         return [
             'title'         => $title,
             'configuration' => [
-                'apply'       => (string) trans('firefly.apply'),
-                'cancel'      => (string) trans('firefly.cancel'),
-                'from'        => (string) trans('firefly.from'),
-                'to'          => (string) trans('firefly.to'),
-                'customRange' => (string) trans('firefly.customRange'),
+                'apply'       => (string)trans('firefly.apply'),
+                'cancel'      => (string)trans('firefly.cancel'),
+                'from'        => (string)trans('firefly.from'),
+                'to'          => (string)trans('firefly.to'),
+                'customRange' => (string)trans('firefly.customRange'),
                 'start'       => $start->format('Y-m-d'),
                 'end'         => $end->format('Y-m-d'),
                 'ranges'      => $ranges,
@@ -212,14 +217,14 @@ trait GetConfigurationData
                     $currentStep          = $options;
 
                     // get the text:
-                    $currentStep['intro'] = (string) trans('intro.'.$route.'_'.$specificPage.'_'.$key);
+                    $currentStep['intro'] = (string)trans('intro.'.$route.'_'.$specificPage.'_'.$key);
 
                     // save in array:
                     $steps[]              = $currentStep;
                 }
             }
         }
-        app('log')->debug(sprintf('Total specific steps for route "%s" and page "%s" (routeKey is "%s") is %d', $route, $specificPage, $routeKey, count($steps)));
+        Log::debug(sprintf('Total specific steps for route "%s" and page "%s" (routeKey is "%s") is %d', $route, $specificPage, $routeKey, count($steps)));
 
         return $steps;
     }
@@ -227,9 +232,9 @@ trait GetConfigurationData
     protected function verifyRecurringCronJob(): void
     {
         $config   = FireflyConfig::get('last_rt_job', 0);
-        $lastTime = (int) $config?->data;
+        $lastTime = (int)$config?->data;
         $now      = Carbon::now()->getTimestamp();
-        app('log')->debug(sprintf('verifyRecurringCronJob: last time is %d ("%s"), now is %d', $lastTime, $config?->data, $now));
+        Log::debug(sprintf('verifyRecurringCronJob: last time is %d ("%s"), now is %d', $lastTime, $config?->data, $now));
         if (0 === $lastTime) {
             request()->session()->flash('info', trans('firefly.recurring_never_cron'));
 

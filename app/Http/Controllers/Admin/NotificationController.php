@@ -70,26 +70,11 @@ class NotificationController extends Controller
         }
         $forcedAvailability['ntfy']     = '' !== $ntfyTopic;
         $forcedAvailability['pushover'] = '' !== $pushoverAppToken && '' !== $pushoverUserToken;
+        $forcedAvailability['slack']    = '' !== $slackUrl;
 
         return view(
             'settings.notifications.index',
-            compact(
-                'title',
-                'subTitle',
-                'forcedAvailability',
-                'mainTitleIcon',
-                'subTitleIcon',
-                'channels',
-                'slackUrl',
-                'notifications',
-                'pushoverAppToken',
-                'pushoverUserToken',
-                'ntfyServer',
-                'ntfyTopic',
-                'ntfyAuth',
-                'ntfyUser',
-                'ntfyPass'
-            )
+            ['title' => $title, 'subTitle' => $subTitle, 'forcedAvailability' => $forcedAvailability, 'mainTitleIcon' => $mainTitleIcon, 'subTitleIcon' => $subTitleIcon, 'channels' => $channels, 'slackUrl' => $slackUrl, 'notifications' => $notifications, 'pushoverAppToken' => $pushoverAppToken, 'pushoverUserToken' => $pushoverUserToken, 'ntfyServer' => $ntfyServer, 'ntfyTopic' => $ntfyTopic, 'ntfyAuth' => $ntfyAuth, 'ntfyUser' => $ntfyUser, 'ntfyPass' => $ntfyPass]
         );
     }
 
@@ -121,6 +106,11 @@ class NotificationController extends Controller
 
     public function testNotification(Request $request): RedirectResponse
     {
+        if (true === auth()->user()->hasRole('demo')) {
+            session()->flash('error', (string) trans('firefly.not_available_demo_user'));
+
+            return redirect(route('settings.notification.index'));
+        }
 
         $all     = $request->all();
         $channel = $all['test_submit'] ?? '';
@@ -136,7 +126,7 @@ class NotificationController extends Controller
             case 'pushover':
             case 'ntfy':
                 $owner = new OwnerNotifiable();
-                app('log')->debug(sprintf('Now in testNotification("%s") controller.', $channel));
+                Log::debug(sprintf('Now in testNotification("%s") controller.', $channel));
                 event(new OwnerTestNotificationChannel($channel, $owner));
                 session()->flash('success', (string) trans('firefly.notification_test_executed', ['channel' => $channel]));
         }

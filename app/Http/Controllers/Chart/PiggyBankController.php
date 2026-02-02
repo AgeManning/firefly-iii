@@ -23,8 +23,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Chart;
 
+use FireflyIII\Support\Facades\Navigation;
 use Carbon\Carbon;
-use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Generator\Chart\Basic\GeneratorInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\PiggyBank;
@@ -33,6 +33,7 @@ use FireflyIII\Repositories\PiggyBank\PiggyBankRepositoryInterface;
 use FireflyIII\Support\CacheProperties;
 use FireflyIII\Support\Http\Controllers\DateCalculation;
 use Illuminate\Http\JsonResponse;
+use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class PiggyBankController.
@@ -58,8 +59,6 @@ class PiggyBankController extends Controller
      * Shows the piggy bank history.
      *
      * TODO this chart is not multi currency aware.
-     *
-     * @throws FireflyException
      */
     public function history(PiggyBankRepositoryInterface $repository, PiggyBank $piggyBank): JsonResponse
     {
@@ -72,7 +71,7 @@ class PiggyBankController extends Controller
         }
         $set                    = $repository->getEvents($piggyBank);
         $set                    = $set->reverse();
-        $locale                 = app('steam')->getLocale();
+        $locale                 = Steam::getLocale();
 
         // get first event or start date of piggy bank or today
         $startDate              = $piggyBank->start_date ?? today(config('app.timezone'));
@@ -95,7 +94,7 @@ class PiggyBankController extends Controller
             $currentSum        = $filtered->sum('amount');
             $label             = $oldest->isoFormat((string) trans('config.month_and_day_js', [], $locale));
             $chartData[$label] = $currentSum;
-            $oldest            = app('navigation')->addPeriod($oldest, $step, 0);
+            $oldest            = Navigation::addPeriod($oldest, $step);
         }
         $finalFiltered          = $set->filter(
             static fn (PiggyBankEvent $event) => $event->date->lte($today)

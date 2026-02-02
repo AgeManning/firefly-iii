@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\PiggyBank;
 
+use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Account;
@@ -34,6 +35,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use FireflyIII\Support\Facades\Amount;
 
 /**
  * Class AmountController
@@ -66,7 +68,7 @@ class AmountController extends Controller
      *
      * @return Factory|View
      */
-    public function add(PiggyBank $piggyBank)
+    public function add(PiggyBank $piggyBank): Factory|\Illuminate\Contracts\View\View
     {
         /** @var Carbon $date */
         $date       = session('end', today(config('app.timezone')));
@@ -98,7 +100,7 @@ class AmountController extends Controller
         }
         $total      = (float) $total; // intentional float.
 
-        return view('piggy-banks.add', compact('piggyBank', 'accounts', 'total'));
+        return view('piggy-banks.add', ['piggyBank' => $piggyBank, 'accounts' => $accounts, 'total' => $total]);
     }
 
     /**
@@ -106,7 +108,7 @@ class AmountController extends Controller
      *
      * @return Factory|View
      */
-    public function addMobile(PiggyBank $piggyBank)
+    public function addMobile(PiggyBank $piggyBank): Factory|\Illuminate\Contracts\View\View
     {
         /** @var Carbon $date */
         $date       = session('end', today(config('app.timezone')));
@@ -127,7 +129,7 @@ class AmountController extends Controller
             $total         = bcadd($total, $leftOnAccount);
         }
 
-        return view('piggy-banks.add-mobile', compact('piggyBank', 'total', 'accounts'));
+        return view('piggy-banks.add-mobile', ['piggyBank' => $piggyBank, 'total' => $total, 'accounts' => $accounts]);
     }
 
     /**
@@ -166,17 +168,17 @@ class AmountController extends Controller
             $piggyBank->refresh();
         }
         if (0 !== bccomp($total, '0')) {
-            session()->flash('success', (string) trans('firefly.added_amount_to_piggy', ['amount' => app('amount')->formatAnything($piggyBank->transactionCurrency, $total, false), 'name' => $piggyBank->name]));
-            app('preferences')->mark();
+            session()->flash('success', (string) trans('firefly.added_amount_to_piggy', ['amount' => Amount::formatAnything($piggyBank->transactionCurrency, $total, false), 'name' => $piggyBank->name]));
+            Preferences::mark();
 
             return redirect(route('piggy-banks.index'));
         }
-        app('log')->error(sprintf('Cannot add %s because canAddAmount returned false.', $total));
+        Log::error(sprintf('Cannot add %s because canAddAmount returned false.', $total));
         session()->flash(
             'error',
             (string) trans(
                 'firefly.cannot_add_amount_piggy',
-                ['amount' => app('amount')->formatAnything($piggyBank->transactionCurrency, $total, false), 'name' => e($piggyBank->name)]
+                ['amount' => Amount::formatAnything($piggyBank->transactionCurrency, $total, false), 'name' => e($piggyBank->name)]
             )
         );
 
@@ -213,10 +215,10 @@ class AmountController extends Controller
                 'success',
                 (string) trans(
                     'firefly.removed_amount_from_piggy',
-                    ['amount' => app('amount')->formatAnything($piggyBank->transactionCurrency, $total, false), 'name' => $piggyBank->name]
+                    ['amount' => Amount::formatAnything($piggyBank->transactionCurrency, $total, false), 'name' => $piggyBank->name]
                 )
             );
-            app('preferences')->mark();
+            Preferences::mark();
 
             return redirect(route('piggy-banks.index'));
         }
@@ -225,7 +227,7 @@ class AmountController extends Controller
             'error',
             (string) trans(
                 'firefly.cannot_remove_from_piggy',
-                ['amount' => app('amount')->formatAnything($piggyBank->transactionCurrency, $total, false), 'name' => e($piggyBank->name)]
+                ['amount' => Amount::formatAnything($piggyBank->transactionCurrency, $total, false), 'name' => e($piggyBank->name)]
             )
         );
 
@@ -237,7 +239,7 @@ class AmountController extends Controller
      *
      * @return Factory|View
      */
-    public function remove(PiggyBank $piggyBank)
+    public function remove(PiggyBank $piggyBank): Factory|\Illuminate\Contracts\View\View
     {
         $accounts = [];
         foreach ($piggyBank->accounts as $account) {
@@ -247,7 +249,7 @@ class AmountController extends Controller
             ];
         }
 
-        return view('piggy-banks.remove', compact('piggyBank', 'accounts'));
+        return view('piggy-banks.remove', ['piggyBank' => $piggyBank, 'accounts' => $accounts]);
     }
 
     /**
@@ -255,7 +257,7 @@ class AmountController extends Controller
      *
      * @return Factory|View
      */
-    public function removeMobile(PiggyBank $piggyBank)
+    public function removeMobile(PiggyBank $piggyBank): Factory|\Illuminate\Contracts\View\View
     {
         $accounts = [];
         foreach ($piggyBank->accounts as $account) {
@@ -265,6 +267,6 @@ class AmountController extends Controller
             ];
         }
 
-        return view('piggy-banks.remove-mobile', compact('piggyBank', 'accounts'));
+        return view('piggy-banks.remove-mobile', ['piggyBank' => $piggyBank, 'accounts' => $accounts]);
     }
 }

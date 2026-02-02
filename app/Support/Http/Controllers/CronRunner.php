@@ -30,6 +30,7 @@ use FireflyIII\Support\Cronjobs\AutoBudgetCronjob;
 use FireflyIII\Support\Cronjobs\BillWarningCronjob;
 use FireflyIII\Support\Cronjobs\ExchangeRatesCronjob;
 use FireflyIII\Support\Cronjobs\RecurringCronjob;
+use FireflyIII\Support\Cronjobs\WebhookCronjob;
 
 /**
  * Trait CronRunner
@@ -137,6 +138,32 @@ trait CronRunner
             'job_succeeded' => $recurring->jobSucceeded,
             'job_errored'   => $recurring->jobErrored,
             'message'       => $recurring->message,
+        ];
+    }
+
+    protected function webhookCronJob(bool $force, Carbon $date): array
+    {
+        /** @var WebhookCronjob $webhook */
+        $webhook = app(WebhookCronjob::class);
+        $webhook->setForce($force);
+        $webhook->setDate($date);
+
+        try {
+            $webhook->fire();
+        } catch (FireflyException $e) {
+            return [
+                'job_fired'     => false,
+                'job_succeeded' => false,
+                'job_errored'   => true,
+                'message'       => $e->getMessage(),
+            ];
+        }
+
+        return [
+            'job_fired'     => $webhook->jobFired,
+            'job_succeeded' => $webhook->jobSucceeded,
+            'job_errored'   => $webhook->jobErrored,
+            'message'       => $webhook->message,
         ];
     }
 }

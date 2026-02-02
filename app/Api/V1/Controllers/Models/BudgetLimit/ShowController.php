@@ -31,6 +31,8 @@ use FireflyIII\Models\Budget;
 use FireflyIII\Models\BudgetLimit;
 use FireflyIII\Repositories\Budget\BudgetLimitRepositoryInterface;
 use FireflyIII\Repositories\Budget\BudgetRepositoryInterface;
+use FireflyIII\Support\JsonApi\Enrichments\BudgetEnrichment;
+use FireflyIII\Support\JsonApi\Enrichments\BudgetLimitEnrichment;
 use FireflyIII\Transformers\BudgetLimitTransformer;
 use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
@@ -75,6 +77,18 @@ class ShowController extends Controller
      */
     public function index(Budget $budget): JsonResponse
     {
+        /** @var User $admin */
+        $admin        = auth()->user();
+        // enrich budget:
+        $enrichment   = new BudgetEnrichment();
+        $enrichment->setUser($admin);
+        $enrichment->setStart($this->parameters->get('start'));
+        $enrichment->setEnd($this->parameters->get('end'));
+
+        /** @var Budget $budget */
+        $budget       = $enrichment->enrichSingle($budget);
+
+
         $manager      = $this->getManager();
         $manager->parseIncludes('budget');
         $pageSize     = $this->parameters->get('limit');
@@ -83,6 +97,11 @@ class ShowController extends Controller
         $budgetLimits = $collection->slice(($this->parameters->get('page') - 1) * $pageSize, $pageSize);
         $paginator    = new LengthAwarePaginator($budgetLimits, $count, $pageSize, $this->parameters->get('page'));
         $paginator->setPath(route('api.v1.budgets.limits.index', [$budget->id]).$this->buildParams());
+
+        // enrich
+        $enrichment   = new BudgetLimitEnrichment();
+        $enrichment->setUser($admin);
+        $budgetLimits = $enrichment->enrich($budgetLimits);
 
         /** @var BudgetLimitTransformer $transformer */
         $transformer  = app(BudgetLimitTransformer::class);
@@ -113,6 +132,13 @@ class ShowController extends Controller
         $paginator    = new LengthAwarePaginator($budgetLimits, $count, $pageSize, $this->parameters->get('page'));
         $paginator->setPath(route('api.v1.budget-limits.index').$this->buildParams());
 
+        // enrich
+        /** @var User $admin */
+        $admin        = auth()->user();
+        $enrichment   = new BudgetLimitEnrichment();
+        $enrichment->setUser($admin);
+        $budgetLimits = $enrichment->enrich($budgetLimits);
+
         /** @var BudgetLimitTransformer $transformer */
         $transformer  = app(BudgetLimitTransformer::class);
         $transformer->setParameters($this->parameters);
@@ -137,9 +163,15 @@ class ShowController extends Controller
         // continue!
         $manager     = $this->getManager();
 
+        // enrich
+        /** @var User $admin */
+        $admin       = auth()->user();
+        $enrichment  = new BudgetLimitEnrichment();
+        $enrichment->setUser($admin);
+        $budgetLimit = $enrichment->enrichSingle($budgetLimit);
+
         /** @var BudgetLimitTransformer $transformer */
         $transformer = app(BudgetLimitTransformer::class);
-        $transformer->setParameters($this->parameters);
 
         $resource    = new Item($budgetLimit, $transformer, 'budget_limits');
 

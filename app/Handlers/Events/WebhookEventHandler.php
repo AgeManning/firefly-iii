@@ -26,6 +26,8 @@ namespace FireflyIII\Handlers\Events;
 
 use FireflyIII\Jobs\SendWebhookMessage;
 use FireflyIII\Models\WebhookMessage;
+use Illuminate\Support\Facades\Log;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 /**
  * Class WebhookEventHandler
@@ -37,23 +39,37 @@ class WebhookEventHandler
      */
     public function sendWebhookMessages(): void
     {
-        app('log')->debug(sprintf('Now in %s', __METHOD__));
+        Log::debug(sprintf('Now in %s', __METHOD__));
+        if (false === config('firefly.feature_flags.webhooks') || false === FireflyConfig::get('allow_webhooks', config('firefly.allow_webhooks'))->data) {
+            Log::debug('Webhook event handler is disabled, do not run sendWebhookMessages().');
+
+            return;
+        }
+
         // kick off the job!
         $messages = WebhookMessage::where('webhook_messages.sent', false)
             ->get(['webhook_messages.*'])
             ->filter(
-                static fn (WebhookMessage $message) => $message->webhookAttempts()->count() <= 2
+                static fn (WebhookMessage $message): bool => $message->webhookAttempts()->count() <= 2
             )->splice(0, 5)
         ;
-        app('log')->debug(sprintf('Found %d webhook message(s) ready to be send.', $messages->count()));
+        Log::debug(sprintf('Found %d webhook message(s) ready to be send.', $messages->count()));
+
+        /** @var WebhookMessage $message */
         foreach ($messages as $message) {
             if (false === $message->sent) {
-                app('log')->debug(sprintf('Send message #%d', $message->id));
+                // set it to "sent" right away!
+                $message->sent = true;
+                $message->save();
+                Log::debug(sprintf('Send message #%d', $message->id));
                 SendWebhookMessage::dispatch($message)->afterResponse();
             }
             if (false !== $message->sent) {
-                app('log')->debug(sprintf('Skip message #%d', $message->id));
+                Log::debug(sprintf('Skip message #%d', $message->id));
             }
         }
+
+        // clean up sent messages table:
+        WebhookMessage::where('webhook_messages.sent', true)->where('webhook_messages.created_at', '<', now()->subDays(30))->delete();
     }
 }

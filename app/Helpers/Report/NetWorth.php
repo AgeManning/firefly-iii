@@ -24,14 +24,11 @@ declare(strict_types=1);
 
 namespace FireflyIII\Helpers\Report;
 
-use Deprecated;
 use Carbon\Carbon;
-use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\UserGroup;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
-use FireflyIII\Repositories\Currency\CurrencyRepositoryInterface;
 use FireflyIII\Support\CacheProperties;
 use FireflyIII\Support\Facades\Amount;
 use FireflyIII\Support\Facades\Steam;
@@ -49,13 +46,10 @@ use Illuminate\Support\Facades\Log;
 class NetWorth implements NetWorthInterface
 {
     private AccountRepositoryInterface  $accountRepository;
-    private CurrencyRepositoryInterface $currencyRepos;
-    private User                        $user;             // @phpstan-ignore-line
-    private ?UserGroup                  $userGroup = null; // @phpstan-ignore-line
 
     /**
      * This method collects the user's net worth in ALL the user's currencies
-     * (1, 4 and 8) and also in the 'native' currency for ease of use.
+     * (1, 4 and 8) and also in the 'primary' currency for ease of use.
      *
      * The set of accounts has to be fed to it.
      *
@@ -64,40 +58,40 @@ class NetWorth implements NetWorthInterface
     public function byAccounts(Collection $accounts, Carbon $date): array
     {
         // start in the past, end in the future? use $date
-        $convertToNative = Amount::convertToNative();
-        $ids             = implode(',', $accounts->pluck('id')->toArray());
-        $cache           = new CacheProperties();
+        $convertToPrimary = Amount::convertToPrimary();
+        $ids              = implode(',', $accounts->pluck('id')->toArray());
+        $cache            = new CacheProperties();
         $cache->addProperty($date);
-        $cache->addProperty($convertToNative);
+        $cache->addProperty($convertToPrimary);
         $cache->addProperty('net-worth-by-accounts');
         $cache->addProperty($ids);
         if ($cache->has()) {
             return $cache->get();
         }
         Log::debug(sprintf('Now in byAccounts("%s", "%s")', $ids, $date->format('Y-m-d H:i:s')));
-        $default         = Amount::getNativeCurrency();
-        $netWorth        = [];
-        Log::debug(sprintf('NetWorth: finalAccountsBalance("%s")', $date->format('Y-m-d H:i:s')));
-        $balances        = Steam::finalAccountsBalance($accounts, $date);
+        $primary          = Amount::getPrimaryCurrency();
+        $netWorth         = [];
+        Log::debug(sprintf('NetWorth: accountsBalancesOptimized("%s")', $date->format('Y-m-d H:i:s')));
+        $balances         = Steam::accountsBalancesOptimized($accounts, $date, null, $convertToPrimary);
 
         /** @var Account $account */
         foreach ($accounts as $account) {
             //            Log::debug(sprintf('Now at account #%d ("%s")', $account->id, $account->name));
-            $currency                           = $this->accountRepository->getAccountCurrency($account) ?? $default;
-            $useNative                          = $convertToNative && $default->id !== $currency->id;
-            $currency                           = $useNative ? $default : $currency;
+            $currency                           = $this->accountRepository->getAccountCurrency($account) ?? $primary;
+            $usePrimary                         = $convertToPrimary && $primary->id !== $currency->id;
+            $currency                           = $usePrimary ? $primary : $currency;
             $currencyCode                       = $currency->code;
             $balance                            = '0';
-            $nativeBalance                      = '0';
+            $primaryBalance                     = '0';
             if (array_key_exists($account->id, $balances)) {
-                $balance       = $balances[$account->id]['balance'] ?? '0';
-                $nativeBalance = $balances[$account->id]['native_balance'] ?? '0';
+                $balance        = $balances[$account->id]['balance'] ?? '0';
+                $primaryBalance = $balances[$account->id]['pc_balance'] ?? '0';
             }
-            //            Log::debug(sprintf('Balance is %s, native balance is %s', $balance, $nativeBalance));
+            //            Log::debug(sprintf('Balance is %s, primary balance is %s', $balance, $primaryBalance));
             // always subtract virtual balance again.
             $balance                            = '' !== (string) $account->virtual_balance ? bcsub($balance, (string) $account->virtual_balance) : $balance;
-            $nativeBalance                      = '' !== (string) $account->native_virtual_balance ? bcsub($nativeBalance, (string) $account->native_virtual_balance) : $nativeBalance;
-            $amountToUse                        = $useNative ? $nativeBalance : $balance;
+            $primaryBalance                     = '' !== (string) $account->native_virtual_balance ? bcsub($primaryBalance, (string) $account->native_virtual_balance) : $primaryBalance;
+            $amountToUse                        = $usePrimary ? $primaryBalance : $balance;
             //            Log::debug(sprintf('Will use %s %s', $currencyCode, $amountToUse));
 
             $netWorth[$currencyCode] ??= [
@@ -116,73 +110,18 @@ class NetWorth implements NetWorthInterface
         return $netWorth;
     }
 
-    public function setUser(null|Authenticatable|User $user): void
+    public function setUser(Authenticatable|User|null $user): void
     {
         if (!$user instanceof User) {
             return;
         }
-        $this->user = $user;
         $this->setUserGroup($user->userGroup);
     }
 
     public function setUserGroup(UserGroup $userGroup): void
     {
-        $this->userGroup         = $userGroup;
         $this->accountRepository = app(AccountRepositoryInterface::class);
         $this->accountRepository->setUserGroup($userGroup);
 
-        $this->currencyRepos     = app(CurrencyRepositoryInterface::class);
-        $this->currencyRepos->setUserGroup($this->userGroup);
-    }
-
-    #[Deprecated]
-    public function sumNetWorthByCurrency(Carbon $date): array
-    {
-        /**
-         * Collect accounts
-         */
-        $accounts = $this->getAccounts();
-        $return   = [];
-        Log::debug(sprintf('SumNetWorth: finalAccountsBalance("%s")', $date->format('Y-m-d H:i:s')));
-        $balances = Steam::finalAccountsBalance($accounts, $date);
-        foreach ($accounts as $account) {
-            $currency                     = $this->accountRepository->getAccountCurrency($account);
-            $balance                      = $balances[$account->id]['balance'] ?? '0';
-
-            // always subtract virtual balance.
-            $virtualBalance               = $account->virtual_balance;
-            if ('' !== $virtualBalance) {
-                $balance = bcsub($balance, (string) $virtualBalance);
-            }
-
-            $return[$currency->id] ??= [
-                'id'             => (string) $currency->id,
-                'name'           => $currency->name,
-                'symbol'         => $currency->symbol,
-                'code'           => $currency->code,
-                'decimal_places' => $currency->decimal_places,
-                'sum'            => '0',
-            ];
-            $return[$currency->id]['sum'] = bcadd($return[$currency->id]['sum'], (string) $balance);
-        }
-
-        return $return;
-    }
-
-    private function getAccounts(): Collection
-    {
-        $accounts = $this->accountRepository->getAccountsByType(
-            [AccountTypeEnum::ASSET->value, AccountTypeEnum::DEFAULT->value, AccountTypeEnum::LOAN->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::MORTGAGE->value]
-        );
-        $filtered = new Collection();
-
-        /** @var Account $account */
-        foreach ($accounts as $account) {
-            if (1 === (int) $this->accountRepository->getMetaValue($account, 'include_net_worth')) {
-                $filtered->push($account);
-            }
-        }
-
-        return $filtered;
     }
 }

@@ -25,11 +25,12 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Autocomplete;
 
 use FireflyIII\Api\V1\Controllers\Controller;
-use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteRequest;
+use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteApiRequest;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\ObjectGroup;
 use FireflyIII\Repositories\ObjectGroup\ObjectGroupRepositoryInterface;
-use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * Class ObjectGroupController
@@ -37,6 +38,7 @@ use Illuminate\Http\JsonResponse;
 class ObjectGroupController extends Controller
 {
     private ObjectGroupRepositoryInterface $repository;
+    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY];
 
     /**
      * CurrencyController constructor.
@@ -44,35 +46,28 @@ class ObjectGroupController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                /** @var User $user */
-                $user             = auth()->user();
-                $this->repository = app(ObjectGroupRepositoryInterface::class);
-                $this->repository->setUser($user);
+        $this->middleware(function (Request $request, $next) {
+            $this->validateUserGroup($request);
+            $this->repository = app(ObjectGroupRepositoryInterface::class);
+            $this->repository->setUser($this->user);
+            $this->repository->setUserGroup($this->userGroup);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
      * Documentation for this endpoint is at:
      * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/autocomplete/getObjectGroupsAC
      */
-    public function objectGroups(AutocompleteRequest $request): JsonResponse
+    public function objectGroups(AutocompleteApiRequest $request): JsonResponse
     {
-        $data   = $request->getData();
         $return = [];
-        $result = $this->repository->search($data['query'], $this->parameters->get('limit'));
+        $result = $this->repository->search($request->attributes->get('query'), $request->attributes->get('limit'));
 
         /** @var ObjectGroup $objectGroup */
         foreach ($result as $objectGroup) {
-            $return[] = [
-                'id'    => (string) $objectGroup->id,
-                'name'  => $objectGroup->title,
-                'title' => $objectGroup->title,
-            ];
+            $return[] = ['id'    => (string) $objectGroup->id, 'name'  => $objectGroup->title, 'title' => $objectGroup->title];
         }
 
         return response()->api($return);

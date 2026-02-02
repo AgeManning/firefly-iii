@@ -61,19 +61,20 @@ trait UserGroupTrait
     /**
      * @throws FireflyException
      */
-    public function setUser(null|Authenticatable|User $user): void
+    public function setUser(Authenticatable|User|null $user): void
     {
         if ($user instanceof User) {
             $this->user      = $user;
             if (null === $user->userGroup) {
-                throw new FireflyException(sprintf('User #%d has no user group.', $user->id));
+                throw new FireflyException(sprintf('User #%d ("%s") has no user group.', $user->id, $user->email));
             }
             $this->userGroup = $user->userGroup;
 
             return;
         }
+        $class = $user instanceof Authenticatable ? $user::class : 'NULL';
 
-        throw new FireflyException(sprintf('Object is of class %s, not User.', $user::class));
+        throw new FireflyException(sprintf('Object is %s, not User.', $class));
     }
 
     public function getUserGroup(): ?UserGroup
@@ -87,7 +88,7 @@ trait UserGroupTrait
     public function setUserGroup(UserGroup $userGroup): void
     {
         if (null === $this->user) {
-            Log::warning(sprintf('User is not set in repository %s', static::class));
+            Log::warning(sprintf('User is not set in repository %s. This does not have to be a problem.', static::class));
         }
         $this->userGroup = $userGroup;
     }

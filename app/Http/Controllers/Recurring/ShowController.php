@@ -32,8 +32,10 @@ use FireflyIII\Models\Recurrence;
 use FireflyIII\Repositories\Attachment\AttachmentRepositoryInterface;
 use FireflyIII\Repositories\Recurring\RecurringRepositoryInterface;
 use FireflyIII\Support\Http\Controllers\GetConfigurationData;
+use FireflyIII\Support\JsonApi\Enrichments\RecurringEnrichment;
 use FireflyIII\Transformers\AttachmentTransformer;
 use FireflyIII\Transformers\RecurrenceTransformer;
+use FireflyIII\User;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\ParameterBag;
@@ -45,8 +47,7 @@ class ShowController extends Controller
 {
     use GetConfigurationData;
 
-    /** @var RecurringRepositoryInterface Recurring repository */
-    private $recurring;
+    private RecurringRepositoryInterface $repository;
 
     /**
      * IndexController constructor.
@@ -62,7 +63,7 @@ class ShowController extends Controller
                 app('view')->share('mainTitleIcon', 'fa-paint-brush');
                 app('view')->share('title', (string) trans('firefly.recurrences'));
 
-                $this->recurring = app(RecurringRepositoryInterface::class);
+                $this->repository = app(RecurringRepositoryInterface::class);
 
                 return $next($request);
             }
@@ -76,9 +77,18 @@ class ShowController extends Controller
      *
      * @throws FireflyException
      */
-    public function show(Recurrence $recurrence)
+    public function show(Recurrence $recurrence): Factory|\Illuminate\Contracts\View\View
     {
         $repos                  = app(AttachmentRepositoryInterface::class);
+
+        // enrich
+        /** @var User $admin */
+        $admin                  = auth()->user();
+        $enrichment             = new RecurringEnrichment();
+        $enrichment->setUser($admin);
+
+        /** @var Recurrence $recurrence */
+        $recurrence             = $enrichment->enrichSingle($recurrence);
 
         /** @var RecurrenceTransformer $transformer */
         $transformer            = app(RecurrenceTransformer::class);
@@ -86,10 +96,10 @@ class ShowController extends Controller
 
         $array                  = $transformer->transform($recurrence);
 
-        $groups                 = $this->recurring->getTransactions($recurrence);
+        $groups                 = $this->repository->getTransactions($recurrence);
         $today                  = today(config('app.timezone'));
         $array['repeat_until']  = null !== $array['repeat_until'] ? new Carbon($array['repeat_until']) : null;
-        $array['journal_count'] = $this->recurring->getJournalCount($recurrence);
+        $array['journal_count'] = $this->repository->getJournalCount($recurrence);
 
         // transform dates back to Carbon objects and expand information
         foreach ($array['repetitions'] as $index => $repetition) {
@@ -97,8 +107,8 @@ class ShowController extends Controller
                 $date                                               = new Carbon($occurrence)->startOfDay();
                 $set                                                = [
                     'date'  => $date,
-                    'fired' => $this->recurring->createdPreviously($recurrence, $date)
-                               || $this->recurring->getJournalCount($recurrence, $date) > 0,
+                    'fired' => $this->repository->createdPreviously($recurrence, $date)
+                               || $this->repository->getJournalCount($recurrence, $date) > 0,
                 ];
                 $array['repetitions'][$index]['occurrences'][$item] = $set;
             }
@@ -127,6 +137,6 @@ class ShowController extends Controller
 
         $subTitle               = (string) trans('firefly.overview_for_recurrence', ['title' => $recurrence->title]);
 
-        return view('recurring.show', compact('recurrence', 'subTitle', 'array', 'groups', 'today'));
+        return view('recurring.show', ['recurrence' => $recurrence, 'subTitle' => $subTitle, 'array' => $array, 'groups' => $groups, 'today' => $today]);
     }
 }

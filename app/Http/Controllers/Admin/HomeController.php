@@ -23,11 +23,14 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Admin;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Middleware\IsDemoUser;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 
 /**
  * Class HomeController.
@@ -47,18 +50,21 @@ class HomeController extends Controller
      * Index of the admin.
      *
      * @return Factory|View
+     *
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
-    public function index()
+    public function index(): Factory|\Illuminate\Contracts\View\View
     {
         Log::channel('audit')->info('User visits admin index.');
         $title         = (string) trans('firefly.system_settings');
         $mainTitleIcon = 'fa-hand-spock-o';
         $email         = auth()->user()->email;
-        $pref          = app('preferences')->get('remote_guard_alt_email');
+        $pref          = Preferences::get('remote_guard_alt_email');
         if (null !== $pref && is_string($pref->data)) {
             $email = $pref->data;
         }
 
-        return view('settings.index', compact('title', 'mainTitleIcon', 'email'));
+        return view('settings.index', ['title' => $title, 'mainTitleIcon' => $mainTitleIcon, 'email' => $email]);
     }
 }

@@ -24,24 +24,21 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Controllers\Chart;
 
-use FireflyIII\Exceptions\ValidationException;
-use FireflyIII\Models\TransactionCurrency;
-use Carbon\Carbon;
 use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Chart\ChartRequest;
-use FireflyIII\Api\V1\Requests\Data\DateRequest;
-use FireflyIII\Enums\AccountTypeEnum;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Account;
-use FireflyIII\Models\Preference;
+use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
-use FireflyIII\Support\Chart\ChartData;
-use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\Support\Facades\Navigation;
 use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Api\ApiSupport;
+use FireflyIII\Support\Http\Api\CleansChartData;
 use FireflyIII\Support\Http\Api\CollectsAccountsFromFilter;
-use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Class AccountController
@@ -49,9 +46,12 @@ use Illuminate\Http\JsonResponse;
 class AccountController extends Controller
 {
     use ApiSupport;
+    use CleansChartData;
     use CollectsAccountsFromFilter;
 
-    private ChartData                  $chartData;
+    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY];
+
+    private array $chartData       = [];
     private AccountRepositoryInterface $repository;
 
     /**
@@ -60,25 +60,20 @@ class AccountController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                /** @var User $user */
-                $user             = auth()->user();
-                $this->chartData  = new ChartData();
-                $this->repository = app(AccountRepositoryInterface::class);
-                $this->repository->setUser($user);
+        $this->middleware(function (Request $request, $next) {
+            $this->repository = app(AccountRepositoryInterface::class);
+            $this->validateUserGroup($request);
+            $this->repository->setUserGroup($this->userGroup);
+            $this->repository->setUser($this->user);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
-     * TODO fix documentation
-     *
      * @throws FireflyException
      */
-    public function dashboard(ChartRequest $request): JsonResponse
+    public function overview(ChartRequest $request): JsonResponse
     {
         $queryParameters = $request->getParameters();
         $accounts        = $this->getAccountList($queryParameters);
@@ -86,14 +81,16 @@ class AccountController extends Controller
         // move date to end of day
         $queryParameters['start']->startOfDay();
         $queryParameters['end']->endOfDay();
+        // Log::debug(sprintf('dashboard(), convert to primary: %s', var_export($this->convertToPrimary, true)));
 
         // loop each account, and collect info:
         /** @var Account $account */
         foreach ($accounts as $account) {
+            Log::debug(sprintf('Account #%d ("%s")', $account->id, $account->name));
             $this->renderAccountData($queryParameters, $account);
         }
 
-        return response()->json($this->chartData->render());
+        return response()->json($this->clean($this->chartData));
     }
 
     /**
@@ -101,109 +98,68 @@ class AccountController extends Controller
      */
     private function renderAccountData(array $params, Account $account): void
     {
-        $currency     = $this->repository->getAccountCurrency($account);
+        Log::debug(sprintf('Now in %s(array, #%d)', __METHOD__, $account->id));
+        $currency          = $this->repository->getAccountCurrency($account);
+        $currentStart      = clone $params['start'];
+        $range             = Steam::finalAccountBalanceInRange($account, $params['start'], clone $params['end'], $this->convertToPrimary);
+        $period            = $params['period'] ?? '1D';
+
+        $previous          = array_values($range)[0]['balance'];
+        $pcPrevious        = null;
         if (!$currency instanceof TransactionCurrency) {
-            $currency = $this->default;
+            $currency = $this->primaryCurrency;
         }
-        $currentSet   = [
+        $currentSet        = [
             'label'                   => $account->name,
 
             // the currency that belongs to the account.
             'currency_id'             => (string) $currency->id,
+            'currency_name'           => $currency->name,
             'currency_code'           => $currency->code,
             'currency_symbol'         => $currency->symbol,
             'currency_decimal_places' => $currency->decimal_places,
 
+            // the primary currency
+            'primary_currency_id'     => (string) $this->primaryCurrency->id,
+
             // the default currency of the user (could be the same!)
             'date'                    => $params['start']->toAtomString(),
-            'start'                   => $params['start']->toAtomString(),
-            'end'                     => $params['end']->toAtomString(),
-            'period'                  => '1D',
+            'start_date'              => $params['start']->toAtomString(),
+            'end_date'                => $params['end']->toAtomString(),
+            'type'                    => 'line',
+            'yAxisID'                 => 0,
+            'period'                  => $period,
             'entries'                 => [],
+            'pc_entries'              => [],
         ];
-        $currentStart = clone $params['start'];
-        $range        = Steam::finalAccountBalanceInRange($account, $params['start'], clone $params['end'], $this->convertToNative);
+        if ($this->convertToPrimary) {
+            $currentSet['pc_entries']                      = [];
+            $currentSet['primary_currency_id']             = (string) $this->primaryCurrency->id;
+            $currentSet['primary_currency_code']           = $this->primaryCurrency->code;
+            $currentSet['primary_currency_symbol']         = $this->primaryCurrency->symbol;
+            $currentSet['primary_currency_decimal_places'] = $this->primaryCurrency->decimal_places;
+            $pcPrevious                                    = array_values($range)[0]['pc_balance'];
+        }
+        // create array of values to collect.
 
-        $previous     = array_values($range)[0]['balance'];
         while ($currentStart <= $params['end']) {
             $format                        = $currentStart->format('Y-m-d');
             $label                         = $currentStart->toAtomString();
             $balance                       = array_key_exists($format, $range) ? $range[$format]['balance'] : $previous;
             $previous                      = $balance;
-
-            $currentStart->addDay();
             $currentSet['entries'][$label] = $balance;
-        }
-        $this->chartData->add($currentSet);
-    }
 
-    /**
-     * This endpoint is documented at:
-     * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/charts/getChartAccountOverview
-     *
-     * @throws ValidationException
-     */
-    public function overview(DateRequest $request): JsonResponse
-    {
-        // parameters for chart:
-        $dates      = $request->getAll();
-
-        /** @var Carbon $start */
-        $start      = $dates['start'];
-
-        /** @var Carbon $end */
-        $end        = $dates['end'];
-
-        // set dates to end of day + start of day:
-        $start->startOfDay();
-        $end->endOfDay();
-
-        // user's preferences
-        $defaultSet = $this->repository->getAccountsByType([AccountTypeEnum::ASSET->value])->pluck('id')->toArray();
-
-        /** @var Preference $frontpage */
-        $frontpage  = Preferences::get('frontpageAccounts', $defaultSet);
-
-        if (!(is_array($frontpage->data) && count($frontpage->data) > 0)) {
-            $frontpage->data = $defaultSet;
-            $frontpage->save();
-        }
-
-        // get accounts:
-        $accounts   = $this->repository->getAccountsById($frontpage->data);
-        $chartData  = [];
-
-        /** @var Account $account */
-        foreach ($accounts as $account) {
-            $currency     = $this->repository->getAccountCurrency($account) ?? $this->nativeCurrency;
-            $field        = $this->convertToNative && $currency->id !== $this->nativeCurrency->id ? 'native_balance' : 'balance';
-            $currentSet   = [
-                'label'                   => $account->name,
-                'currency_id'             => (string) $currency->id,
-                'currency_code'           => $currency->code,
-                'currency_symbol'         => $currency->symbol,
-                'currency_decimal_places' => $currency->decimal_places,
-                'start_date'              => $start->toAtomString(),
-                'end_date'                => $end->toAtomString(),
-                'type'                    => 'line', // line, area or bar
-                'yAxisID'                 => 0, // 0, 1, 2
-                'entries'                 => [],
-            ];
-            // TODO this code is also present in the V2 chart account controller so this method is due to be deprecated.
-            $currentStart = clone $start;
-            $range        = Steam::finalAccountBalanceInRange($account, $start, clone $end, $this->convertToNative);
-            $previous     = array_values($range)[0][$field];
-            while ($currentStart <= $end) {
-                $format                        = $currentStart->format('Y-m-d');
-                $label                         = $currentStart->toAtomString();
-                $balance                       = array_key_exists($format, $range) ? $range[$format][$field] : $previous;
-                $previous                      = $balance;
-                $currentStart->addDay();
-                $currentSet['entries'][$label] = $balance;
+            // do the same for the primary currency balance, if relevant:
+            $pcBalance                     = null;
+            if ($this->convertToPrimary) {
+                $pcBalance                        = array_key_exists($format, $range) ? $range[$format]['pc_balance'] : $pcPrevious;
+                $pcPrevious                       = $pcBalance;
+                $currentSet['pc_entries'][$label] = $pcBalance;
             }
-            $chartData[]  = $currentSet;
-        }
+            $currentStart                  = Navigation::addPeriod($currentStart, $period);
 
-        return response()->json($chartData);
+            // $currentStart->addDay();
+        }
+        $this->chartData[] = $currentSet;
     }
 }

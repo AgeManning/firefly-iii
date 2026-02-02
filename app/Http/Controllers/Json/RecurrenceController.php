@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Json;
 
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Carbon\Exceptions\InvalidFormatException;
 use FireflyIII\Exceptions\FireflyException;
@@ -32,6 +33,7 @@ use FireflyIII\Models\RecurrenceRepetition;
 use FireflyIII\Repositories\Recurring\RecurringRepositoryInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class RecurrenceController
@@ -166,14 +168,14 @@ class RecurrenceController extends Controller
         }
         $date->startOfDay();
         $preSelected = (string) $request->get('pre_select');
-        $locale      = app('steam')->getLocale();
+        $locale      = Steam::getLocale();
 
-        app('log')->debug(sprintf('date = %s, today = %s. date > today? %s', $date->toAtomString(), $today->toAtomString(), var_export($date > $today, true)));
-        app('log')->debug(sprintf('past = true? %s', var_export('true' === (string) $request->get('past'), true)));
+        Log::debug(sprintf('date = %s, today = %s. date > today? %s', $date->toAtomString(), $today->toAtomString(), var_export($date > $today, true)));
+        Log::debug(sprintf('past = true? %s', var_export('true' === (string) $request->get('past'), true)));
 
         $result      = [];
         if ($date > $today || 'true' === (string) $request->get('past')) {
-            app('log')->debug('Will fill dropdown.');
+            Log::debug('Will fill dropdown.');
             $weekly     = sprintf('weekly,%s', $date->dayOfWeekIso);
             $monthly    = sprintf('monthly,%s', $date->day);
             $dayOfWeek  = (string) trans(sprintf('config.dow_%s', $date->dayOfWeekIso));
@@ -200,7 +202,7 @@ class RecurrenceController extends Controller
                 ],
             ];
         }
-        app('log')->debug('Dropdown is', $result);
+        Log::debug('Dropdown is', $result);
 
         return response()->json($result);
     }

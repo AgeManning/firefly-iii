@@ -25,9 +25,10 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Models\AvailableBudget;
 
 use FireflyIII\Api\V1\Controllers\Controller;
-use FireflyIII\Exceptions\FireflyException;
+use FireflyIII\Api\V1\Requests\Generic\PaginationDateRangeRequest;
 use FireflyIII\Models\AvailableBudget;
 use FireflyIII\Repositories\Budget\AvailableBudgetRepositoryInterface;
+use FireflyIII\Support\JsonApi\Enrichments\AvailableBudgetEnrichment;
 use FireflyIII\Transformers\AvailableBudgetTransformer;
 use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
@@ -66,31 +67,36 @@ class ShowController extends Controller
      * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/available_budgets/getAvailableBudget
      *
      * Display a listing of the resource.
-     *
-     * @throws FireflyException
      */
-    public function index(): JsonResponse
+    public function index(PaginationDateRangeRequest $request): JsonResponse
     {
         $manager          = $this->getManager();
-
-        // types to get, page size:
-        $pageSize         = $this->parameters->get('limit');
-
-        $start            = $this->parameters->get('start');
-        $end              = $this->parameters->get('end');
+        [
+            'limit'  => $limit,
+            'offset' => $offset,
+            'page'   => $page,
+            'start'  => $start,
+            'end'    => $end,
+        ]                 = $request->attributes->all();
 
         // get list of available budgets. Count it and split it.
         $collection       = $this->abRepository->getAvailableBudgetsByDate($start, $end);
         $count            = $collection->count();
-        $availableBudgets = $collection->slice(($this->parameters->get('page') - 1) * $pageSize, $pageSize);
+        $availableBudgets = $collection->slice($offset, $limit);
+
+        // enrich
+        /** @var User $admin */
+        $admin            = auth()->user();
+        $enrichment       = new AvailableBudgetEnrichment();
+        $enrichment->setUser($admin);
+        $availableBudgets = $enrichment->enrich($availableBudgets);
 
         // make paginator:
-        $paginator        = new LengthAwarePaginator($availableBudgets, $count, $pageSize, $this->parameters->get('page'));
+        $paginator        = new LengthAwarePaginator($availableBudgets, $count, $limit, $page);
         $paginator->setPath(route('api.v1.available-budgets.index').$this->buildParams());
 
         /** @var AvailableBudgetTransformer $transformer */
         $transformer      = app(AvailableBudgetTransformer::class);
-        $transformer->setParameters($this->parameters);
 
         $resource         = new FractalCollection($availableBudgets, $transformer, 'available_budgets');
         $resource->setPaginator(new IlluminatePaginatorAdapter($paginator));
@@ -106,13 +112,22 @@ class ShowController extends Controller
      */
     public function show(AvailableBudget $availableBudget): JsonResponse
     {
-        $manager     = $this->getManager();
+        $manager         = $this->getManager();
+        //        $start           = $this->parameters->get('start');
+        //        $end             = $this->parameters->get('end');
 
         /** @var AvailableBudgetTransformer $transformer */
-        $transformer = app(AvailableBudgetTransformer::class);
-        $transformer->setParameters($this->parameters);
+        $transformer     = app(AvailableBudgetTransformer::class);
 
-        $resource    = new Item($availableBudget, $transformer, 'available_budgets');
+        // enrich
+        /** @var User $admin */
+        $admin           = auth()->user();
+        $enrichment      = new AvailableBudgetEnrichment();
+        $enrichment->setUser($admin);
+        $availableBudget = $enrichment->enrichSingle($availableBudget);
+
+
+        $resource        = new Item($availableBudget, $transformer, 'available_budgets');
 
         return response()->json($manager->createData($resource)->toArray())->header('Content-Type', self::CONTENT_TYPE);
     }

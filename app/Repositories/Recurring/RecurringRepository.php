@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Repositories\Recurring;
 
+use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Factory\RecurrenceFactory;
@@ -35,6 +36,7 @@ use FireflyIII\Models\RecurrenceMeta;
 use FireflyIII\Models\RecurrenceRepetition;
 use FireflyIII\Models\RecurrenceTransaction;
 use FireflyIII\Models\RecurrenceTransactionMeta;
+use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Models\TransactionJournalMeta;
 use FireflyIII\Services\Internal\Destroy\RecurrenceDestroyService;
@@ -50,8 +52,8 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
-use function Safe\json_encode;
 use function Safe\json_decode;
+use function Safe\json_encode;
 
 /**
  * Class RecurringRepository
@@ -78,7 +80,7 @@ class RecurringRepository implements RecurringRepositoryInterface, UserGroupInte
         foreach ($set as $journalMeta) {
             $count = TransactionJournalMeta::where(static function (Builder $q2) use ($date): void {
                 $string = (string) $date;
-                app('log')->debug(sprintf('Search for date: %s', json_encode($string)));
+                Log::debug(sprintf('Search for date: %s', json_encode($string)));
                 $q2->where('name', 'recurrence_date');
                 $q2->where('data', json_encode($string));
             })
@@ -86,7 +88,7 @@ class RecurringRepository implements RecurringRepositoryInterface, UserGroupInte
                 ->count()
             ;
             if ($count > 0) {
-                app('log')->debug(sprintf('Looks like journal #%d was already created', $journalMeta->transaction_journal_id));
+                Log::debug(sprintf('Looks like journal #%d was already created', $journalMeta->transaction_journal_id));
 
                 return true;
             }
@@ -372,7 +374,7 @@ class RecurringRepository implements RecurringRepositoryInterface, UserGroupInte
      */
     public function getXOccurrencesSince(RecurrenceRepetition $repetition, Carbon $date, Carbon $afterDate, int $count): array
     {
-        app('log')->debug('Now in getXOccurrencesSince()');
+        Log::debug('Now in getXOccurrencesSince()');
         $skipMod     = $repetition->repetition_skip + 1;
         $occurrences = [];
 
@@ -429,15 +431,13 @@ class RecurringRepository implements RecurringRepositoryInterface, UserGroupInte
 
     /**
      * Parse the repetition in a string that is user readable.
-     *
-     * @throws FireflyException
      */
     public function repetitionDescription(RecurrenceRepetition $repetition): string
     {
-        app('log')->debug('Now in repetitionDescription()');
+        Log::debug('Now in repetitionDescription()');
 
         /** @var Preference $pref */
-        $pref     = app('preferences')->getForUser($this->user, 'language', config('firefly.default_language', 'en_US'));
+        $pref     = Preferences::getForUser($this->user, 'language', config('firefly.default_language', 'en_US'));
         $language = $pref->data;
         if (is_array($language)) {
             $language = 'en_US';
@@ -547,8 +547,8 @@ class RecurringRepository implements RecurringRepositoryInterface, UserGroupInte
         $mutator     = clone $start;
         $mutator->startOfDay();
         $skipMod     = $repetition->repetition_skip + 1;
-        app('log')->debug(sprintf('Calculating occurrences for rep type "%s"', $repetition->repetition_type));
-        app('log')->debug(sprintf('Mutator is now: %s', $mutator->format('Y-m-d')));
+        Log::debug(sprintf('Calculating occurrences for rep type "%s"', $repetition->repetition_type));
+        Log::debug(sprintf('Mutator is now: %s', $mutator->format('Y-m-d')));
 
         if ('daily' === $repetition->repetition_type) {
             $occurrences = $this->getDailyInRange($mutator, $end, $skipMod);
@@ -581,5 +581,18 @@ class RecurringRepository implements RecurringRepositoryInterface, UserGroupInte
         $service = app(RecurrenceUpdateService::class);
 
         return $service->update($recurrence, $data);
+    }
+
+    public function markGroupsAsNow(Collection $groups): void
+    {
+        /** @var TransactionGroup $group */
+        foreach ($groups as $group) {
+            /** @var TransactionJournal $journal */
+            foreach ($group->transactionJournals as $journal) {
+                Log::debug(sprintf('Set date of journal #%d to today!', $journal->id));
+                $journal->date = now(config('app.timezone'));
+                $journal->save();
+            }
+        }
     }
 }

@@ -25,11 +25,12 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Autocomplete;
 
 use FireflyIII\Api\V1\Controllers\Controller;
-use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteRequest;
+use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteApiRequest;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Tag;
 use FireflyIII\Repositories\Tag\TagRepositoryInterface;
-use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * Class TagController
@@ -37,6 +38,7 @@ use Illuminate\Http\JsonResponse;
 class TagController extends Controller
 {
     private TagRepositoryInterface $repository;
+    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY];
 
     /**
      * TagController constructor.
@@ -44,35 +46,24 @@ class TagController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                /** @var User $user */
-                $user             = auth()->user();
-                $this->repository = app(TagRepositoryInterface::class);
-                $this->repository->setUser($user);
+        $this->middleware(function (Request $request, $next) {
+            $this->validateUserGroup($request);
+            $this->repository = app(TagRepositoryInterface::class);
+            $this->repository->setUser($this->user);
+            $this->repository->setUserGroup($this->userGroup);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
-    /**
-     * This endpoint is documented at:
-     * * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/autocomplete/getTagAC
-     */
-    public function tags(AutocompleteRequest $request): JsonResponse
+    public function tags(AutocompleteApiRequest $request): JsonResponse
     {
-        $data   = $request->getData();
-        $result = $this->repository->searchTags($data['query'], $this->parameters->get('limit'));
+        $result = $this->repository->searchTags($request->attributes->get('query'), $request->attributes->get('limit'));
         $array  = [];
 
         /** @var Tag $tag */
         foreach ($result as $tag) {
-            $array[] = [
-                'id'   => (string) $tag->id,
-                'name' => $tag->tag,
-                'tag'  => $tag->tag,
-            ];
+            $array[] = ['id'   => (string) $tag->id, 'name' => $tag->tag, 'tag'  => $tag->tag];
         }
 
         return response()->api($array);

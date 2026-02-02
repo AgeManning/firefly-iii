@@ -44,15 +44,15 @@ class AccountObserver
     public function created(Account $account): void
     {
         //        Log::debug('Observe "created" of an account.');
-        $this->updateNativeAmount($account);
+        $this->updatePrimaryCurrencyAmount($account);
     }
 
-    private function updateNativeAmount(Account $account): void
+    private function updatePrimaryCurrencyAmount(Account $account): void
     {
-        if (!Amount::convertToNative($account->user)) {
+        if (!Amount::convertToPrimary($account->user)) {
             return;
         }
-        $userCurrency = app('amount')->getNativeCurrencyByUserGroup($account->user->userGroup);
+        $userCurrency = Amount::getPrimaryCurrencyByUserGroup($account->user->userGroup);
         $repository   = app(AccountRepositoryInterface::class);
         $currency     = $repository->getAccountCurrency($account);
         if (null !== $currency && $currency->id !== $userCurrency->id && '' !== (string) $account->virtual_balance && 0 !== bccomp($account->virtual_balance, '0')) {
@@ -67,7 +67,7 @@ class AccountObserver
             $account->native_virtual_balance = null;
         }
         $account->saveQuietly();
-        // Log::debug('Account native virtual balance is updated.');
+        // Log::debug('Account primary currency virtual balance is updated.');
     }
 
     /**
@@ -75,7 +75,7 @@ class AccountObserver
      */
     public function deleting(Account $account): void
     {
-        app('log')->debug('Observe "deleting" of an account.');
+        Log::debug('Observe "deleting" of an account.');
 
         $repository = app(AttachmentRepositoryInterface::class);
         $repository->setUser($account->user);
@@ -108,6 +108,6 @@ class AccountObserver
     public function updated(Account $account): void
     {
         //        Log::debug('Observe "updated" of an account.');
-        $this->updateNativeAmount($account);
+        $this->updatePrimaryCurrencyAmount($account);
     }
 }

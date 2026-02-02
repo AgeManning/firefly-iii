@@ -24,9 +24,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Transformers;
 
-use FireflyIII\Enums\WebhookDelivery;
-use FireflyIII\Enums\WebhookResponse;
-use FireflyIII\Enums\WebhookTrigger;
 use FireflyIII\Models\Webhook;
 
 /**
@@ -34,11 +31,6 @@ use FireflyIII\Models\Webhook;
  */
 class WebhookTransformer extends AbstractTransformer
 {
-    /**
-     * WebhookTransformer constructor.
-     */
-    public function __construct() {}
-
     /**
      * Transform webhook.
      */
@@ -51,9 +43,9 @@ class WebhookTransformer extends AbstractTransformer
             'active'     => $webhook->active,
             'title'      => $webhook->title,
             'secret'     => $webhook->secret,
-            'trigger'    => $this->getEnum('trigger', $webhook->trigger),
-            'response'   => $this->getEnum('response', $webhook->response),
-            'delivery'   => $this->getEnum('delivery', $webhook->delivery),
+            'triggers'   => $webhook->meta['triggers'],
+            'deliveries' => $webhook->meta['deliveries'],
+            'responses'  => $webhook->meta['responses'],
             'url'        => $webhook->url,
             'links'      => [
                 [
@@ -62,17 +54,5 @@ class WebhookTransformer extends AbstractTransformer
                 ],
             ],
         ];
-    }
-
-    private function getEnum(string $type, int $value): string
-    {
-        if ('trigger' === $type) {
-            return WebhookTrigger::from($value)->name;
-        }
-        if ('response' === $type) {
-            return WebhookResponse::from($value)->name;
-        }
-
-        return WebhookDelivery::from($value)->name;
     }
 }

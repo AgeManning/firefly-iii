@@ -29,6 +29,8 @@ use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Attachment;
 use FireflyIII\Models\Note;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 class UpgradesAttachments extends Command
 {
@@ -75,7 +77,7 @@ class UpgradesAttachments extends Command
                 $att->description = '';
                 $att->save();
 
-                app('log')->debug(sprintf('Migrated attachment #%s description to note #%d.', $att->id, $note->id));
+                Log::debug(sprintf('Migrated attachment #%s description to note #%d.', $att->id, $note->id));
                 ++$count;
             }
         }
@@ -91,16 +93,14 @@ class UpgradesAttachments extends Command
 
     private function isExecuted(): bool
     {
-        $configVar = app('fireflyconfig')->get(self::CONFIG_NAME, false);
-        if (null !== $configVar) {
-            return (bool) $configVar->data;
-        }
+        $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
 
-        return false;
+        return (bool)$configVar?->data;
+
     }
 
     private function markAsExecuted(): void
     {
-        app('fireflyconfig')->set(self::CONFIG_NAME, true);
+        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 }

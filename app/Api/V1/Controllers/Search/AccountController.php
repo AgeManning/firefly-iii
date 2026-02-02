@@ -45,18 +45,17 @@ class AccountController extends Controller
 {
     use AccountFilter;
 
-    private array $validFields;
+    private array $validFields = [
+        AccountSearch::SEARCH_ALL,
+        AccountSearch::SEARCH_ID,
+        AccountSearch::SEARCH_NAME,
+        AccountSearch::SEARCH_IBAN,
+        AccountSearch::SEARCH_NUMBER,
+    ];
 
     public function __construct()
     {
         parent::__construct();
-        $this->validFields = [
-            AccountSearch::SEARCH_ALL,
-            AccountSearch::SEARCH_ID,
-            AccountSearch::SEARCH_NAME,
-            AccountSearch::SEARCH_IBAN,
-            AccountSearch::SEARCH_NUMBER,
-        ];
     }
 
     /**
@@ -88,8 +87,8 @@ class AccountController extends Controller
         /** @var User $admin */
         $admin       = auth()->user();
         $enrichment  = new AccountEnrichment();
+        $enrichment->setDate($this->parameters->get('date'));
         $enrichment->setUser($admin);
-        $enrichment->setNative($this->nativeCurrency);
         $accounts    = $enrichment->enrich($accounts);
 
         /** @var AccountTransformer $transformer */

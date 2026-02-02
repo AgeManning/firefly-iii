@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Account;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
@@ -66,7 +67,7 @@ class DeleteController extends Controller
      *
      * @return Factory|Redirector|RedirectResponse|View
      */
-    public function delete(Account $account)
+    public function delete(Account $account): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
         if (!$this->isEditableAccount($account)) {
             return $this->redirectAccountToAccount($account);
@@ -81,15 +82,13 @@ class DeleteController extends Controller
         // put previous url in session
         $this->rememberPreviousUrl('accounts.delete.url');
 
-        return view('accounts.delete', compact('account', 'subTitle', 'accountList', 'objectType'));
+        return view('accounts.delete', ['account' => $account, 'subTitle' => $subTitle, 'accountList' => $accountList, 'objectType' => $objectType]);
     }
 
     /**
      * Delete the account.
-     *
-     * @return Redirector|RedirectResponse
      */
-    public function destroy(Request $request, Account $account)
+    public function destroy(Request $request, Account $account): Redirector|RedirectResponse
     {
         if (!$this->isEditableAccount($account)) {
             return $this->redirectAccountToAccount($account);
@@ -103,7 +102,7 @@ class DeleteController extends Controller
         $this->repository->destroy($account, $moveTo);
 
         $request->session()->flash('success', (string) trans(sprintf('firefly.%s_deleted', $typeName), ['name' => $name]));
-        app('preferences')->mark();
+        Preferences::mark();
 
         return redirect($this->getPreviousUrl('accounts.delete.url'));
     }

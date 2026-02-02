@@ -26,14 +26,12 @@ namespace FireflyIII\Support\Chart;
 
 use FireflyIII\Exceptions\FireflyException;
 
+/**
+ * @deprecated
+ */
 class ChartData
 {
-    private array $series;
-
-    public function __construct()
-    {
-        $this->series = [];
-    }
+    private array $series = [];
 
     /**
      * @throws FireflyException
@@ -41,10 +39,10 @@ class ChartData
     public function add(array $data): void
     {
         if (array_key_exists('currency_id', $data)) {
-            $data['currency_id'] = (string) $data['currency_id'];
+            $data['currency_id'] = (string)$data['currency_id'];
         }
-        if (array_key_exists('native_currency_id', $data)) {
-            $data['native_currency_id'] = (string) $data['native_currency_id'];
+        if (array_key_exists('primary_currency_id', $data)) {
+            $data['primary_currency_id'] = (string)$data['primary_currency_id'];
         }
         $required       = ['start', 'date', 'end', 'entries'];
         foreach ($required as $field) {

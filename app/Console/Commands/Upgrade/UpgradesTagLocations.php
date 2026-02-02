@@ -28,6 +28,7 @@ use FireflyIII\Console\Commands\ShowsFriendlyMessages;
 use FireflyIII\Models\Location;
 use FireflyIII\Models\Tag;
 use Illuminate\Console\Command;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 class UpgradesTagLocations extends Command
 {
@@ -57,12 +58,10 @@ class UpgradesTagLocations extends Command
 
     private function isExecuted(): bool
     {
-        $configVar = app('fireflyconfig')->get(self::CONFIG_NAME, false);
-        if (null !== $configVar) {
-            return (bool) $configVar->data;
-        }
+        $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
 
-        return false;
+        return (bool)$configVar?->data;
+
     }
 
     private function migrateTagLocations(): void
@@ -79,7 +78,7 @@ class UpgradesTagLocations extends Command
 
     private function hasLocationDetails(Tag $tag): bool
     {
-        return null !== $tag->latitude && null !== $tag->longitude && null !== $tag->zoomLevel;
+        return !in_array(null, [$tag->latitude, $tag->longitude, $tag->zoomLevel], true);
     }
 
     private function migrateLocationDetails(Tag $tag): void
@@ -99,6 +98,6 @@ class UpgradesTagLocations extends Command
 
     private function markAsExecuted(): void
     {
-        app('fireflyconfig')->set(self::CONFIG_NAME, true);
+        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 }

@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Bill;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\BillUpdateRequest;
@@ -34,6 +35,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class EditController
@@ -64,10 +66,8 @@ class EditController extends Controller
 
     /**
      * Edit a bill.
-     *
-     * @return Factory|View
      */
-    public function edit(Request $request, Bill $bill)
+    public function edit(Request $request, Bill $bill): Factory|View
     {
         $periods          = [];
 
@@ -85,10 +85,9 @@ class EditController extends Controller
             $this->rememberPreviousUrl('bills.edit.url');
         }
 
-        $bill->amount_min = app('steam')->bcround($bill->amount_min, $bill->transactionCurrency->decimal_places);
-        $bill->amount_max = app('steam')->bcround($bill->amount_max, $bill->transactionCurrency->decimal_places);
+        $bill->amount_min = Steam::bcround($bill->amount_min, $bill->transactionCurrency->decimal_places);
+        $bill->amount_max = Steam::bcround($bill->amount_max, $bill->transactionCurrency->decimal_places);
         $rules            = $this->repository->getRulesForBill($bill);
-        $defaultCurrency  = $this->defaultCurrency;
 
         // code to handle active-checkboxes
         $hasOldInput      = null !== $request->old('_token');
@@ -105,7 +104,7 @@ class EditController extends Controller
         $request->session()->flash('preFilled', $preFilled);
         $request->session()->forget('bills.edit.fromUpdate');
 
-        return view('bills.edit', compact('subTitle', 'periods', 'rules', 'bill', 'defaultCurrency', 'preFilled'));
+        return view('bills.edit', ['subTitle' => $subTitle, 'periods' => $periods, 'rules' => $rules, 'bill' => $bill, 'preFilled' => $preFilled]);
     }
 
     /**
@@ -119,7 +118,7 @@ class EditController extends Controller
         Log::channel('audit')->info(sprintf('Updated bill #%d.', $bill->id), $billData);
 
         $request->session()->flash('success', (string) trans('firefly.updated_bill', ['name' => $bill->name]));
-        app('preferences')->mark();
+        Preferences::mark();
 
         /** @var null|array $files */
         $files    = $request->hasFile('attachments') ? $request->file('attachments') : null;

@@ -29,6 +29,7 @@ use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Class RequestedReportOnJournals
@@ -44,15 +45,13 @@ class RequestedReportOnJournals
      */
     public function __construct(public int $userId, public Collection $groups)
     {
-        app('log')->debug('In event RequestedReportOnJournals.');
+        Log::debug('In event RequestedReportOnJournals.');
     }
 
     /**
      * Get the channels the event should broadcast on.
-     *
-     * @return PrivateChannel
      */
-    public function broadcastOn()
+    public function broadcastOn(): PrivateChannel
     {
         return new PrivateChannel('channel-name');
     }

@@ -34,6 +34,7 @@ use FireflyIII\Support\Repositories\UserGroup\UserGroupInterface;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupTrait;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use FireflyIII\Support\Facades\Amount;
 
 /**
  * Class AccountTasker.
@@ -50,15 +51,16 @@ class AccountTasker implements AccountTaskerInterface, UserGroupInterface
         $yesterday       = clone $start;
         $yesterday->subDay()->endOfDay(); // exactly up until $start but NOT including.
         $end->endOfDay();                 // needs to be end of day to be correct.
-        Log::debug(sprintf('getAccountReport: finalAccountsBalance("%s")', $yesterday->format('Y-m-d H:i:s')));
-        Log::debug(sprintf('getAccountReport: finalAccountsBalance("%s")', $end->format('Y-m-d H:i:s')));
-        $startSet        = Steam::finalAccountsBalance($accounts, $yesterday);
-        $endSet          = Steam::finalAccountsBalance($accounts, $end);
+        Log::debug(sprintf('getAccountReport: accountsBalancesInRange("%s", "%s")', $yesterday->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')));
+        [
+            $startSet,
+            $endSet,
+        ]                = Steam::accountsBalancesInRange($accounts, $yesterday, $end);
         Log::debug('Start of accountreport');
 
         /** @var AccountRepositoryInterface $repository */
         $repository      = app(AccountRepositoryInterface::class);
-        $defaultCurrency = app('amount')->getNativeCurrencyByUserGroup($this->user->userGroup);
+        $primaryCurrency = Amount::getPrimaryCurrencyByUserGroup($this->user->userGroup);
 
         $return          = [
             'accounts' => [],
@@ -68,7 +70,7 @@ class AccountTasker implements AccountTaskerInterface, UserGroupInterface
         /** @var Account $account */
         foreach ($accounts as $account) {
             $id                                     = $account->id;
-            $currency                               = $repository->getAccountCurrency($account) ?? $defaultCurrency;
+            $currency                               = $repository->getAccountCurrency($account) ?? $primaryCurrency;
             $return['sums'][$currency->id] ??= [
                 'start'                   => '0',
                 'end'                     => '0',
@@ -143,16 +145,13 @@ class AccountTasker implements AccountTaskerInterface, UserGroupInterface
         return $report;
     }
 
-    /**
-     * @throws FireflyException
-     */
     private function groupExpenseByDestination(array $array): array
     {
-        $defaultCurrency = app('amount')->getNativeCurrencyByUserGroup($this->user->userGroup);
+        $primaryCurrency = Amount::getPrimaryCurrencyByUserGroup($this->user->userGroup);
 
         /** @var CurrencyRepositoryInterface $currencyRepos */
         $currencyRepos   = app(CurrencyRepositoryInterface::class);
-        $currencies      = [$defaultCurrency->id => $defaultCurrency];
+        $currencies      = [$primaryCurrency->id => $primaryCurrency];
         $report          = [
             'accounts' => [],
             'sums'     => [],
@@ -231,16 +230,13 @@ class AccountTasker implements AccountTaskerInterface, UserGroupInterface
         return $report;
     }
 
-    /**
-     * @throws FireflyException
-     */
     private function groupIncomeBySource(array $array): array
     {
-        $defaultCurrency = app('amount')->getNativeCurrencyByUserGroup($this->user->userGroup);
+        $primaryCurrency = Amount::getPrimaryCurrencyByUserGroup($this->user->userGroup);
 
         /** @var CurrencyRepositoryInterface $currencyRepos */
         $currencyRepos   = app(CurrencyRepositoryInterface::class);
-        $currencies      = [$defaultCurrency->id => $defaultCurrency];
+        $currencies      = [$primaryCurrency->id => $primaryCurrency];
         $report          = [
             'accounts' => [],
             'sums'     => [],

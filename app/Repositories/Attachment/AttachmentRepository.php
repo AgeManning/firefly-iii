@@ -23,6 +23,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Repositories\Attachment;
 
+use Illuminate\Support\Facades\Log;
+use Exception;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Factory\AttachmentFactory;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
@@ -35,7 +37,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\UnableToDeleteFile;
-use Exception;
 use LogicException;
 
 /**
@@ -78,7 +79,7 @@ class AttachmentRepository implements AttachmentRepositoryInterface, UserGroupIn
             try {
                 $unencryptedContent = Crypt::decrypt($encryptedContent); // verified
             } catch (DecryptException $e) {
-                app('log')->debug(sprintf('Could not decrypt attachment #%d but this is fine: %s', $attachment->id, $e->getMessage()));
+                Log::debug(sprintf('Could not decrypt attachment #%d but this is fine: %s', $attachment->id, $e->getMessage()));
                 $unencryptedContent = $encryptedContent;
             }
         }
@@ -161,7 +162,7 @@ class AttachmentRepository implements AttachmentRepositoryInterface, UserGroupIn
                 try {
                     $dbNote->delete();
                 } catch (LogicException $e) {
-                    app('log')->error($e->getMessage());
+                    Log::error($e->getMessage());
                 }
             }
 

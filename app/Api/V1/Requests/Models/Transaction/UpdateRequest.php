@@ -38,6 +38,7 @@ use FireflyIII\Validation\GroupValidation;
 use FireflyIII\Validation\TransactionValidation;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 /**
  * Class UpdateRequest
@@ -64,7 +65,7 @@ class UpdateRequest extends FormRequest
      */
     public function getAll(): array
     {
-        app('log')->debug(sprintf('Now in %s', __METHOD__));
+        Log::debug(sprintf('Now in %s', __METHOD__));
         $this->integerFields  = ['order', 'currency_id', 'foreign_currency_id', 'transaction_journal_id', 'source_id', 'destination_id', 'budget_id', 'category_id', 'bill_id', 'recurrence_id'];
         $this->dateFields     = ['date', 'interest_date', 'book_date', 'process_date', 'due_date', 'payment_date', 'invoice_date'];
         $this->textareaFields = ['notes'];
@@ -97,7 +98,7 @@ class UpdateRequest extends FormRequest
      */
     private function getTransactionData(): array
     {
-        app('log')->debug(sprintf('Now in %s', __METHOD__));
+        Log::debug(sprintf('Now in %s', __METHOD__));
         $return       = [];
 
         /** @var null|array $transactions */
@@ -181,7 +182,7 @@ class UpdateRequest extends FormRequest
     private function getDateData(array $current, array $transaction): array
     {
         foreach ($this->dateFields as $fieldName) {
-            app('log')->debug(sprintf('Now at date field %s', $fieldName));
+            Log::debug(sprintf('Now at date field %s', $fieldName));
             if (array_key_exists($fieldName, $transaction)) {
                 Log::debug(sprintf('New value: "%s"', $transaction[$fieldName]));
                 $current[$fieldName] = $this->dateFromValue((string) $transaction[$fieldName]);
@@ -247,8 +248,8 @@ class UpdateRequest extends FormRequest
      */
     public function rules(): array
     {
-        app('log')->debug(sprintf('Now in %s', __METHOD__));
-        $validProtocols = config('firefly.valid_url_protocols');
+        Log::debug(sprintf('Now in %s', __METHOD__));
+        $validProtocols = FireflyConfig::get('valid_url_protocols', config('firefly.valid_url_protocols'))->data;
 
         return [
             // basic fields for group:
@@ -330,7 +331,7 @@ class UpdateRequest extends FormRequest
      */
     public function withValidator(Validator $validator): void
     {
-        app('log')->debug('Now in withValidator');
+        Log::debug('Now in withValidator');
 
         /** @var TransactionGroup $transactionGroup */
         $transactionGroup = $this->route()->parameter('transactionGroup');
@@ -338,6 +339,9 @@ class UpdateRequest extends FormRequest
             function (Validator $validator) use ($transactionGroup): void {
                 // if more than one, verify that there are journal ID's present.
                 $this->validateJournalIds($validator, $transactionGroup);
+
+                // if more than one split, needs group title
+                $this->validateGroupDescription($validator);
 
                 // all transaction types must be equal:
                 $this->validateTransactionTypesForUpdate($validator);

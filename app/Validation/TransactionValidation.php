@@ -37,6 +37,7 @@ use FireflyIII\Repositories\Account\AccountRepository;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\User;
 use Illuminate\Support\Facades\Log;
+use FireflyIII\Support\Facades\Amount;
 
 /**
  * Trait TransactionValidation
@@ -224,9 +225,9 @@ trait TransactionValidation
 
         /** @var AccountRepository $accountRepository */
         $accountRepository   = app(AccountRepositoryInterface::class);
-        $defaultCurrency     = app('amount')->getNativeCurrency();
-        $sourceCurrency      = $accountRepository->getAccountCurrency($source) ?? $defaultCurrency;
-        $destinationCurrency = $accountRepository->getAccountCurrency($destination) ?? $defaultCurrency;
+        $primaryCurrency     = Amount::getPrimaryCurrency();
+        $sourceCurrency      = $accountRepository->getAccountCurrency($source) ?? $primaryCurrency;
+        $destinationCurrency = $accountRepository->getAccountCurrency($destination) ?? $primaryCurrency;
         // if both accounts have the same currency, continue.
         if ($sourceCurrency->code === $destinationCurrency->code) {
             Log::debug('Both accounts have the same currency, continue.');
@@ -254,7 +255,7 @@ trait TransactionValidation
             // wrong currency information is present
             $foreignCurrencyCode = $transaction['foreign_currency_code'] ?? false;
             $foreignCurrencyId   = (int) ($transaction['foreign_currency_id'] ?? 0);
-            Log::debug(sprintf('Foreign currency code seems to be #%d "%s"', $foreignCurrencyId, $foreignCurrencyCode), $transaction);
+            Log::debug(sprintf('[a] Foreign currency code seems to be #%d "%s"', $foreignCurrencyId, $foreignCurrencyCode), $transaction);
             if ($foreignCurrencyCode !== $destinationCurrency->code && $foreignCurrencyId !== $destinationCurrency->id) {
                 $validator->errors()->add(sprintf('transactions.%d.foreign_currency_code', $index), (string) trans('validation.require_foreign_src'));
 
@@ -281,7 +282,7 @@ trait TransactionValidation
             // wrong currency information is present
             $foreignCurrencyCode = $transaction['foreign_currency_code'] ?? false;
             $foreignCurrencyId   = (int) ($transaction['foreign_currency_id'] ?? 0);
-            Log::debug(sprintf('Foreign currency code seems to be #%d "%s"', $foreignCurrencyId, $foreignCurrencyCode), $transaction);
+            Log::debug(sprintf('[b] Foreign currency code seems to be #%d "%s"', $foreignCurrencyId, $foreignCurrencyCode), $transaction);
             if ($foreignCurrencyCode !== $destinationCurrency->code && $foreignCurrencyId !== $destinationCurrency->id) {
                 Log::debug(sprintf('No match on code, "%s" vs "%s"', $foreignCurrencyCode, $destinationCurrency->code));
                 Log::debug(sprintf('No match on ID, #%d vs #%d', $foreignCurrencyId, $destinationCurrency->id));
@@ -296,17 +297,14 @@ trait TransactionValidation
             return true;
         }
 
-        return (bool) $this->isAsset($account);
+        return $this->isAsset($account);
     }
 
     private function isLiability(Account $account): bool
     {
         $type = $account->accountType->type;
-        if (in_array($type, config('firefly.valid_liabilities'), true)) {
-            return true;
-        }
 
-        return false;
+        return in_array($type, config('firefly.valid_liabilities'), true);
     }
 
     private function isAsset(Account $account): bool
@@ -327,11 +325,8 @@ trait TransactionValidation
         if ('' === $transaction['foreign_amount']) {
             return false;
         }
-        if (0 === bccomp('0', (string) $transaction['foreign_amount'])) {
-            return false;
-        }
 
-        return true;
+        return 0 !== bccomp('0', (string) $transaction['foreign_amount']);
     }
 
     /**
@@ -758,12 +753,9 @@ trait TransactionValidation
             // source ID's are equal, return void.
             return true;
         }
-        if ($this->arrayEqual($comparison['source_name'])) {
-            // source names are equal, return void.
-            return true;
-        }
 
-        return false;
+        // source names are equal, return void.
+        return (bool) $this->arrayEqual($comparison['source_name']);
     }
 
     private function arrayEqual(array $array): bool
@@ -777,12 +769,9 @@ trait TransactionValidation
             // destination ID's are equal, return void.
             return true;
         }
-        if ($this->arrayEqual($comparison['destination_name'])) {
-            // destination names are equal, return void.
-            return true;
-        }
 
-        return false;
+        // destination names are equal, return void.
+        return (bool) $this->arrayEqual($comparison['destination_name']);
     }
 
     private function compareAccountDataTransfer(array $comparison): bool
@@ -799,11 +788,8 @@ trait TransactionValidation
             // destination ID's are equal, return void.
             return true;
         }
-        if ($this->arrayEqual($comparison['destination_name'])) {
-            // destination names are equal, return void.
-            return true;
-        }
 
-        return false;
+        // destination names are equal, return void.
+        return (bool) $this->arrayEqual($comparison['destination_name']);
     }
 }

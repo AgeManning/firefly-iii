@@ -25,7 +25,6 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Models\Transaction;
 
 use FireflyIII\Api\V1\Controllers\Controller;
-use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
@@ -52,8 +51,6 @@ class ShowController extends Controller
      * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/transactions/listTransaction
      *
      * Show all transactions.
-     *
-     * @throws FireflyException
      */
     public function index(Request $request): JsonResponse
     {
@@ -146,6 +143,7 @@ class ShowController extends Controller
         $enrichment    = new TransactionGroupEnrichment();
         $enrichment->setUser($admin);
         $selectedGroup = $enrichment->enrichSingle($selectedGroup);
+
 
         /** @var TransactionGroupTransformer $transformer */
         $transformer   = app(TransactionGroupTransformer::class);

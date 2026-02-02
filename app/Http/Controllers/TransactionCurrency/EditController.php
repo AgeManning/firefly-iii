@@ -24,6 +24,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\TransactionCurrency;
 
+use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\CurrencyFormRequest;
 use FireflyIII\Models\TransactionCurrency;
@@ -66,7 +68,7 @@ class EditController extends Controller
      *
      * @return Factory|Redirector|RedirectResponse|View
      */
-    public function edit(Request $request, TransactionCurrency $currency)
+    public function edit(Request $request, TransactionCurrency $currency): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
         /** @var User $user */
         $user             = auth()->user();
@@ -100,15 +102,15 @@ class EditController extends Controller
         }
         $request->session()->forget('currencies.edit.fromUpdate');
 
-        return view('currencies.edit', compact('currency', 'subTitle', 'subTitleIcon'));
+        return view('currencies.edit', ['currency' => $currency, 'subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon]);
     }
 
     /**
      * Updates a currency.
      *
-     * @return Redirector|RedirectResponse
+     * @throws FireflyException
      */
-    public function update(CurrencyFormRequest $request, TransactionCurrency $currency)
+    public function update(CurrencyFormRequest $request, TransactionCurrency $currency): Redirector|RedirectResponse
     {
         /** @var User $user */
         $user     = auth()->user();
@@ -127,7 +129,7 @@ class EditController extends Controller
         $currency = $this->repository->update($currency, $data);
         Log::channel('audit')->info('Updated (POST) currency.', $data);
         $request->session()->flash('success', (string) trans('firefly.updated_currency', ['name' => $currency->name]));
-        app('preferences')->mark();
+        Preferences::mark();
 
         if (1 === (int) $request->get('return_to_edit')) {
             $request->session()->put('currencies.edit.fromUpdate', true);

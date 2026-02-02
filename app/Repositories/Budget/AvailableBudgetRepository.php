@@ -24,8 +24,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Repositories\Budget;
 
-use Deprecated;
 use Carbon\Carbon;
+use Deprecated;
 use FireflyIII\Models\AvailableBudget;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Support\Facades\Amount;
@@ -53,7 +53,7 @@ class AvailableBudgetRepository implements AvailableBudgetRepositoryInterface, U
             $end          = $availableBudget->end_date->format('Y-m-d');
             $key          = sprintf('%s-%s-%s', $availableBudget->transaction_currency_id, $start, $end);
             if (array_key_exists($key, $exists)) {
-                app('log')->debug(sprintf('Found duplicate AB: %s %s, %s-%s. Has been deleted', $availableBudget->transaction_currency_id, $availableBudget->amount, $start, $end));
+                Log::debug(sprintf('Found duplicate AB: %s %s, %s-%s. Has been deleted', $availableBudget->transaction_currency_id, $availableBudget->amount, $start, $end));
                 $availableBudget->delete();
             }
             $exists[$key] = true;
@@ -113,6 +113,7 @@ class AvailableBudgetRepository implements AvailableBudgetRepositoryInterface, U
         ;
     }
 
+    #[Deprecated]
     public function getAvailableBudget(TransactionCurrency $currency, Carbon $start, Carbon $end): string
     {
         $amount          = '0';
@@ -141,14 +142,14 @@ class AvailableBudgetRepository implements AvailableBudgetRepositoryInterface, U
 
         Log::debug(sprintf('Found %d available budgets (already converted)', $availableBudgets->count()));
 
-        // use native amount if necessary?
-        $convertToNative  = Amount::convertToNative($this->user);
-        $default          = Amount::getNativeCurrency();
+        // use primary amount if necessary?
+        $convertToPrimary = Amount::convertToPrimary($this->user);
+        $primary          = Amount::getPrimaryCurrency();
 
         /** @var AvailableBudget $availableBudget */
         foreach ($availableBudgets as $availableBudget) {
-            $currencyId          = $convertToNative && $availableBudget->transaction_currency_id !== $default->id ? $default->id : $availableBudget->transaction_currency_id;
-            $field               = $convertToNative && $availableBudget->transaction_currency_id !== $default->id ? 'native_amount' : 'amount';
+            $currencyId          = $convertToPrimary && $availableBudget->transaction_currency_id !== $primary->id ? $primary->id : $availableBudget->transaction_currency_id;
+            $field               = $convertToPrimary && $availableBudget->transaction_currency_id !== $primary->id ? 'native_amount' : 'amount';
             $return[$currencyId] ??= '0';
             $amount              = '' === (string) $availableBudget->{$field} ? '0' : (string) $availableBudget->{$field};
             $return[$currencyId] = bcadd($return[$currencyId], $amount);
@@ -209,7 +210,7 @@ class AvailableBudgetRepository implements AvailableBudgetRepositoryInterface, U
     #[Deprecated]
     public function setAvailableBudget(TransactionCurrency $currency, Carbon $start, Carbon $end, string $amount): AvailableBudget
     {
-        /** @var null|AvailableBudget */
+        /** @var null|AvailableBudget $availableBudget */
         $availableBudget         = $this->user->availableBudgets()
             ->where('transaction_currency_id', $currency->id)
             ->where('start_date', $start->format('Y-m-d'))

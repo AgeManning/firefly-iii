@@ -27,6 +27,8 @@ namespace FireflyIII\Console\Commands\Upgrade;
 use FireflyIII\Console\Commands\ShowsFriendlyMessages;
 use FireflyIII\Models\BudgetLimit;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 class UpgradesBudgetLimitPeriods extends Command
 {
@@ -57,7 +59,7 @@ class UpgradesBudgetLimitPeriods extends Command
 
     private function isExecuted(): bool
     {
-        $configVar = app('fireflyconfig')->get(self::CONFIG_NAME, false);
+        $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
 
         return (bool) $configVar->data;
     }
@@ -84,7 +86,7 @@ class UpgradesBudgetLimitPeriods extends Command
                 $limit->end_date->format('Y-m-d')
             );
             $this->friendlyWarning($message);
-            app('log')->warning($message);
+            Log::warning($message);
 
             return;
         }
@@ -98,7 +100,7 @@ class UpgradesBudgetLimitPeriods extends Command
             $limit->end_date->format('Y-m-d'),
             $period
         );
-        app('log')->debug($msg);
+        Log::debug($msg);
     }
 
     private function getLimitPeriod(BudgetLimit $limit): ?string
@@ -151,6 +153,6 @@ class UpgradesBudgetLimitPeriods extends Command
 
     private function markAsExecuted(): void
     {
-        app('fireflyconfig')->set(self::CONFIG_NAME, true);
+        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 }

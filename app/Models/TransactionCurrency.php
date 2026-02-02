@@ -31,6 +31,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use FireflyIII\Support\Facades\Amount;
 
 class TransactionCurrency extends Model
 {
@@ -50,7 +51,7 @@ class TransactionCurrency extends Model
     public static function routeBinder(string $value): self
     {
         if (auth()->check()) {
-            $currencyId = (int) $value;
+            $currencyId = (int)$value;
             $currency   = self::find($currencyId);
             if (null !== $currency) {
                 $currency->refreshForUser(auth()->user());
@@ -65,7 +66,7 @@ class TransactionCurrency extends Model
     public function refreshForUser(User $user): void
     {
         $current                = $user->userGroup->currencies()->where('transaction_currencies.id', $this->id)->first();
-        $native                 = app('amount')->getNativeCurrencyByUserGroup($user->userGroup);
+        $native                 = Amount::getPrimaryCurrencyByUserGroup($user->userGroup);
         $this->userGroupNative  = $native->id === $this->id;
         $this->userGroupEnabled = null !== $current;
     }
@@ -101,13 +102,6 @@ class TransactionCurrency extends Model
         return $this->belongsToMany(User::class)->withTimestamps()->withPivot('user_default');
     }
 
-    protected function decimalPlaces(): Attribute
-    {
-        return Attribute::make(
-            get: static fn ($value) => (int) $value,
-        );
-    }
-
     protected function casts(): array
     {
         return [
@@ -117,5 +111,12 @@ class TransactionCurrency extends Model
             'decimal_places' => 'int',
             'enabled'        => 'bool',
         ];
+    }
+
+    protected function decimalPlaces(): Attribute
+    {
+        return Attribute::make(
+            get: static fn ($value): int => (int)$value,
+        );
     }
 }

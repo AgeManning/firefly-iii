@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Jobs;
 
+use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Events\RequestedReportOnJournals;
 use FireflyIII\Events\StoredTransactionGroup;
@@ -132,7 +133,7 @@ class CreateRecurringTransactions implements ShouldQueue
             $this->groupRepository->setUser($recurrence->user);
 
             // clear cache for user
-            app('preferences')->setForUser($recurrence->user, 'lastActivity', microtime());
+            Preferences::setForUser($recurrence->user, 'lastActivity', microtime());
 
             Log::debug(sprintf('Now at recurrence #%d of user #%d', $recurrence->id, $recurrence->user_id));
             $createdReps                  = $this->handleRepetitions($recurrence);
@@ -150,13 +151,13 @@ class CreateRecurringTransactions implements ShouldQueue
         Log::debug('Done with handle()');
 
         // clear cache:
-        app('preferences')->mark();
+        Preferences::mark();
     }
 
     private function filterRecurrences(Collection $recurrences): Collection
     {
         return $recurrences->filter(
-            fn (Recurrence $recurrence) => $this->validRecurrence($recurrence)
+            $this->validRecurrence(...)
         );
     }
 
@@ -355,7 +356,7 @@ class CreateRecurringTransactions implements ShouldQueue
             return null;
         }
 
-        if ($journalCount > 0 && true === $this->force) {
+        if ($journalCount > 0 && $this->force) {
             Log::warning(sprintf('Already created %d groups for date %s but FORCED to continue.', $journalCount, $date->format('Y-m-d')));
         }
 
@@ -411,9 +412,11 @@ class CreateRecurringTransactions implements ShouldQueue
         $count        = $this->repository->getJournalCount($recurrence) + 1;
         $transactions = $recurrence->recurrenceTransactions()->get();
 
-        /** @var RecurrenceTransaction $first */
-        $first        = $transactions->first();
+        $transactions->first();
         $return       = [];
+
+
+
 
         /** @var RecurrenceTransaction $transaction */
         foreach ($transactions as $index => $transaction) {

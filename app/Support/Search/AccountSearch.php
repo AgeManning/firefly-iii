@@ -36,29 +36,19 @@ use function Safe\json_encode;
  */
 class AccountSearch implements GenericSearchInterface
 {
-    /** @var string */
     public const string SEARCH_ALL    = 'all';
 
-    /** @var string */
     public const string SEARCH_IBAN   = 'iban';
 
-    /** @var string */
     public const string SEARCH_ID     = 'id';
 
-    /** @var string */
     public const string SEARCH_NAME   = 'name';
 
-    /** @var string */
     public const string SEARCH_NUMBER = 'number';
     private string $field;
     private string $query;
-    private array  $types;
+    private array  $types             = [];
     private User   $user;
-
-    public function __construct()
-    {
-        $this->types = [];
-    }
 
     public function search(): Collection
     {
@@ -92,7 +82,7 @@ class AccountSearch implements GenericSearchInterface
                 break;
 
             case self::SEARCH_ID:
-                $searchQuery->where('accounts.id', '=', (int) $originalQuery);
+                $searchQuery->where('accounts.id', '=', (int)$originalQuery);
 
                 break;
 
@@ -137,7 +127,7 @@ class AccountSearch implements GenericSearchInterface
         $this->types = $types;
     }
 
-    public function setUser(null|Authenticatable|User $user): void
+    public function setUser(Authenticatable|User|null $user): void
     {
         if ($user instanceof User) {
             $this->user = $user;

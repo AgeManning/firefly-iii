@@ -25,11 +25,9 @@ declare(strict_types=1);
 namespace Tests\integration\Api\Autocomplete;
 
 use FireflyIII\Models\Budget;
-use FireflyIII\Models\UserGroup;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\integration\TestCase;
 use FireflyIII\User;
-use Override;
 
 /**
  * Class BudgetControllerTest
@@ -44,21 +42,6 @@ final class BudgetControllerTest extends TestCase
      * @covers \FireflyIII\Api\V1\Controllers\Autocomplete\BudgetController
      */
     use RefreshDatabase;
-
-    #[Override]
-    protected function createAuthenticatedUser(): User
-    {
-        $userGroup           = UserGroup::create(['title' => 'Test Group']);
-
-        $user                = User::create([
-            'email'         => 'test@email.com',
-            'password'      => 'password',
-        ]);
-        $user->user_group_id = $userGroup->id;
-        $user->save();
-
-        return $user;
-    }
 
     private function createTestBudgets(int $count, User $user): void
     {

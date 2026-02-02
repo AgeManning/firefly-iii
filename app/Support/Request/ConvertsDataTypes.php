@@ -129,12 +129,42 @@ trait ConvertsDataTypes
         // clear zalgo text (TODO also in API v2)
         $string = preg_replace('/(\pM{2})\pM+/u', '\1', $string);
 
-        return trim((string) $string);
+        return trim($string);
     }
 
     public function convertIban(string $field): string
     {
         return Steam::filterSpaces($this->convertString($field));
+    }
+
+    /**
+     * Return integer value.
+     */
+    public function convertInteger(string $field): int
+    {
+        return (int)$this->get($field);
+    }
+
+    public function convertSortParameters(string $field, string $class): array
+    {
+        // assume this all works, because the validator would have caught any errors.
+        $parameter      = (string)request()->query->get($field);
+        if ('' === $parameter) {
+            return [];
+        }
+        $parts          = explode(',', $parameter);
+        $sortParameters = [];
+        foreach ($parts as $part) {
+            $part             = trim($part);
+            $direction        = 'asc';
+            if ('-' === $part[0]) {
+                $part      = substr($part, 1);
+                $direction = 'desc';
+            }
+            $sortParameters[] = [$part, $direction];
+        }
+
+        return $sortParameters;
     }
 
     /**
@@ -147,7 +177,7 @@ trait ConvertsDataTypes
             return $default;
         }
 
-        return (string) $this->clearString((string) $entry);
+        return (string)$this->clearString((string)$entry);
     }
 
     /**
@@ -155,14 +185,6 @@ trait ConvertsDataTypes
      * trait, OR a stub needs to be added by any other class that uses this train.
      */
     abstract public function get(string $key, mixed $default = null): mixed;
-
-    /**
-     * Return integer value.
-     */
-    public function convertInteger(string $field): int
-    {
-        return (int) $this->get($field);
-    }
 
     /**
      * TODO duplicate, see SelectTransactionsRequest
@@ -186,7 +208,7 @@ trait ConvertsDataTypes
         $collection = new Collection();
         if (is_array($set)) {
             foreach ($set as $accountId) {
-                $account = $repository->find((int) $accountId);
+                $account = $repository->find((int)$accountId);
                 if (null !== $account) {
                     $collection->push($account);
                 }
@@ -197,11 +219,21 @@ trait ConvertsDataTypes
     }
 
     /**
+     * Abstract method that always exists in the Request classes that use this
+     * trait, OR a stub needs to be added by any other class that uses this train.
+     *
+     * @param mixed $key
+     *
+     * @return mixed
+     */
+    abstract public function has($key);
+
+    /**
      * Return string value with newlines.
      */
     public function stringWithNewlines(string $field): string
     {
-        return (string) $this->clearStringKeepNewlines((string) ($this->get($field) ?? ''));
+        return (string)$this->clearStringKeepNewlines((string)($this->get($field) ?? ''));
     }
 
     /**
@@ -236,26 +268,29 @@ trait ConvertsDataTypes
         if ('yes' === $value) {
             return true;
         }
-        if ('1' === $value) {
+        if ('on' === $value) {
+            return true;
+        }
+        if ('y' === $value) {
             return true;
         }
 
-        return false;
+        return '1' === $value;
     }
 
     protected function convertDateTime(?string $string): ?Carbon
     {
-        $value = $this->get((string) $string);
+        $value = $this->get((string)$string);
         if (null === $value) {
             return null;
         }
         if ('' === $value) {
             return null;
         }
-        if (10 === strlen((string) $value)) {
+        if (10 === strlen((string)$value)) {
             // probably a date format.
             try {
-                $carbon = Carbon::createFromFormat('Y-m-d', $value);
+                $carbon = Carbon::createFromFormat('Y-m-d', $value, config('app.timezone'));
             } catch (InvalidDateException $e) { // @phpstan-ignore-line
                 Log::error(sprintf('[1] "%s" is not a valid date: %s', $value, $e->getMessage()));
 
@@ -277,6 +312,7 @@ trait ConvertsDataTypes
         // is an atom string, I hope?
         try {
             $carbon = Carbon::parse($value);
+            $carbon->setTimezone(config('app.timezone'));
         } catch (InvalidDateException $e) { // @phpstan-ignore-line
             Log::error(sprintf('[3] "%s" is not a valid date or time: %s', $value, $e->getMessage()));
 
@@ -300,7 +336,7 @@ trait ConvertsDataTypes
             return null;
         }
 
-        return (float) $res;
+        return (float)$res;
     }
 
     protected function dateFromValue(?string $string): ?Carbon
@@ -338,7 +374,7 @@ trait ConvertsDataTypes
             return null;
         }
 
-        return (float) $string;
+        return (float)$string;
     }
 
     /**
@@ -359,81 +395,25 @@ trait ConvertsDataTypes
     }
 
     /**
-     * Abstract method that always exists in the Request classes that use this
-     * trait, OR a stub needs to be added by any other class that uses this train.
-     *
-     * @param mixed $key
-     *
-     * @return mixed
-     */
-    abstract public function has($key);
-
-    /**
      * Return date or NULL.
      */
     protected function getCarbonDate(string $field): ?Carbon
     {
-        $result = null;
+        $data = (string)$this->get($field);
+        Log::debug(sprintf('Date string is "%s"', $data));
 
-        Log::debug(sprintf('Date string is "%s"', (string) $this->get($field)));
+        if ('' === $data) {
+            return null;
+        }
 
         try {
-            $result = '' !== (string) $this->get($field) ? new Carbon((string) $this->get($field), config('app.timezone')) : null;
+            return new Carbon($data, config('app.timezone'));
         } catch (InvalidFormatException) {
             // @ignoreException
-            Log::debug(sprintf('Exception when parsing date "%s".', $this->get($field)));
-        }
-        if (!$result instanceof Carbon) {
-            Log::debug(sprintf('Exception when parsing date "%s".', $this->get($field)));
+            Log::debug(sprintf('Exception when parsing date "%s".', $data));
         }
 
-        return $result;
-    }
-
-    /**
-     * Return integer value, or NULL when it's not set.
-     */
-    protected function nullableInteger(string $field): ?int
-    {
-        if (false === $this->has($field)) {
-            return null;
-        }
-
-        $value = (string) $this->get($field);
-        if ('' === $value) {
-            return null;
-        }
-
-        return (int) $value;
-    }
-
-    protected function parseAccounts(mixed $array): array
-    {
-        if (!is_array($array)) {
-            return [];
-        }
-        $return = [];
-        foreach ($array as $entry) {
-            if (!is_array($entry)) {
-                continue;
-            }
-            $amount   = null;
-            if (array_key_exists('current_amount', $entry)) {
-                $amount = $this->clearString((string) ($entry['current_amount'] ?? '0'));
-                if (null === $entry['current_amount']) {
-                    $amount = null;
-                }
-            }
-            if (!array_key_exists('current_amount', $entry)) {
-                $amount = null;
-            }
-            $return[] = [
-                'account_id'     => $this->integerFromValue((string) ($entry['account_id'] ?? '0')),
-                'current_amount' => $amount,
-            ];
-        }
-
-        return $return;
+        return null;
     }
 
     /**
@@ -448,6 +428,52 @@ trait ConvertsDataTypes
             return null;
         }
 
-        return (int) $string;
+        return (int)$string;
+    }
+
+    /**
+     * Return integer value, or NULL when it's not set.
+     */
+    protected function nullableInteger(string $field): ?int
+    {
+        if (false === $this->has($field)) {
+            return null;
+        }
+
+        $value = (string)$this->get($field);
+        if ('' === $value) {
+            return null;
+        }
+
+        return (int)$value;
+    }
+
+    protected function parseAccounts(mixed $array): array
+    {
+        if (!is_array($array)) {
+            return [];
+        }
+        $return = [];
+        foreach ($array as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $amount   = null;
+            if (array_key_exists('current_amount', $entry)) {
+                $amount = $this->clearString((string)($entry['current_amount'] ?? '0'));
+                if (null === $entry['current_amount']) {
+                    $amount = null;
+                }
+            }
+            if (!array_key_exists('current_amount', $entry)) {
+                $amount = null;
+            }
+            $return[] = [
+                'account_id'     => $this->integerFromValue((string)($entry['account_id'] ?? '0')),
+                'current_amount' => $amount,
+            ];
+        }
+
+        return $return;
     }
 }

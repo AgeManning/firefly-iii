@@ -23,7 +23,10 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Admin;
 
+use FireflyIII\Support\Facades\Preferences;
+use Illuminate\Support\Facades\Log;
 use FireflyIII\Events\Admin\InvitationCreated;
+use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Middleware\IsDemoUser;
 use FireflyIII\Http\Requests\InviteUserFormRequest;
@@ -37,6 +40,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Redirector;
 use Illuminate\View\View;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 /**
  * Class UserController.
@@ -69,7 +75,7 @@ class UserController extends Controller
     /**
      * @return Application|Factory|Redirector|RedirectResponse|View
      */
-    public function delete(User $user)
+    public function delete(User $user): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
         if ($this->externalIdentity) {
             request()->session()->flash('error', trans('firefly.external_user_mgt_disabled'));
@@ -79,19 +85,19 @@ class UserController extends Controller
 
         $subTitle = (string) trans('firefly.delete_user', ['email' => $user->email]);
 
-        return view('settings.users.delete', compact('user', 'subTitle'));
+        return view('settings.users.delete', ['user' => $user, 'subTitle' => $subTitle]);
     }
 
     public function deleteInvite(InvitedUser $invitedUser): JsonResponse
     {
-        app('log')->debug('Will now delete invitation');
+        Log::debug('Will now delete invitation');
         if (true === $invitedUser->redeemed) {
-            app('log')->debug('Is already redeemed.');
+            Log::debug('Is already redeemed.');
             session()->flash('error', trans('firefly.invite_is_already_redeemed', ['address' => $invitedUser->email]));
 
             return response()->json(['success' => false]);
         }
-        app('log')->debug('Delete!');
+        Log::debug('Delete!');
         session()->flash('success', trans('firefly.invite_is_deleted', ['address' => $invitedUser->email]));
         $this->repository->deleteInvite($invitedUser);
 
@@ -100,10 +106,8 @@ class UserController extends Controller
 
     /**
      * Destroy a user.
-     *
-     * @return Redirector|RedirectResponse
      */
-    public function destroy(User $user)
+    public function destroy(User $user): Redirector|RedirectResponse
     {
         if ($this->externalIdentity) {
             request()->session()->flash('error', trans('firefly.external_user_mgt_disabled'));
@@ -121,7 +125,7 @@ class UserController extends Controller
      *
      * @return Factory|View
      */
-    public function edit(User $user)
+    public function edit(User $user): Factory|\Illuminate\Contracts\View\View
     {
         $canEditDetails = true;
         if ($this->externalIdentity) {
@@ -144,20 +148,24 @@ class UserController extends Controller
             'email_changed' => (string) trans('firefly.block_code_email_changed'),
         ];
 
-        return view('settings.users.edit', compact('user', 'canEditDetails', 'subTitle', 'subTitleIcon', 'codes', 'currentUser', 'isAdmin'));
+        return view('settings.users.edit', ['user' => $user, 'canEditDetails' => $canEditDetails, 'subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'codes' => $codes, 'currentUser' => $currentUser, 'isAdmin' => $isAdmin]);
     }
 
     /**
      * Show index of user manager.
      *
      * @return Factory|View
+     *
+     * @throws ContainerExceptionInterface
+     * @throws FireflyException
+     * @throws NotFoundExceptionInterface
      */
-    public function index()
+    public function index(): Factory|\Illuminate\Contracts\View\View
     {
         $subTitle       = (string) trans('firefly.user_administration');
         $subTitleIcon   = 'fa-users';
         $users          = $this->repository->all();
-        $singleUserMode = (bool) app('fireflyconfig')->get('single_user_mode', config('firefly.configuration.single_user_mode'))->data;
+        $singleUserMode = (bool) FireflyConfig::get('single_user_mode', config('firefly.configuration.single_user_mode'))->data;
         $allowInvites   = false;
         if (!$this->externalIdentity && $singleUserMode) {
             // also registration enabled.
@@ -174,7 +182,7 @@ class UserController extends Controller
             }
         );
 
-        return view('settings.users.index', compact('subTitle', 'subTitleIcon', 'users', 'allowInvites', 'invitedUsers'));
+        return view('settings.users.index', ['subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'users' => $users, 'allowInvites' => $allowInvites, 'invitedUsers' => $invitedUsers]);
     }
 
     public function invite(InviteUserFormRequest $request): RedirectResponse
@@ -194,7 +202,7 @@ class UserController extends Controller
      *
      * @return Factory|View
      */
-    public function show(User $user)
+    public function show(User $user): Factory|\Illuminate\Contracts\View\View
     {
         $title         = (string) trans('firefly.system_settings');
         $mainTitleIcon = 'fa-hand-spock-o';
@@ -204,14 +212,7 @@ class UserController extends Controller
 
         return view(
             'settings.users.show',
-            compact(
-                'title',
-                'mainTitleIcon',
-                'subTitle',
-                'subTitleIcon',
-                'information',
-                'user'
-            )
+            ['title' => $title, 'mainTitleIcon' => $mainTitleIcon, 'subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'information' => $information, 'user' => $user]
         );
     }
 
@@ -222,7 +223,7 @@ class UserController extends Controller
      */
     public function update(UserFormRequest $request, User $user)
     {
-        app('log')->debug('Actually here');
+        Log::debug('Actually here');
         $data     = $request->getUserData();
 
         // var_dump($data);
@@ -243,7 +244,7 @@ class UserController extends Controller
         $this->repository->updateEmail($user, $data['email']);
 
         session()->flash('success', (string) trans('firefly.updated_user', ['email' => $user->email]));
-        app('preferences')->mark();
+        Preferences::mark();
         $redirect = redirect($this->getPreviousUrl('users.edit.url'));
         if (1 === (int) $request->get('return_to_edit')) {
             session()->put('users.edit.fromUpdate', true);

@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers;
 
+use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Exceptions\FireflyException;
@@ -30,9 +31,13 @@ use FireflyIII\Models\Account;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\Currency\CurrencyRepositoryInterface;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Controllers\GetConfigurationData;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
+use FireflyIII\Support\Facades\Amount;
 
 /**
  * Class JavascriptController.
@@ -55,7 +60,7 @@ class JavascriptController extends Controller
         foreach ($accounts as $account) {
             $accountId                    = $account->id;
             $currency                     = (int) $repository->getMetaValue($account, 'currency_id');
-            $currency                     = 0 === $currency ? $this->defaultCurrency->id : $currency;
+            $currency                     = 0 === $currency ? $this->primaryCurrency->id : $currency;
             $entry                        = ['preferredCurrency' => $currency, 'name' => $account->name];
             $data['accounts'][$accountId] = $entry;
         }
@@ -91,18 +96,20 @@ class JavascriptController extends Controller
      * Show some common variables to be used in scripts.
      *
      * @throws FireflyException
-     *                                              */
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
+     */
     public function variables(Request $request, AccountRepositoryInterface $repository): Response
     {
         $account                   = $repository->find((int) $request->get('account'));
-        $currency                  = $this->defaultCurrency;
+        $currency                  = $this->primaryCurrency;
         if ($account instanceof Account) {
-            $currency = $repository->getAccountCurrency($account) ?? $this->defaultCurrency;
+            $currency = $repository->getAccountCurrency($account) ?? $this->primaryCurrency;
         }
-        $locale                    = app('steam')->getLocale();
-        $accounting                = app('amount')->getJsConfig();
+        $locale                    = Steam::getLocale();
+        $accounting                = Amount::getJsConfig();
         $accounting['frac_digits'] = $currency->decimal_places;
-        $pref                      = app('preferences')->get('language', config('firefly.default_language', 'en_US'));
+        $pref                      = Preferences::get('language', config('firefly.default_language', 'en_US'));
         $lang                      = $pref->data;
         $dateRange                 = $this->getDateRangeConfig();
         $uid                       = substr(hash('sha256', sprintf('%s-%s-%s', (string) config('app.key'), auth()->user()->id, auth()->user()->email)), 0, 12);
@@ -115,6 +122,7 @@ class JavascriptController extends Controller
             'currencyCode'         => $currency->code,
             'currencySymbol'       => $currency->symbol,
             'accountingLocaleInfo' => $accounting,
+            'anonymous'            => var_export(Steam::anonymous(), true),
             'language'             => $lang,
             'dateRangeTitle'       => $dateRange['title'],
             'locale'               => $locale,

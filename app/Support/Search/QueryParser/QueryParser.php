@@ -26,6 +26,7 @@ declare(strict_types=1);
 namespace FireflyIII\Support\Search\QueryParser;
 
 use Illuminate\Support\Facades\Log;
+use SensitiveParameter;
 
 /**
  * Single-pass parser that processes query strings into structured nodes.
@@ -46,35 +47,29 @@ class QueryParser implements QueryParserInterface
         return $this->buildNodeGroup(false);
     }
 
-    private function buildNodeGroup(bool $isSubquery, bool $prohibited = false): NodeGroup
-    {
-        $nodes      = [];
-        $nodeResult = $this->buildNextNode($isSubquery);
-
-        while ($nodeResult->node instanceof Node) {
-            $nodes[]    = $nodeResult->node;
-            if ($nodeResult->isSubqueryEnd) {
-                break;
-            }
-            $nodeResult = $this->buildNextNode($isSubquery);
-        }
-
-        return new NodeGroup($nodes, $prohibited);
-    }
-
     private function buildNextNode(bool $isSubquery): NodeResult
     {
         $tokenUnderConstruction = '';
         $inQuotes               = false;
         $fieldName              = '';
         $prohibited             = false;
-
-        while ($this->position < strlen($this->query)) {
-            $char = $this->query[$this->position];
+        $chrArray               = preg_split('//u', $this->query, -1, PREG_SPLIT_NO_EMPTY);
+        $count                  = count($chrArray);
+        while ($this->position < $count) {
+            $char     = $chrArray[$this->position];
+            $nextChar = $chrArray[$this->position + 1] ?? '';
             // Log::debug(sprintf('Char #%d: %s', $this->position, $char));
 
             // If we're in a quoted string, we treat all characters except another quote as ordinary characters
             if ($inQuotes) {
+                if ('\\' === $char && '"' === $nextChar) {
+                    // Log::debug('BACKSLASH!');
+                    // escaped quote, pretend it's a normal char and continue two places (skipping the actual character).
+                    $tokenUnderConstruction .= '\\'.$nextChar;
+                    $this->position         += 2;
+
+                    continue;
+                }
                 if ('"' !== $char) {
                     $tokenUnderConstruction .= $char;
                     ++$this->position;
@@ -83,11 +78,9 @@ class QueryParser implements QueryParserInterface
                 }
                 // char is "
                 ++$this->position;
+                Log::debug(sprintf('Constructed token: %s', $tokenUnderConstruction));
 
-                return new NodeResult(
-                    $this->createNode($tokenUnderConstruction, $fieldName, $prohibited),
-                    false
-                );
+                return new NodeResult($this->createNode($tokenUnderConstruction, $fieldName, $prohibited), false);
             }
 
             switch ($char) {
@@ -194,12 +187,32 @@ class QueryParser implements QueryParserInterface
         return new NodeResult($finalNode, true);
     }
 
-    private function createNode(string $token, string $fieldName, bool $prohibited): Node
+    private function buildNodeGroup(bool $isSubquery, bool $prohibited = false): NodeGroup
+    {
+        $nodes      = [];
+        $nodeResult = $this->buildNextNode($isSubquery);
+
+        while ($nodeResult->node instanceof Node) {
+            $nodes[]    = $nodeResult->node;
+            if ($nodeResult->isSubqueryEnd) {
+                break;
+            }
+            $nodeResult = $this->buildNextNode($isSubquery);
+        }
+
+        return new NodeGroup($nodes, $prohibited);
+    }
+
+    private function createNode(#[SensitiveParameter] string $token, string $fieldName, bool $prohibited): Node
     {
         if ('' !== $fieldName) {
-            Log::debug(sprintf('Create FieldNode %s:%s (%s)', $fieldName, $token, var_export($prohibited, true)));
+            // OK dus hoe trim je \" correct?
             $token = ltrim($token, ':"');
-            $token = rtrim($token, '"');
+            if (!str_ends_with($token, '\"')) {
+                $token = rtrim($token, '"');
+            }
+            $token = str_replace('\"', '"', $token);
+            Log::debug(sprintf('Create FieldNode %s:%s (%s)', $fieldName, $token, var_export($prohibited, true)));
 
             return new FieldNode(trim($fieldName), trim($token), $prohibited);
         }

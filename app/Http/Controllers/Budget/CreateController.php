@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Budget;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Enums\AutoBudgetType;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
@@ -67,7 +68,7 @@ class CreateController extends Controller
      *
      * @return Factory|View
      */
-    public function create(Request $request)
+    public function create(Request $request): Factory|\Illuminate\Contracts\View\View
     {
         $hasOldInput       = null !== $request->old('_token');
 
@@ -89,7 +90,7 @@ class CreateController extends Controller
 
         $preFilled         = [
             'auto_budget_period'      => $hasOldInput ? (bool) $request->old('auto_budget_period') : 'monthly',
-            'auto_budget_currency_id' => $hasOldInput ? (int) $request->old('auto_budget_currency_id') : $this->defaultCurrency->id,
+            'auto_budget_currency_id' => $hasOldInput ? (int) $request->old('auto_budget_currency_id') : $this->primaryCurrency->id,
         ];
 
         $request->session()->flash('preFilled', $preFilled);
@@ -101,7 +102,7 @@ class CreateController extends Controller
         $request->session()->forget('budgets.create.fromStore');
         $subTitle          = (string) trans('firefly.create_new_budget');
 
-        return view('budgets.create', compact('subTitle', 'autoBudgetTypes', 'autoBudgetPeriods'));
+        return view('budgets.create', ['subTitle' => $subTitle, 'autoBudgetTypes' => $autoBudgetTypes, 'autoBudgetPeriods' => $autoBudgetPeriods]);
     }
 
     /**
@@ -116,7 +117,7 @@ class CreateController extends Controller
         $budget   = $this->repository->store($data);
         $this->repository->cleanupBudgets();
         $request->session()->flash('success', (string) trans('firefly.stored_new_budget', ['name' => $budget->name]));
-        app('preferences')->mark();
+        Preferences::mark();
 
         Log::channel('audit')->info('Stored new budget.', $data);
 

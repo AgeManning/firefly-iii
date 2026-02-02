@@ -26,6 +26,7 @@ $paths = [
     $current . '/../../config',
     $current . '/../../routes',
     $current . '/../../tests',
+    $current . '/../../resources/lang/en_US',
 ];
 
 $finder = PhpCsFixer\Finder::create()
@@ -33,13 +34,15 @@ $finder = PhpCsFixer\Finder::create()
 
 
 $config = (new PhpCsFixer\Config())
+        // ->setUnsupportedPhpVersionAllowed(true) // use this when PHP 8.5 comes out.
         ->setParallelConfig(PhpCsFixer\Runner\Parallel\ParallelConfigFactory::detect())
         ;
 return $config->setRules(
 
     [
         // rule sets
-        '@PHP83Migration'               => true,
+        '@PHP8x3Migration'               => true,
+        '@PHP8x4Migration'               => true,
         '@PhpCsFixer'                   => true,
         '@PhpCsFixer:risky'             => true,
         '@PSR12'                        => true,

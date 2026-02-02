@@ -23,7 +23,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Repositories\LinkType;
 
-use FireflyIII\Events\DestroyedTransactionLink;
+use Illuminate\Support\Facades\Log;
+use Exception;
 use FireflyIII\Models\LinkType;
 use FireflyIII\Models\Note;
 use FireflyIII\Models\TransactionJournal;
@@ -31,7 +32,6 @@ use FireflyIII\Models\TransactionJournalLink;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupInterface;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupTrait;
 use Illuminate\Support\Collection;
-use Exception;
 
 /**
  * Class LinkTypeRepository.
@@ -57,13 +57,13 @@ class LinkTypeRepository implements LinkTypeRepositoryInterface, UserGroupInterf
 
     public function update(LinkType $linkType, array $data): LinkType
     {
-        if (array_key_exists('name', $data) && '' !== (string) $data['name']) {
+        if (array_key_exists('name', $data) && '' !== (string)$data['name']) {
             $linkType->name = $data['name'];
         }
-        if (array_key_exists('inward', $data) && '' !== (string) $data['inward']) {
+        if (array_key_exists('inward', $data) && '' !== (string)$data['inward']) {
             $linkType->inward = $data['inward'];
         }
-        if (array_key_exists('outward', $data) && '' !== (string) $data['outward']) {
+        if (array_key_exists('outward', $data) && '' !== (string)$data['outward']) {
             $linkType->outward = $data['outward'];
         }
         $linkType->save();
@@ -76,7 +76,6 @@ class LinkTypeRepository implements LinkTypeRepositoryInterface, UserGroupInterf
      */
     public function destroyLink(TransactionJournalLink $link): bool
     {
-        event(new DestroyedTransactionLink($link));
         $link->delete();
 
         return true;
@@ -87,7 +86,7 @@ class LinkTypeRepository implements LinkTypeRepositoryInterface, UserGroupInterf
      */
     public function findLink(TransactionJournal $one, TransactionJournal $two): bool
     {
-        app('log')->debug(sprintf('Now in findLink(%d, %d)', $one->id, $two->id));
+        Log::debug(sprintf('Now in findLink(%d, %d)', $one->id, $two->id));
         $count         = TransactionJournalLink::whereDestinationId($one->id)->whereSourceId($two->id)->count();
         $opposingCount = TransactionJournalLink::whereDestinationId($two->id)->whereSourceId($one->id)->count();
 
@@ -152,7 +151,7 @@ class LinkTypeRepository implements LinkTypeRepositoryInterface, UserGroupInterf
         $merged  = $outward->merge($inward);
 
         return $merged->filter(
-            static fn (TransactionJournalLink $link) => null !== $link->source && null !== $link->destination
+            static fn (TransactionJournalLink $link): bool => null !== $link->source && null !== $link->destination
         );
     }
 
@@ -175,7 +174,7 @@ class LinkTypeRepository implements LinkTypeRepositoryInterface, UserGroupInterf
      */
     public function storeLink(array $information, TransactionJournal $inward, TransactionJournal $outward): ?TransactionJournalLink
     {
-        $linkType = $this->find((int) ($information['link_type_id'] ?? 0));
+        $linkType = $this->find((int)($information['link_type_id'] ?? 0));
 
         if (!$linkType instanceof LinkType) {
             $linkType = $this->findByName($information['link_type_name']);
@@ -194,20 +193,20 @@ class LinkTypeRepository implements LinkTypeRepositoryInterface, UserGroupInterf
         $link     = new TransactionJournalLink();
         $link->linkType()->associate($linkType);
         if ('inward' === $information['direction']) {
-            app('log')->debug(sprintf('Link type is inwards ("%s"), so %d is source and %d is destination.', $linkType->inward, $inward->id, $outward->id));
+            Log::debug(sprintf('Link type is inwards ("%s"), so %d is source and %d is destination.', $linkType->inward, $inward->id, $outward->id));
             $link->source()->associate($inward);
             $link->destination()->associate($outward);
         }
 
         if ('outward' === $information['direction']) {
-            app('log')->debug(sprintf('Link type is inwards ("%s"), so %d is source and %d is destination.', $linkType->outward, $outward->id, $inward->id));
+            Log::debug(sprintf('Link type is inwards ("%s"), so %d is source and %d is destination.', $linkType->outward, $outward->id, $inward->id));
             $link->source()->associate($outward);
             $link->destination()->associate($inward);
         }
         $link->save();
 
         // make note in noteable:
-        $this->setNoteText($link, (string) $information['notes']);
+        $this->setNoteText($link, (string)$information['notes']);
 
         return $link;
     }

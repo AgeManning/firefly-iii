@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\PiggyBank;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\PiggyBankUpdateRequest;
@@ -34,6 +35,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class EditController
@@ -76,7 +78,7 @@ class EditController extends Controller
      *
      * @return Factory|View
      */
-    public function edit(PiggyBank $piggyBank)
+    public function edit(PiggyBank $piggyBank): Factory|\Illuminate\Contracts\View\View
     {
         $subTitle     = (string) trans('firefly.update_piggy_title', ['name' => $piggyBank->name]);
         $subTitleIcon = 'fa-pencil';
@@ -88,7 +90,7 @@ class EditController extends Controller
         $preFilled    = [
             'name'                    => $piggyBank->name,
             'transaction_currency_id' => (int) $piggyBank->transaction_currency_id,
-            'target_amount'           => app('steam')->bcround($piggyBank->target_amount, $piggyBank->transactionCurrency->decimal_places),
+            'target_amount'           => Steam::bcround($piggyBank->target_amount, $piggyBank->transactionCurrency->decimal_places),
             'target_date'             => $targetDate,
             'start_date'              => $startDate,
             'accounts'                => [],
@@ -109,21 +111,19 @@ class EditController extends Controller
         }
         session()->forget('piggy-banks.edit.fromUpdate');
 
-        return view('piggy-banks.edit', compact('subTitle', 'subTitleIcon', 'piggyBank', 'preFilled'));
+        return view('piggy-banks.edit', ['subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'piggyBank' => $piggyBank, 'preFilled' => $preFilled]);
     }
 
     /**
      * Update a piggy bank.
-     *
-     * @return Redirector|RedirectResponse
      */
-    public function update(PiggyBankUpdateRequest $request, PiggyBank $piggyBank)
+    public function update(PiggyBankUpdateRequest $request, PiggyBank $piggyBank): Redirector|RedirectResponse
     {
         $data      = $request->getPiggyBankData();
         $piggyBank = $this->piggyRepos->update($piggyBank, $data);
 
         session()->flash('success', (string) trans('firefly.updated_piggy_bank', ['name' => $piggyBank->name]));
-        app('preferences')->mark();
+        Preferences::mark();
 
         // store new attachment(s):
         /** @var null|array $files */

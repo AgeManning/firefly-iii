@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\PiggyBank;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
 use FireflyIII\Http\Controllers\Controller;
@@ -69,12 +70,15 @@ class CreateController extends Controller
      *
      * @return Factory|View
      */
-    public function create(Request $request)
+    public function create(Request $request): Factory|\Illuminate\Contracts\View\View
     {
         $subTitle     = (string) trans('firefly.new_piggy_bank');
         $subTitleIcon = 'fa-plus';
-        $hasOldInput  = null !== $request->old('_token');
+        $request->old('_token');
         $preFilled    = $request->old();
+        if (!array_key_exists('transaction_currency_id', $preFilled)) {
+            $preFilled['transaction_currency_id'] = $this->primaryCurrency->id;
+        }
 
         // put previous url in session if not redirect from store (not "create another").
         if (true !== session('piggy-banks.create.fromStore')) {
@@ -82,7 +86,7 @@ class CreateController extends Controller
         }
         session()->forget('piggy-banks.create.fromStore');
 
-        return view('piggy-banks.create', compact('subTitle', 'subTitleIcon', 'preFilled'));
+        return view('piggy-banks.create', ['subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'preFilled' => $preFilled]);
     }
 
     /**
@@ -103,7 +107,7 @@ class CreateController extends Controller
 
         session()->flash('success', (string) trans('firefly.stored_piggy_bank', ['name' => $piggyBank->name]));
         session()->flash('success_url', route('piggy-banks.show', [$piggyBank->id]));
-        app('preferences')->mark();
+        Preferences::mark();
 
         // store attachment(s):
         /** @var null|array $files */

@@ -24,27 +24,55 @@ declare(strict_types=1);
 
 namespace FireflyIII\Handlers\Observer;
 
+use FireflyIII\Enums\WebhookTrigger;
+use FireflyIII\Events\RequestedSendWebhookMessages;
+use FireflyIII\Generator\Webhook\MessageGeneratorInterface;
 use FireflyIII\Models\BudgetLimit;
 use FireflyIII\Support\Facades\Amount;
 use FireflyIII\Support\Http\Api\ExchangeRateConverter;
+use FireflyIII\Support\Observers\RecalculatesAvailableBudgetsTrait;
+use FireflyIII\Support\Singleton\PreferencesSingleton;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 class BudgetLimitObserver
 {
+    use RecalculatesAvailableBudgetsTrait;
+
     public function created(BudgetLimit $budgetLimit): void
     {
         Log::debug('Observe "created" of a budget limit.');
-        $this->updateNativeAmount($budgetLimit);
+        $this->updatePrimaryCurrencyAmount($budgetLimit);
+        $this->updateAvailableBudget($budgetLimit);
+
+
+        // this is a lame trick to communicate with the observer.
+        $singleton = PreferencesSingleton::getInstance();
+
+        if (true === $singleton->getPreference('fire_webhooks_bl_store')) {
+
+            $user   = $budgetLimit->budget->user;
+
+            /** @var MessageGeneratorInterface $engine */
+            $engine = app(MessageGeneratorInterface::class);
+            $engine->setUser($user);
+            $engine->setObjects(new Collection()->push($budgetLimit));
+            $engine->setTrigger(WebhookTrigger::STORE_UPDATE_BUDGET_LIMIT);
+            $engine->generateMessages();
+
+            Log::debug(sprintf('send event RequestedSendWebhookMessages from %s', __METHOD__));
+            event(new RequestedSendWebhookMessages());
+        }
     }
 
-    private function updateNativeAmount(BudgetLimit $budgetLimit): void
+    private function updatePrimaryCurrencyAmount(BudgetLimit $budgetLimit): void
     {
-        if (!Amount::convertToNative($budgetLimit->budget->user)) {
-            // Log::debug('Do not update native amount of the budget limit.');
+        if (!Amount::convertToPrimary($budgetLimit->budget->user)) {
+            // Log::debug('Do not update primary currency amount of the budget limit.');
 
             return;
         }
-        $userCurrency               = app('amount')->getNativeCurrencyByUserGroup($budgetLimit->budget->user->userGroup);
+        $userCurrency               = Amount::getPrimaryCurrencyByUserGroup($budgetLimit->budget->user->userGroup);
         $budgetLimit->native_amount = null;
         if ($budgetLimit->transactionCurrency->id !== $userCurrency->id) {
             $converter                  = new ExchangeRateConverter();
@@ -53,12 +81,30 @@ class BudgetLimitObserver
             $budgetLimit->native_amount = $converter->convert($budgetLimit->transactionCurrency, $userCurrency, today(), $budgetLimit->amount);
         }
         $budgetLimit->saveQuietly();
-        Log::debug('Budget limit native amounts are updated.');
+        Log::debug('Budget limit primary currency amounts are updated.');
     }
 
     public function updated(BudgetLimit $budgetLimit): void
     {
         Log::debug('Observe "updated" of a budget limit.');
-        $this->updateNativeAmount($budgetLimit);
+        $this->updatePrimaryCurrencyAmount($budgetLimit);
+        $this->updateAvailableBudget($budgetLimit);
+
+        // this is a lame trick to communicate with the observer.
+        $singleton = PreferencesSingleton::getInstance();
+
+        if (true === $singleton->getPreference('fire_webhooks_bl_update')) {
+            $user   = $budgetLimit->budget->user;
+
+            /** @var MessageGeneratorInterface $engine */
+            $engine = app(MessageGeneratorInterface::class);
+            $engine->setUser($user);
+            $engine->setObjects(new Collection()->push($budgetLimit));
+            $engine->setTrigger(WebhookTrigger::STORE_UPDATE_BUDGET_LIMIT);
+            $engine->generateMessages();
+
+            Log::debug(sprintf('send event RequestedSendWebhookMessages from %s', __METHOD__));
+            event(new RequestedSendWebhookMessages());
+        }
     }
 }

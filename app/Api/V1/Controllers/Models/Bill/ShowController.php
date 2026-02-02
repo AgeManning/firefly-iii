@@ -25,10 +25,13 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Models\Bill;
 
 use FireflyIII\Api\V1\Controllers\Controller;
-use FireflyIII\Exceptions\FireflyException;
+use FireflyIII\Api\V1\Requests\DateRangeRequest;
+use FireflyIII\Api\V1\Requests\Generic\PaginationDateRangeRequest;
 use FireflyIII\Models\Bill;
 use FireflyIII\Repositories\Bill\BillRepositoryInterface;
+use FireflyIII\Support\JsonApi\Enrichments\SubscriptionEnrichment;
 use FireflyIII\Transformers\BillTransformer;
+use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use League\Fractal\Pagination\IlluminatePaginatorAdapter;
@@ -63,22 +66,35 @@ class ShowController extends Controller
      * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/bills/listBill
      *
      * Display a listing of the resource.
-     *
-     * @throws FireflyException
      */
-    public function index(): JsonResponse
+    public function index(PaginationDateRangeRequest $request): JsonResponse
     {
+        [
+            'limit'  => $limit,
+            'offset' => $offset,
+            'start'  => $start,
+            'end'    => $end,
+            'page'   => $page,
+        ]            = $request->attributes->all();
+
         $this->repository->correctOrder();
         $bills       = $this->repository->getBills();
         $manager     = $this->getManager();
-        $pageSize    = $this->parameters->get('limit');
         $count       = $bills->count();
-        $bills       = $bills->slice(($this->parameters->get('page') - 1) * $pageSize, $pageSize);
-        $paginator   = new LengthAwarePaginator($bills, $count, $pageSize, $this->parameters->get('page'));
+        $bills       = $bills->slice($offset, $limit);
+        $paginator   = new LengthAwarePaginator($bills, $count, $limit, $page);
+
+        // enrich
+        /** @var User $admin */
+        $admin       = auth()->user();
+        $enrichment  = new SubscriptionEnrichment();
+        $enrichment->setUser($admin);
+        $enrichment->setStart($start);
+        $enrichment->setEnd($end);
+        $bills       = $enrichment->enrich($bills);
 
         /** @var BillTransformer $transformer */
         $transformer = app(BillTransformer::class);
-        $transformer->setParameters($this->parameters);
 
         $resource    = new FractalCollection($bills, $transformer, 'bills');
         $resource->setPaginator(new IlluminatePaginatorAdapter($paginator));
@@ -92,13 +108,26 @@ class ShowController extends Controller
      *
      * Show the specified bill.
      */
-    public function show(Bill $bill): JsonResponse
+    public function show(DateRangeRequest $request, Bill $bill): JsonResponse
     {
+        [
+            'start'  => $start,
+            'end'    => $end,
+        ]            = $request->attributes->all();
+
         $manager     = $this->getManager();
+
+        // enrich
+        /** @var User $admin */
+        $admin       = auth()->user();
+        $enrichment  = new SubscriptionEnrichment();
+        $enrichment->setUser($admin);
+        $enrichment->setStart($start);
+        $enrichment->setEnd($end);
+        $bill        = $enrichment->enrichSingle($bill);
 
         /** @var BillTransformer $transformer */
         $transformer = app(BillTransformer::class);
-        $transformer->setParameters($this->parameters);
 
         $resource    = new Item($bill, $transformer, 'bills');
 

@@ -26,11 +26,13 @@ namespace FireflyIII\Api\V1\Controllers\Autocomplete;
 
 use Deprecated;
 use FireflyIII\Api\V1\Controllers\Controller;
+use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteApiRequest;
 use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteRequest;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Repositories\Currency\CurrencyRepositoryInterface;
-use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * Class CurrencyController
@@ -38,6 +40,7 @@ use Illuminate\Http\JsonResponse;
 class CurrencyController extends Controller
 {
     private CurrencyRepositoryInterface $repository;
+    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY];
 
     /**
      * CurrencyController constructor.
@@ -45,26 +48,23 @@ class CurrencyController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                /** @var User $user */
-                $user             = auth()->user();
-                $this->repository = app(CurrencyRepositoryInterface::class);
-                $this->repository->setUser($user);
+        $this->middleware(function (Request $request, $next) {
+            $this->validateUserGroup($request);
+            $this->repository = app(CurrencyRepositoryInterface::class);
+            $this->repository->setUser($this->user);
+            $this->repository->setUserGroup($this->userGroup);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
      * Documentation for this endpoint is at:
      * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/autocomplete/getCurrenciesAC
      */
-    public function currencies(AutocompleteRequest $request): JsonResponse
+    public function currencies(AutocompleteApiRequest $request): JsonResponse
     {
-        $data       = $request->getData();
-        $collection = $this->repository->searchCurrency($data['query'], $this->parameters->get('limit'));
+        $collection = $this->repository->searchCurrency($request->attributes->get('query'), $request->attributes->get('limit'));
         $result     = [];
 
         /** @var TransactionCurrency $currency */

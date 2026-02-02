@@ -32,6 +32,7 @@ import {showWizardButton} from "../../support/page-settings/show-wizard-button.j
 import {setVariable} from "../../store/set-variable.js";
 import {getVariables} from "../../store/get-variables.js";
 import pageNavigation from "../../support/page-navigation.js";
+import {getVariable} from "../../store/get-variable.js";
 
 
 // set type from URL
@@ -56,12 +57,12 @@ if(sortingColumn[0] === '-') {
 
 page = parseInt(params.page ?? 1);
 
-
 showInternalsButton();
 showWizardButton();
 
 // TODO currency conversion
 // TODO page cleanup and recycle for transaction lists.
+// TODO process startPeriod and endPeriod.
 
 let index = function () {
     return {
@@ -73,9 +74,9 @@ let index = function () {
                 show: false, text: '', url: '',
             }, wait: {
                 show: false, text: '',
-
             }
         },
+        convertToPrimary: false,
         totalPages: 1,
         page: 1,
         pageUrl: '',
@@ -259,6 +260,7 @@ let index = function () {
                 {name: this.getPreferenceKey('sd'), default: ''},
                 {name: this.getPreferenceKey('filters'), default: this.filters},
                 {name: this.getPreferenceKey('grouped'), default: true},
+                {name: 'convert_to_primary', default: false},
             ]).then((res) => {
                 // process columns:
                 for (let k in res[0]) {
@@ -282,6 +284,9 @@ let index = function () {
 
                 // group accounts
                 this.pageOptions.groupedAccounts = res[4];
+
+                // convert to primary?
+                this.convertToPrimary = res[5];
 
                 this.loadAccounts();
             });
@@ -315,7 +320,7 @@ let index = function () {
             // need to find the input thing
             console.log('Clicked edit button for account on index #' + index + ' and field ' + fieldName);
             const querySelector = 'input[data-field="' + fieldName + '"][data-index="' + index + '"]';
-            console.log(querySelector);
+            // console.log(querySelector);
             const newValue = document.querySelectorAll(querySelector)[0].value ?? '';
             if ('' === newValue) {
                 return;
@@ -348,16 +353,18 @@ let index = function () {
             if('asc' === this.pageOptions.sortDirection && '' !== sorting) {
                 sorting = '-' + sorting;
             }
-            //const sorting = [{column: this.pageOptions.sortingColumn, direction: this.pageOptions.sortDirection}];
 
             // filter instructions
             let filters = {};
+            let type = this.filters.type;
+            let active = this.filters.active;
             for (let k in this.filters) {
                 if (this.filters.hasOwnProperty(k) && null !== this.filters[k]) {
                     filters[k] = this.filters[k];
                     //filters.push({column: k, filter: this.filters[k]});
                 }
             }
+            delete filters.type;
 
             // get start and end from the store:
             const start = new Date(window.store.get('start'));
@@ -367,24 +374,23 @@ let index = function () {
             let params = {
                 sort: sorting,
                 filter: filters,
-                currentMoment: today,
-                // type: type,
-                page: {number: this.page},
-                startPeriod: start,
-                endPeriod: end
+                active: active,
+                date: format(today,'yyyy-MM-dd'),
+                type: type,
+                page: this.page,
+                start: start,
+                end: end
             };
 
             if (!this.tableColumns.balance_difference.enabled) {
-                delete params.startPeriod;
-                delete params.enPeriod;
+                // delete params.startPeriod;
+                // delete params.endPeriod;
             }
             this.accounts = [];
             let groupedAccounts = {};
-            // one page only.o
+            // one page only
             (new Get()).index(params).then(response => {
-                console.log(response);
                 this.totalPages = response.meta.pagination.total_pages;
-                console.log('a');
                 for (let i = 0; i < response.data.length; i++) {
                     if (response.data.hasOwnProperty(i)) {
                         let current = response.data[i];
@@ -397,21 +403,26 @@ let index = function () {
                             role: current.attributes.account_role,
                             iban: null === current.attributes.iban ? '' : current.attributes.iban.match(/.{1,4}/g).join(' '),
                             account_number: null === current.attributes.account_number ? '' : current.attributes.account_number,
-                            current_balance: current.attributes.current_balance,
-                            currency_code: current.attributes.currency_code,
-                            //native_current_balance: current.attributes.native_current_balance,
-                            //native_currency_code: current.attributes.native_currency_code,
                             last_activity: null === current.attributes.last_activity ? '' : format(new Date(current.attributes.last_activity), i18next.t('config.month_and_day_fns')),
-                            //balance_difference: current.attributes.balance_difference,
-                            //native_balance_difference: current.attributes.native_balance_difference,
                             liability_type: current.attributes.liability_type,
                             liability_direction: current.attributes.liability_direction,
                             interest: current.attributes.interest,
                             interest_period: current.attributes.interest_period,
-                            //current_debt: current.attributes.current_debt,
-                            balance: current.attributes.balance,
-                            native_balance: current.attributes.native_balance,
+
+                            // currency info
+                            currency_code: current.attributes.currency_code,
+                            primary_currency_code: current.attributes.primary_currency_code,
+
+
+                            // balances.
+                            current_balance: current.attributes.current_balance,
+                            pc_current_balance: current.attributes.pc_current_balance,
+                            balance_difference: current.attributes.balance_difference,
+                            pc_balance_difference: current.attributes.pc_balance_difference,
+                            debt_amount: current.attributes.debt_amount,
+                            pc_debt_amount: current.attributes.debt_amount,
                         };
+                        console.log(account);
                         // get group info:
                         let groupId = current.attributes.object_group_id;
                         if(!this.pageOptions.groupedAccounts) {
@@ -428,10 +439,9 @@ let index = function () {
                             }
                         }
                         groupedAccounts[groupId].accounts.push(account);
-
-                        //this.accounts.push(account);
                     }
                 }
+
                 // order grouped accounts by order.
                 let sortable = [];
                 for (let set in groupedAccounts) {

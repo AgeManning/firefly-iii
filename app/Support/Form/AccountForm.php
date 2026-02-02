@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Support\Form;
 
+use Illuminate\Support\Facades\Log;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Account;
@@ -51,41 +52,10 @@ class AccountForm
         $repository               = $this->getAccountRepository();
         $grouped                  = $this->getAccountsGrouped($types, $repository);
         $cash                     = $repository->getCashAccount();
-        $key                      = (string) trans('firefly.cash_account_type');
-        $grouped[$key][$cash->id] = sprintf('(%s)', (string) trans('firefly.cash'));
+        $key                      = (string)trans('firefly.cash_account_type');
+        $grouped[$key][$cash->id] = sprintf('(%s)', (string)trans('firefly.cash'));
 
         return $this->select($name, $grouped, $value, $options);
-    }
-
-    private function getAccountsGrouped(array $types, ?AccountRepositoryInterface $repository = null): array
-    {
-        if (!$repository instanceof AccountRepositoryInterface) {
-            $repository = $this->getAccountRepository();
-        }
-        $accountList    = $repository->getActiveAccountsByType($types);
-        $liabilityTypes = [AccountTypeEnum::MORTGAGE->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::CREDITCARD->value, AccountTypeEnum::LOAN->value];
-        $grouped        = [];
-
-        /** @var Account $account */
-        foreach ($accountList as $account) {
-            $role                        = (string) $repository->getMetaValue($account, 'account_role');
-            if (in_array($account->accountType->type, $liabilityTypes, true)) {
-                $role = sprintf('l_%s', $account->accountType->type);
-            }
-            if ('' === $role) {
-                $role = 'no_account_type';
-                if (AccountTypeEnum::EXPENSE->value === $account->accountType->type) {
-                    $role = 'expense_account';
-                }
-                if (AccountTypeEnum::REVENUE->value === $account->accountType->type) {
-                    $role = 'revenue_account';
-                }
-            }
-            $key                         = (string) trans(sprintf('firefly.opt_group_%s', $role));
-            $grouped[$key][$account->id] = $account->name;
-        }
-
-        return $grouped;
     }
 
     /**
@@ -98,8 +68,8 @@ class AccountForm
         $grouped                  = $this->getAccountsGrouped($types, $repository);
 
         $cash                     = $repository->getCashAccount();
-        $key                      = (string) trans('firefly.cash_account_type');
-        $grouped[$key][$cash->id] = sprintf('(%s)', (string) trans('firefly.cash'));
+        $key                      = (string)trans('firefly.cash_account_type');
+        $grouped[$key][$cash->id] = sprintf('(%s)', (string)trans('firefly.cash'));
 
         return $this->select($name, $grouped, $value, $options);
     }
@@ -124,9 +94,9 @@ class AccountForm
         unset($options['class']);
 
         try {
-            $html = view('form.assetAccountCheckList', compact('classes', 'selected', 'name', 'label', 'options', 'grouped'))->render();
+            $html = view('form.assetAccountCheckList', ['classes' => $classes, 'selected' => $selected, 'name' => $name, 'label' => $label, 'options' => $options, 'grouped' => $grouped])->render();
         } catch (Throwable $e) {
-            app('log')->debug(sprintf('Could not render assetAccountCheckList(): %s', $e->getMessage()));
+            Log::debug(sprintf('Could not render assetAccountCheckList(): %s', $e->getMessage()));
             $html = 'Could not render assetAccountCheckList.';
 
             throw new FireflyException($html, 0, $e);
@@ -172,5 +142,36 @@ class AccountForm
         $grouped = $this->getAccountsGrouped($types);
 
         return $this->select($name, $grouped, $value, $options);
+    }
+
+    private function getAccountsGrouped(array $types, ?AccountRepositoryInterface $repository = null): array
+    {
+        if (!$repository instanceof AccountRepositoryInterface) {
+            $repository = $this->getAccountRepository();
+        }
+        $accountList    = $repository->getActiveAccountsByType($types);
+        $liabilityTypes = [AccountTypeEnum::MORTGAGE->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::CREDITCARD->value, AccountTypeEnum::LOAN->value];
+        $grouped        = [];
+
+        /** @var Account $account */
+        foreach ($accountList as $account) {
+            $role                        = (string)$repository->getMetaValue($account, 'account_role');
+            if (in_array($account->accountType->type, $liabilityTypes, true)) {
+                $role = sprintf('l_%s', $account->accountType->type);
+            }
+            if ('' === $role) {
+                $role = 'no_account_type';
+                if (AccountTypeEnum::EXPENSE->value === $account->accountType->type) {
+                    $role = 'expense_account';
+                }
+                if (AccountTypeEnum::REVENUE->value === $account->accountType->type) {
+                    $role = 'revenue_account';
+                }
+            }
+            $key                         = (string)trans(sprintf('firefly.opt_group_%s', $role));
+            $grouped[$key][$account->id] = $account->name;
+        }
+
+        return $grouped;
     }
 }

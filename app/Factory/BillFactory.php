@@ -24,13 +24,15 @@ declare(strict_types=1);
 
 namespace FireflyIII\Factory;
 
-use FireflyIII\Models\ObjectGroup;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Bill;
+use FireflyIII\Models\ObjectGroup;
 use FireflyIII\Repositories\ObjectGroup\CreatesObjectGroups;
 use FireflyIII\Services\Internal\Support\BillServiceTrait;
 use FireflyIII\User;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Log;
+use FireflyIII\Support\Facades\Amount;
 
 /**
  * Class BillFactory
@@ -47,10 +49,10 @@ class BillFactory
      */
     public function create(array $data): ?Bill
     {
-        app('log')->debug(sprintf('Now in %s', __METHOD__), $data);
+        Log::debug(sprintf('Now in %s', __METHOD__), $data);
         $factory          = app(TransactionCurrencyFactory::class);
         $currency         = $factory->find((int) ($data['currency_id'] ?? null), (string) ($data['currency_code'] ?? null))
-                    ?? app('amount')->getNativeCurrencyByUserGroup($this->user->userGroup);
+                    ?? Amount::getPrimaryCurrencyByUserGroup($this->user->userGroup);
 
         try {
             $skip   = array_key_exists('skip', $data) ? $data['skip'] : 0;
@@ -82,8 +84,8 @@ class BillFactory
                 ]
             );
         } catch (QueryException $e) {
-            app('log')->error($e->getMessage());
-            app('log')->error($e->getTraceAsString());
+            Log::error($e->getMessage());
+            Log::error($e->getTraceAsString());
 
             throw new FireflyException('400000: Could not store bill.', 0, $e);
         }

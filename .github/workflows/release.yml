@@ -18,8 +18,18 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate input
+        run: |
+          # validate argument
+          if  [[ $version != develo* ]] && [[ $version != v* ]] && [[ $version != branch* ]] ;
+          then
+            echo "Argument '$version' does not start with a d or with a v or a b"
+            exit 1
+          fi
+        env:
+          version: ${{ github.event_name == 'schedule' && 'develop' || inputs.version }}
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Import GPG key
@@ -32,10 +42,18 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: ${{ github.event.inputs.phpversion }}
+          php-version: ${{ github.event.inputs.phpversion || '8.4' }}
           extensions: mbstring, intl, zip, bcmath
       - name: Switch and pull
         run: |
+          # validate argument
+          if  [[ $version != d* ]] && [[ $version != v* ]] ;
+          then
+            echo 'Argument does not start with a d or with a v'
+            exit 1
+          fi
+
+
           #
           # Always check out origin/develop, unless its a branch release.
           #
@@ -50,7 +68,7 @@ jobs:
           git pull
           echo "Current branch is $(git branch --show-current)"
         env:
-          version: ${{ github.event_name == 'schedule' && 'develop' || github.event.inputs.version }}
+          version: ${{ github.event_name == 'schedule' && 'develop' || inputs.version }}
       - name: Configure Git
         run: |
           # do some configuration
@@ -118,7 +136,7 @@ jobs:
         env:
           FIREFLY_III_ROOT: /github/workspace
           GH_TOKEN: ""
-          FF_III_VERSION: ${{ github.event_name == 'schedule' && 'develop' || github.event.inputs.version }}
+          FF_III_VERSION: ${{ github.event_name == 'schedule' && 'develop' || inputs.version }}
       - name: Generate JSON v1
         id: json-v1
         uses: JC5/firefly-iii-dev@main
@@ -152,10 +170,14 @@ jobs:
           npm run prod  --workspace=v1
           npm run build --workspace=v2
           npm update
+      - name: Setup Mago
+        uses: nhedger/setup-mago@v1
       - name: Run CI
         run: |
           rm -rf vendor composer.lock
-          composer update --no-dev --no-scripts --no-plugins -q
+          composer update --no-scripts --no-plugins -q
+          mago format || true
+          mago analyze --reporting-format=github || true
           sudo chown -R runner:docker resources/lang
           .ci/phpcs.sh || true
       - name: Calculate variables
@@ -221,7 +243,7 @@ jobs:
           echo "tarName=$tarName" >> "$GITHUB_ENV"
           echo "BRANCH_NAME=$BRANCH_NAME" >> "$GITHUB_ENV"
         env:
-          version: ${{ github.event_name == 'schedule' && 'develop' || github.event.inputs.version }}
+          version: ${{ github.event_name == 'schedule' && 'develop' || inputs.version }}
       - name: Commit all changes
         run: |
           # add all content, except output.txt (this contains the changelog and/or the download instructions)
@@ -232,123 +254,16 @@ jobs:
           git commit -m "🤖 Auto commit for release '$version' on $(date +'%Y-%m-%d')" || true
           git push
         env:
-          version: ${{ github.event_name == 'schedule' && 'develop' || github.event.inputs.version }}
-      - name: Extract changelog
-        id: extract-changelog
+          version: ${{ github.event_name == 'schedule' && 'develop' || inputs.version }}
+      - name: Generate release description
+        id: release-description
         uses: JC5/firefly-iii-dev@main
         with:
-          action: 'ff3:extract-changelog'
+          action: "ff3:generate-release-notes firefly-iii ${{ inputs.version || 'develop' }}"
           output: 'output'
         env:
           FIREFLY_III_ROOT: /github/workspace
           GH_TOKEN: ""
-      - name: Describe new release
-        run: |
-
-          # describe the development release.
-          if [[ "develop" == "$version" ]]; then
-            echo 'Describe the latest develop release'
-            rm -f output.txt
-            touch output.txt
-            sudo chown -R runner:docker output.txt
-            echo "Weekly development release of Firefly III with the latest fixes, translations and features. Docker users can find this release under the \`develop\` tag." >> output.txt
-            echo "" >> output.txt
-            echo "This release was created on **$(date +'%Y-%m-%d %H:%M')** and may contain unexpected bugs. Data loss is rare but is not impossible. The releases are signed, and you can verify them using the [Firefly III releases PGP key](https://docs.firefly-iii.org/explanation/more-information/signatures/)." >> output.txt
-            echo "" >> output.txt
-            echo "* Please read the installation instructions for [Docker](https://docs.firefly-iii.org/how-to/firefly-iii/installation/docker/), [Portainer](https://docs.firefly-iii.org/how-to/firefly-iii/installation/portainer/), [Kubernetes](https://docs.firefly-iii.org/how-to/firefly-iii/installation/kubernetes/) or [self-managed servers](https://docs.firefly-iii.org/how-to/firefly-iii/installation/self-managed/)" >> output.txt
-            echo "* Or read the upgrade instructions for [Docker](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/docker/), [Kubernetes](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/kubernetes/) or [self-managed servers](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/self-managed/)" >> output.txt
-            echo "" >> output.txt
-            echo ":warning: Please be careful with this pre-release, as it may not work as expected." >> output.txt
-
-            # donations!
-            echo '' >> output.txt
-            echo '### Support Firefly III' >> output.txt
-            echo 'Did you know you can support the development of Firefly III? You can donate in many ways, like GitHub Sponsors or Patreon. For more information, please [follow this link](https://bit.ly/donate-to-Firefly-III) for more information.' >> output.txt
-            echo '' >> output.txt
-          fi
-          # describe a branch release
-          if [[ "$version" == branch* ]]; then
-            echo 'Describe a branch release'
-            rm -f output.txt
-            touch output.txt
-            sudo chown -R runner:docker output.txt
-            echo "Irregular BRANCH release of Firefly III. This release contains specific features or changes. Docker users can find this release under the \`$version\` tag." >> output.txt
-            echo "" >> output.txt
-            echo "This release was created on **$(date +'%Y-%m-%d %H:%M')** and may contain unexpected bugs. Data loss is rare but is not impossible. The releases are signed, and you can verify them using the [Firefly III releases PGP key](https://docs.firefly-iii.org/explanation/more-information/signatures/)." >> output.txt
-            echo "" >> output.txt
-            echo "* Please read the installation instructions for [Docker](https://docs.firefly-iii.org/how-to/firefly-iii/installation/docker/), [Portainer](https://docs.firefly-iii.org/how-to/firefly-iii/installation/portainer/), [Kubernetes](https://docs.firefly-iii.org/how-to/firefly-iii/installation/kubernetes/) or [self-managed servers](https://docs.firefly-iii.org/how-to/firefly-iii/installation/self-managed/)" >> output.txt
-            echo "* Or read the upgrade instructions for [Docker](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/docker/), [Kubernetes](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/kubernetes/) or [self-managed servers](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/self-managed/)" >> output.txt
-            echo "" >> output.txt
-            echo ":warning: Please be careful with this branch pre-release, as it may not work as expected." >> output.txt
-          fi
-          # describe the main release
-          if [[ "develop" != "$version" ]] && [[ "$version" != branch* ]] && [[ "$version" != *alpha* ]] && [[ "$version" != *beta* ]]; then
-            echo 'Describe the latest release'
-            sudo chown -R runner:docker output.txt
-
-            # the changelog is in output.txt
-            mv output.txt output2.txt
-
-            touch output.txt
-            echo '' >> output.txt
-            echo "Welcome to release $version of Firefly III. It contains the the latest fixes, translations and features. Docker users can find this release under the \`latest\` tag." >> output.txt
-            echo '' >> output.txt
-
-            # add changelog to file.
-            cat output2.txt >> output.txt
-            echo '' >> output.txt
-            rm -f output2.txt
-
-            echo '### Instructions' >> output.txt
-            echo '' >> output.txt
-            echo "* Installation instructions for [Docker](https://docs.firefly-iii.org/how-to/firefly-iii/installation/docker/), [Portainer](https://docs.firefly-iii.org/how-to/firefly-iii/installation/portainer/), [Kubernetes](https://docs.firefly-iii.org/how-to/firefly-iii/installation/kubernetes/) or [self-managed servers](https://docs.firefly-iii.org/how-to/firefly-iii/installation/self-managed/)" >> output.txt
-            echo "* Or read the upgrade instructions for [Docker](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/docker/), [Kubernetes](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/kubernetes/) or [self-managed servers](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/self-managed/)" >> output.txt
-            echo "* The releases are signed, and you can verify them using the [Firefly III releases PGP key](https://docs.firefly-iii.org/explanation/more-information/signatures/)." >> output.txt
-
-            # donations!
-            echo '' >> output.txt
-            echo '### Support Firefly III' >> output.txt
-            echo 'Did you know you can support the development of Firefly III? You can donate in many ways, like GitHub Sponsors or Patreon. For more information, please [follow this link](https://bit.ly/donate-to-Firefly-III) for more information.' >> output.txt
-            echo '' >> output.txt
-          fi
-
-          # describe alpha release
-          if [[ "$version" == *alpha* ]]; then
-            echo 'Describe an ALPHA release'
-            rm -f output.txt
-            touch output.txt
-            sudo chown -R runner:docker output.txt
-            echo "Very early ALPHA release of Firefly III. This release contains specific features or changes. Docker users can find this release under the \`$version\` tag." >> output.txt
-            echo '' >> output.txt
-            echo "This release was created on **$(date +'%Y-%m-%d %H:%M')** and may contain unexpected bugs. Data loss is rare but is not impossible. The releases are signed, and you can verify them using the [Firefly III releases PGP key](https://docs.firefly-iii.org/explanation/more-information/signatures/)." >> output.txt
-            echo '' >> output.txt
-            echo '### Instructions' >> output.txt
-            echo '' >> output.txt
-            echo "* Installation instructions for [Docker](https://docs.firefly-iii.org/how-to/firefly-iii/installation/docker/), [Portainer](https://docs.firefly-iii.org/how-to/firefly-iii/installation/portainer/), [Kubernetes](https://docs.firefly-iii.org/how-to/firefly-iii/installation/kubernetes/) or [self-managed servers](https://docs.firefly-iii.org/how-to/firefly-iii/installation/self-managed/)" >> output.txt
-            echo "* Or read the upgrade instructions for [Docker](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/docker/), [Kubernetes](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/kubernetes/) or [self-managed servers](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/self-managed/)" >> output.txt
-            echo "* The releases are signed, and you can verify them using the [Firefly III releases PGP key](https://docs.firefly-iii.org/explanation/more-information/signatures/)." >> output.txt
-
-          fi
-
-          # describe beta release
-          if [[ "$version" == *beta* ]]; then
-            echo 'Describe a BETA release'
-            rm -f output.txt
-            touch output.txt
-            sudo chown -R runner:docker output.txt
-            echo "Very early BETA release of Firefly III. This release contains specific features or changes. Docker users can find this release under the \`$version\` tag." >> output.txt
-            echo '' >> output.txt
-            echo "This release was created on **$(date +'%Y-%m-%d %H:%M')** and may contain unexpected bugs. Data loss is rare but is not impossible. The releases are signed, and you can verify them using the [Firefly III releases PGP key](https://docs.firefly-iii.org/explanation/more-information/signatures/)." >> output.txt
-            echo '' >> output.txt
-            echo '### Instructions' >> output.txt
-            echo '' >> output.txt
-            echo "* Installation instructions for [Docker](https://docs.firefly-iii.org/how-to/firefly-iii/installation/docker/), [Portainer](https://docs.firefly-iii.org/how-to/firefly-iii/installation/portainer/), [Kubernetes](https://docs.firefly-iii.org/how-to/firefly-iii/installation/kubernetes/) or [self-managed servers](https://docs.firefly-iii.org/how-to/firefly-iii/installation/self-managed/)" >> output.txt
-            echo "* Or read the upgrade instructions for [Docker](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/docker/), [Kubernetes](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/kubernetes/) or [self-managed servers](https://docs.firefly-iii.org/how-to/firefly-iii/upgrade/self-managed/)" >> output.txt
-            echo "* The releases are signed, and you can verify them using the [Firefly III releases PGP key](https://docs.firefly-iii.org/explanation/more-information/signatures/)." >> output.txt
-
-          fi
-        env:
-          version: ${{ github.event_name == 'schedule' && 'develop' || github.event.inputs.version }}
       - name: Merge all into working branch
         run: |
           MERGE_INTO=develop
@@ -357,7 +272,7 @@ jobs:
             fi
 
           echo "Merge all changes from $BRANCH_NAME back into '$MERGE_INTO' using a PR"
-          PR_URL=$(gh pr create -B $MERGE_INTO -H $BRANCH_NAME --title "🤖 Automatic PR to merge all changes into the '$MERGE_INTO' branch." --body '🤖 Created by GitHub action')
+          PR_URL=$(gh pr create -B $MERGE_INTO -H $BRANCH_NAME --title "🤖 Automatic PR to merge all changes into the '$MERGE_INTO' branch." --body '🤖 This PR was created automatically by a GitHub action to merge the changed files into this branch. It will be merged automatically. `Share and enjoy`')
           echo "PR URL is '$PR_URL'"
           IFS='/' read -ra parts <<< "$PR_URL"
           PR_NR=$(printf %s\\n "${parts[@]:(-1)}")
@@ -379,7 +294,7 @@ jobs:
 
             echo "Also merge everything into main since this is a release."
             echo 'create PR'
-            PR_URL=$(gh pr create -B main -H develop --title "🤖 Automatic PR to merge all changes into the main branch." --body "🤖 Created by GitHub action")
+            PR_URL=$(gh pr create -B main -H develop --title "🤖 Automatic PR to merge all changes into the main branch." --body '🤖 This PR was created automatically by a GitHub action to merge the changed files into this branch. It will be merged automatically. `Share and enjoy`')
             echo "PR URL is '$PR_URL'"
 
             IFS='/' read -ra parts <<< "$PR_URL"
@@ -398,7 +313,7 @@ jobs:
           echo "DONE!"
         env:
           GH_TOKEN: ${{ github.token }}
-          version: ${{ github.event_name == 'schedule' && 'develop' || github.event.inputs.version }}
+          version: ${{ github.event_name == 'schedule' && 'develop' || inputs.version }}
       - name: Create archives
         run: |
           echo "Create zip file $zipName"
@@ -482,7 +397,7 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ github.token }}
-          version: ${{ github.event_name == 'schedule' && 'develop' || github.event.inputs.version }}
+          version: ${{ github.event_name == 'schedule' && 'develop' || inputs.version }}
       - name: Upload artifacts
         run: |
           # add zip file to release.
@@ -518,4 +433,4 @@ jobs:
           rm -f $tarName.sha256
         env:
           GH_TOKEN: ${{ github.token }}
-          version: ${{ github.event_name == 'schedule' && 'develop' || github.event.inputs.version }}
+          version: ${{ github.event_name == 'schedule' && 'develop' || inputs.version }}

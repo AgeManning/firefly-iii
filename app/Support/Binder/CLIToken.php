@@ -24,7 +24,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Support\Binder;
 
-use FireflyIII\Exceptions\FireflyException;
+use FireflyIII\Support\Facades\Preferences;
+use Illuminate\Support\Facades\Log;
 use FireflyIII\Repositories\User\UserRepositoryInterface;
 use Illuminate\Routing\Route;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -34,12 +35,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 class CLIToken implements BinderInterface
 {
-    /**
-     * @return mixed
-     *
-     * @throws FireflyException
-     */
-    public static function routeBinder(string $value, Route $route)
+    public static function routeBinder(string $value, Route $route): string
     {
         /** @var UserRepositoryInterface $repository */
         $repository = app(UserRepositoryInterface::class);
@@ -51,14 +47,14 @@ class CLIToken implements BinderInterface
         }
 
         foreach ($users as $user) {
-            $accessToken = app('preferences')->getForUser($user, 'access_token');
+            $accessToken = Preferences::getForUser($user, 'access_token');
             if (null !== $accessToken && $accessToken->data === $value) {
-                app('log')->info(sprintf('Recognized user #%d (%s) from his access token.', $user->id, $user->email));
+                Log::info(sprintf('Recognized user #%d (%s) from his access token.', $user->id, $user->email));
 
                 return $value;
             }
         }
-        app('log')->error(sprintf('Recognized no users by access token "%s"', $value));
+        Log::error(sprintf('Recognized no users by access token "%s"', $value));
 
         throw new NotFoundHttpException();
     }

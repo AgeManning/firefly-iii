@@ -24,7 +24,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Rule;
 
-use Throwable;
+use FireflyIII\Support\Facades\Preferences;
+use Illuminate\Support\Facades\Log;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\RuleFormRequest;
@@ -39,6 +40,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Redirector;
 use Illuminate\View\View;
+use Throwable;
 
 /**
  * Class EditController
@@ -76,7 +78,7 @@ class EditController extends Controller
      *
      * @throws FireflyException
      */
-    public function edit(Request $request, Rule $rule)
+    public function edit(Request $request, Rule $rule): Factory|\Illuminate\Contracts\View\View
     {
         $triggerCount   = 0;
         $actionCount    = 0;
@@ -146,7 +148,7 @@ class EditController extends Controller
 
         $request->session()->flash('preFilled', $preFilled);
 
-        return view('rules.rule.edit', compact('rule', 'subTitle', 'primaryTrigger', 'oldTriggers', 'oldActions', 'triggerCount', 'actionCount'));
+        return view('rules.rule.edit', ['rule' => $rule, 'subTitle' => $subTitle, 'primaryTrigger' => $primaryTrigger, 'oldTriggers' => $oldTriggers, 'oldActions' => $oldActions, 'triggerCount' => $triggerCount, 'actionCount' => $actionCount]);
     }
 
     /**
@@ -180,8 +182,8 @@ class EditController extends Controller
                 )->render();
             } catch (Throwable $e) {
                 $message = sprintf('Throwable was thrown in getPreviousTriggers(): %s', $e->getMessage());
-                app('log')->debug($message);
-                app('log')->error($e->getTraceAsString());
+                Log::debug($message);
+                Log::error($e->getTraceAsString());
 
                 throw new FireflyException($message, 0, $e);
             }
@@ -203,8 +205,13 @@ class EditController extends Controller
         $this->ruleRepos->update($rule, $data);
 
         session()->flash('success', (string) trans('firefly.updated_rule', ['title' => $rule->title]));
-        app('preferences')->mark();
+        Preferences::mark();
         $redirect = redirect($this->getPreviousUrl('rules.edit.url'));
+
+        if (true === $data['run_after_form']) {
+            return redirect(route('rules.select-transactions', [$rule->id]));
+        }
+
         if (1 === (int) $request->get('return_to_edit')) {
             session()->put('rules.edit.fromUpdate', true);
 

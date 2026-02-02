@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace FireflyIII\Repositories\Tag;
 
 use Carbon\Carbon;
+use Exception;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Factory\TagFactory;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
@@ -31,13 +32,14 @@ use FireflyIII\Models\Attachment;
 use FireflyIII\Models\Location;
 use FireflyIII\Models\Note;
 use FireflyIII\Models\Tag;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupInterface;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupTrait;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Exception;
+use Override;
 
 /**
  * Class TagRepository.
@@ -108,7 +110,6 @@ class TagRepository implements TagRepositoryInterface, UserGroupInterface
 
     public function firstUseDate(Tag $tag): ?Carbon
     {
-        /** @var null|Carbon */
         return $tag->transactionJournals()->orderBy('date', 'ASC')->first()?->date;
     }
 
@@ -135,13 +136,14 @@ class TagRepository implements TagRepositoryInterface, UserGroupInterface
 
         // add date range (or not):
         if (null === $year) {
-            app('log')->debug('Get tags without a date.');
+            Log::debug('Get tags without a date.');
             $tagQuery->whereNull('tags.date');
         }
 
         if (null !== $year) {
-            app('log')->debug(sprintf('Get tags with year %s.', $year));
-            $tagQuery->where('tags.date', '>=', $year.'-01-01 00:00:00')->where('tags.date', '<=', $year.'-12-31 23:59:59');
+            $year = min(2038, max(1970, $year));
+            Log::debug(sprintf('Get tags with year %s.', $year));
+            $tagQuery->where('tags.date', '>=', sprintf('%d-01-01 00:00:00', $year))->where('tags.date', '<=', sprintf('%d-12-31 23:59:59', $year));
         }
         $collection = $tagQuery->get();
         $return     = [];
@@ -174,7 +176,6 @@ class TagRepository implements TagRepositoryInterface, UserGroupInterface
 
     public function lastUseDate(Tag $tag): ?Carbon
     {
-        /** @var null|Carbon */
         return $tag->transactionJournals()->orderBy('date', 'DESC')->first()?->date;
     }
 
@@ -267,12 +268,12 @@ class TagRepository implements TagRepositoryInterface, UserGroupInterface
             ];
 
             // add amount to correct type:
-            $amount                   = app('steam')->positive((string) $journal['amount']);
+            $amount                   = Steam::positive((string) $journal['amount']);
             $type                     = $journal['transaction_type_type'];
             if (TransactionTypeEnum::WITHDRAWAL->value === $type) {
-                $amount = bcmul((string) $amount, '-1');
+                $amount = bcmul($amount, '-1');
             }
-            $sums[$currencyId][$type] = bcadd((string) $sums[$currencyId][$type], (string) $amount);
+            $sums[$currencyId][$type] = bcadd((string) $sums[$currencyId][$type], $amount);
 
             $foreignCurrencyId        = $journal['foreign_currency_id'];
             if (null !== $foreignCurrencyId && 0 !== $foreignCurrencyId) {
@@ -288,11 +289,11 @@ class TagRepository implements TagRepositoryInterface, UserGroupInterface
                     TransactionTypeEnum::OPENING_BALANCE->value => '0',
                 ];
                 // add foreign amount to correct type:
-                $amount                          = app('steam')->positive((string) $journal['foreign_amount']);
+                $amount                          = Steam::positive((string) $journal['foreign_amount']);
                 if (TransactionTypeEnum::WITHDRAWAL->value === $type) {
-                    $amount = bcmul((string) $amount, '-1');
+                    $amount = bcmul($amount, '-1');
                 }
-                $sums[$foreignCurrencyId][$type] = bcadd((string) $sums[$foreignCurrencyId][$type], (string) $amount);
+                $sums[$foreignCurrencyId][$type] = bcadd((string) $sums[$foreignCurrencyId][$type], $amount);
             }
         }
 
@@ -376,5 +377,45 @@ class TagRepository implements TagRepositoryInterface, UserGroupInterface
     {
         /** @var null|Location */
         return $tag->locations()->first();
+    }
+
+    #[Override]
+    public function periodCollection(Tag $tag, Carbon $start, Carbon $end): array
+    {
+        Log::debug(sprintf('periodCollection(#%d, %s, %s)', $tag->id, $start->format('Y-m-d'), $end->format('Y-m-d')));
+
+        return $tag->transactionJournals()
+            ->leftJoin('transactions', 'transactions.transaction_journal_id', '=', 'transaction_journals.id')
+            ->leftJoin('transaction_types', 'transaction_types.id', '=', 'transaction_journals.transaction_type_id')
+            ->leftJoin('transaction_currencies', 'transaction_currencies.id', '=', 'transactions.transaction_currency_id')
+            ->leftJoin('transaction_currencies as foreign_currencies', 'foreign_currencies.id', '=', 'transactions.foreign_currency_id')
+            ->where('transaction_journals.date', '>=', $start)
+            ->where('transaction_journals.date', '<=', $end)
+            ->where('transactions.amount', '>', 0)
+            ->get([
+                // currencies
+                'transaction_currencies.id as currency_id',
+                'transaction_currencies.code as currency_code',
+                'transaction_currencies.name as currency_name',
+                'transaction_currencies.symbol as currency_symbol',
+                'transaction_currencies.decimal_places as currency_decimal_places',
+
+                // foreign
+                'foreign_currencies.id as foreign_currency_id',
+                'foreign_currencies.code as foreign_currency_code',
+                'foreign_currencies.name as foreign_currency_name',
+                'foreign_currencies.symbol as foreign_currency_symbol',
+                'foreign_currencies.decimal_places as foreign_currency_decimal_places',
+
+                // fields
+                'transaction_journals.date',
+                'transaction_types.type',
+                'transaction_journals.transaction_currency_id',
+                'transactions.amount',
+                'transactions.native_amount as pc_amount',
+                'transactions.foreign_amount',
+            ])
+            ->toArray()
+        ;
     }
 }

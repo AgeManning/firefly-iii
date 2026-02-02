@@ -25,10 +25,12 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Autocomplete;
 
 use FireflyIII\Api\V1\Controllers\Controller;
-use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteRequest;
+use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteApiRequest;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\RuleGroup;
 use FireflyIII\Repositories\RuleGroup\RuleGroupRepositoryInterface;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * Class RuleGroupController
@@ -36,6 +38,7 @@ use Illuminate\Http\JsonResponse;
 class RuleGroupController extends Controller
 {
     private RuleGroupRepositoryInterface $repository;
+    protected array $acceptedRoles = [UserRoleEnum::READ_RULES];
 
     /**
      * RuleGroupController constructor.
@@ -43,24 +46,19 @@ class RuleGroupController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->repository = app(RuleGroupRepositoryInterface::class);
-                $this->repository->setUser(auth()->user());
+        $this->middleware(function (Request $request, $next) {
+            $this->validateUserGroup($request);
+            $this->repository = app(RuleGroupRepositoryInterface::class);
+            $this->repository->setUser($this->user);
+            $this->repository->setUserGroup($this->userGroup);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
-    /**
-     * This endpoint is documented at:
-     * * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/autocomplete/getRuleGroupsAC
-     */
-    public function ruleGroups(AutocompleteRequest $request): JsonResponse
+    public function ruleGroups(AutocompleteApiRequest $request): JsonResponse
     {
-        $data     = $request->getData();
-        $groups   = $this->repository->searchRuleGroup($data['query'], $this->parameters->get('limit'));
+        $groups   = $this->repository->searchRuleGroup($request->attributes->get('query'), $request->attributes->get('limit'));
         $response = [];
 
         /** @var RuleGroup $group */
@@ -69,6 +67,7 @@ class RuleGroupController extends Controller
                 'id'          => (string) $group->id,
                 'name'        => $group->title,
                 'description' => $group->description,
+                'active'      => $group->active,
             ];
         }
 

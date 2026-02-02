@@ -23,8 +23,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Chart;
 
+use FireflyIII\Support\Facades\Navigation;
 use Carbon\Carbon;
-use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Generator\Chart\Basic\GeneratorInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Category;
@@ -34,11 +34,14 @@ use FireflyIII\Repositories\Category\OperationsRepositoryInterface;
 use FireflyIII\Support\CacheProperties;
 use FireflyIII\Support\Chart\Category\FrontpageChartGenerator;
 use FireflyIII\Support\Chart\Category\WholePeriodChartGenerator;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Controllers\AugumentData;
 use FireflyIII\Support\Http\Controllers\ChartGeneration;
 use FireflyIII\Support\Http\Controllers\DateCalculation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 
 /**
  * Class CategoryController.
@@ -64,33 +67,31 @@ class CategoryController extends Controller
     /**
      * Show an overview for a category for all time, per month/week/year.
      * TODO test method, for category refactor.
-     *
-     * @throws FireflyException
      */
     public function all(Category $category): JsonResponse
     {
         // cache results:
-        $cache                           = new CacheProperties();
+        $cache                            = new CacheProperties();
         $cache->addProperty('chart.category.all');
         $cache->addProperty($category->id);
-        $cache->addProperty($this->convertToNative);
+        $cache->addProperty($this->convertToPrimary);
         if ($cache->has()) {
             return response()->json($cache->get());
         }
 
         /** @var CategoryRepositoryInterface $repository */
-        $repository                      = app(CategoryRepositoryInterface::class);
-        $start                           = $repository->firstUseDate($category) ?? $this->getDate();
-        $range                           = app('navigation')->getViewRange(false);
-        $start                           = app('navigation')->startOfPeriod($start, $range);
-        $end                             = $this->getDate();
+        $repository                       = app(CategoryRepositoryInterface::class);
+        $start                            = $repository->firstUseDate($category) ?? $this->getDate();
+        $range                            = Navigation::getViewRange(false);
+        $start                            = Navigation::startOfPeriod($start, $range);
+        $end                              = $this->getDate();
 
         /** @var WholePeriodChartGenerator $chartGenerator */
-        $chartGenerator                  = app(WholePeriodChartGenerator::class);
-        $chartGenerator->convertToNative = $this->convertToNative;
+        $chartGenerator                   = app(WholePeriodChartGenerator::class);
+        $chartGenerator->convertToPrimary = $this->convertToPrimary;
 
-        $chartData                       = $chartGenerator->generate($category, $start, $end);
-        $data                            = $this->generator->multiSet($chartData);
+        $chartData                        = $chartGenerator->generate($category, $start, $end);
+        $data                             = $this->generator->multiSet($chartData);
         $cache->store($data);
 
         return response()->json($data);
@@ -113,7 +114,7 @@ class CategoryController extends Controller
         $cache              = new CacheProperties();
         $cache->addProperty($start);
         $cache->addProperty($end);
-        $cache->addProperty($this->convertToNative);
+        $cache->addProperty($this->convertToPrimary);
         $cache->addProperty('chart.category.frontpage');
         if ($cache->has()) {
             return response()->json($cache->get());
@@ -139,7 +140,7 @@ class CategoryController extends Controller
         $cache->addProperty('chart.category.period');
         $cache->addProperty($accounts->pluck('id')->toArray());
         $cache->addProperty($category);
-        $cache->addProperty($this->convertToNative);
+        $cache->addProperty($this->convertToPrimary);
         if ($cache->has()) {
             return response()->json($cache->get());
         }
@@ -173,13 +174,13 @@ class CategoryController extends Controller
             $opsRepository = app(OperationsRepositoryInterface::class);
             $categoryId    = $category->id;
             // this gives us all currencies
-            $collection    = new Collection([$category]);
+            $collection    = new Collection()->push($category);
             $expenses      = $opsRepository->listExpenses($start, $end, $accounts, $collection);
             $income        = $opsRepository->listIncome($start, $end, $accounts, $collection);
         }
         $currencies = array_unique(array_merge(array_keys($income), array_keys($expenses)));
-        $periods    = app('navigation')->listOfPeriods($start, $end);
-        $format     = app('navigation')->preferredCarbonLocalizedFormat($start, $end);
+        $periods    = Navigation::listOfPeriods($start, $end);
+        $format     = Navigation::preferredCarbonLocalizedFormat($start, $end);
         $chartData  = [];
         // make empty data array:
         // double foreach (bad) to make empty array:
@@ -211,19 +212,19 @@ class CategoryController extends Controller
             // loop income and expenses for this category.:
             $outSet       = $expenses[$currencyId]['categories'][$categoryId] ?? ['transaction_journals' => []];
             foreach ($outSet['transaction_journals'] as $journal) {
-                $amount                               = app('steam')->positive($journal['amount']);
+                $amount                               = Steam::positive($journal['amount']);
                 $date                                 = $journal['date']->isoFormat($format);
                 $chartData[$outKey]['entries'][$date] ??= '0';
 
-                $chartData[$outKey]['entries'][$date] = bcadd((string) $amount, $chartData[$outKey]['entries'][$date]);
+                $chartData[$outKey]['entries'][$date] = bcadd($amount, $chartData[$outKey]['entries'][$date]);
             }
 
             $inSet        = $income[$currencyId]['categories'][$categoryId] ?? ['transaction_journals' => []];
             foreach ($inSet['transaction_journals'] as $journal) {
-                $amount                              = app('steam')->positive($journal['amount']);
+                $amount                              = Steam::positive($journal['amount']);
                 $date                                = $journal['date']->isoFormat($format);
                 $chartData[$inKey]['entries'][$date] ??= '0';
-                $chartData[$inKey]['entries'][$date] = bcadd((string) $amount, $chartData[$inKey]['entries'][$date]);
+                $chartData[$inKey]['entries'][$date] = bcadd($amount, $chartData[$inKey]['entries'][$date]);
             }
         }
 
@@ -255,12 +256,13 @@ class CategoryController extends Controller
      * Chart for a specific period.
      * TODO test me, for category refactor.
      *
-     * @throws FireflyException
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
     public function specificPeriod(Category $category, Carbon $date): JsonResponse
     {
-        $range          = app('navigation')->getViewRange(false);
-        $start          = app('navigation')->startOfPeriod($date, $range);
+        $range          = Navigation::getViewRange(false);
+        $start          = Navigation::startOfPeriod($date, $range);
         $end            = session()->get('end');
         if ($end < $start) {
             [$end, $start] = [$start, $end];

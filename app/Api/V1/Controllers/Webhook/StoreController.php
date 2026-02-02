@@ -27,11 +27,14 @@ namespace FireflyIII\Api\V1\Controllers\Webhook;
 use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Models\Webhook\CreateRequest;
 use FireflyIII\Repositories\Webhook\WebhookRepositoryInterface;
+use FireflyIII\Support\JsonApi\Enrichments\WebhookEnrichment;
 use FireflyIII\Transformers\WebhookTransformer;
+use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use League\Fractal\Resource\Item;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 /**
  * Class StoreController
@@ -61,13 +64,22 @@ class StoreController extends Controller
     public function store(CreateRequest $request): JsonResponse
     {
         $data        = $request->getData();
-        if (false === config('firefly.allow_webhooks')) {
+        if (false === FireflyConfig::get('allow_webhooks', config('firefly.allow_webhooks'))->data) {
             Log::channel('audit')->info('User tries to store new webhook, but webhooks are DISABLED.', $data);
 
             throw new NotFoundHttpException('Webhooks are not enabled.');
         }
 
         $webhook     = $this->repository->store($data);
+
+        // enrich
+        /** @var User $admin */
+        $admin       = auth()->user();
+        $enrichment  = new WebhookEnrichment();
+        $enrichment->setUser($admin);
+        $webhook     = $enrichment->enrichSingle($webhook);
+
+
         $manager     = $this->getManager();
 
         Log::channel('audit')->info('User stores new webhook', $data);

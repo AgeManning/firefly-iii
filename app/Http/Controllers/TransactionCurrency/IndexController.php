@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\TransactionCurrency;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Repositories\Currency\CurrencyRepositoryInterface;
@@ -33,6 +34,8 @@ use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\View\View;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 
 class IndexController extends Controller
 {
@@ -62,22 +65,25 @@ class IndexController extends Controller
      * Show overview of currencies.
      *
      * @return Factory|View
+     *
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
-    public function index(Request $request)
+    public function index(Request $request): Factory|\Illuminate\Contracts\View\View
     {
         /** @var User $user */
         $user       = auth()->user();
         $page       = 0 === (int) $request->get('page') ? 1 : (int) $request->get('page');
-        $pageSize   = (int) app('preferences')->get('listPageSize', 50)->data;
+        $pageSize   = (int) Preferences::get('listPageSize', 50)->data;
         $collection = $this->repository->getAll();
 
         // order so default and enabled are on top:
         $collection = $collection->sortBy(
-            static function (TransactionCurrency $currency) {
-                $native  = true === $currency->userGroupNative ? 0 : 1;
+            static function (TransactionCurrency $currency): string {
+                $primary = true === $currency->userGroupNative ? 0 : 1;
                 $enabled = true === $currency->userGroupEnabled ? 0 : 1;
 
-                return sprintf('%s-%s-%s', $native, $enabled, $currency->code);
+                return sprintf('%s-%s-%s', $primary, $enabled, $currency->code);
             }
         );
         $total      = $collection->count();
@@ -91,6 +97,6 @@ class IndexController extends Controller
             $isOwner = false;
         }
 
-        return view('currencies.index', compact('currencies', 'isOwner'));
+        return view('currencies.index', ['currencies' => $currencies, 'isOwner' => $isOwner]);
     }
 }

@@ -33,6 +33,10 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
+use Safe\Exceptions\UrlException;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 use function Safe\parse_url;
 
@@ -60,6 +64,8 @@ class ForgotPasswordController extends Controller
      * Send a reset link to the given user.
      *
      * @return Factory|RedirectResponse|View
+     *
+     * @throws FireflyException
      */
     public function sendResetLinkEmail(Request $request, UserRepositoryInterface $repository)
     {
@@ -68,7 +74,7 @@ class ForgotPasswordController extends Controller
             $message = sprintf('Cannot reset password when authenticating over "%s".', config('firefly.authentication_guard'));
             Log::error($message);
 
-            return view('error', compact('message'));
+            return view('errors.error', ['message' => $message]);
         }
 
         // validate host header.
@@ -103,11 +109,15 @@ class ForgotPasswordController extends Controller
      */
     private function validateHost(): void
     {
-        $configuredHost = parse_url((string) config('app.url'), PHP_URL_HOST);
-        if (false === $configuredHost || null === $configuredHost) {
+        try {
+            $configuredHost = parse_url((string)config('app.url'), PHP_URL_HOST);
+        } catch (UrlException $e) {
+            throw new FireflyException('Please set a valid and correct Firefly III URL in the APP_URL environment variable.', 0, $e);
+        }
+        if (!is_string($configuredHost)) {
             throw new FireflyException('Please set a valid and correct Firefly III URL in the APP_URL environment variable.');
         }
-        $host           = request()->host();
+        $host = request()->host();
         if ($configuredHost !== $host) {
             Log::error(sprintf('Host header is "%s", APP_URL is "%s".', $host, $configuredHost));
 
@@ -121,17 +131,19 @@ class ForgotPasswordController extends Controller
      * @return Factory|View
      *
      * @throws FireflyException
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
     public function showLinkRequestForm()
     {
         if ('web' !== config('firefly.authentication_guard')) {
             $message = sprintf('Cannot reset password when authenticating over "%s".', config('firefly.authentication_guard'));
 
-            return view('error', compact('message'));
+            return view('errors.error', ['message' => $message]);
         }
 
         // is allowed to?
-        $singleUserMode    = app('fireflyconfig')->get('single_user_mode', config('firefly.configuration.single_user_mode'))->data;
+        $singleUserMode    = FireflyConfig::get('single_user_mode', config('firefly.configuration.single_user_mode'))->data;
         $userCount         = User::count();
         $allowRegistration = true;
         $pageTitle         = (string) trans('firefly.forgot_pw_page_title');
@@ -139,6 +151,6 @@ class ForgotPasswordController extends Controller
             $allowRegistration = false;
         }
 
-        return view('auth.passwords.email')->with(compact('allowRegistration', 'pageTitle'));
+        return view('auth.passwords.email')->with(['allowRegistration' => $allowRegistration, 'pageTitle' => $pageTitle]);
     }
 }

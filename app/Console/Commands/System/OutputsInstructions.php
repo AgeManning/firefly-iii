@@ -26,11 +26,14 @@ namespace FireflyIII\Console\Commands\System;
 
 use Carbon\Carbon;
 use FireflyIII\Support\System\GeneratesInstallationId;
+use FireflyIII\Support\System\IsOldVersion;
 use Illuminate\Console\Command;
+use Random\RandomException;
 
 class OutputsInstructions extends Command
 {
     use GeneratesInstallationId;
+    use IsOldVersion;
 
     protected $description = 'Instructions in case of upgrade trouble.';
 
@@ -57,7 +60,7 @@ class OutputsInstructions extends Command
      */
     private function updateInstructions(): void
     {
-        $version = (string) config('firefly.version');
+        $version = (string)config('firefly.version');
 
         /** @var array $config */
         $config  = config('upgrade.text.upgrade');
@@ -67,12 +70,12 @@ class OutputsInstructions extends Command
         foreach (array_keys($config) as $compare) {
             // if string starts with:
             if (str_starts_with($version, $compare)) {
-                $text = (string) $config[$compare];
+                $text = (string)$config[$compare];
             }
         }
 
         // validate some settings.
-        if ('' === $text && 'local' === (string) config('app.env')) {
+        if ('' === $text && 'local' === (string)config('app.env')) {
             $text = 'Please set APP_ENV=production for a safer environment.';
         }
 
@@ -83,6 +86,7 @@ class OutputsInstructions extends Command
 
         $this->newLine();
         $this->showLogo();
+        $this->newLine();
         $this->newLine();
         $this->showLine();
 
@@ -132,6 +136,9 @@ class OutputsInstructions extends Command
         if ('03-31' === $today) {
             $colors = ['bright-blue', 'bright-red', 'white', 'white', 'bright-red', 'bright-blue', 'default', 'default'];
         }
+        if ('ru_RU' === config('firefly.default_language')) {
+            $colors = ['blue', 'blue', 'blue', 'yellow', 'yellow', 'yellow', 'default', 'default'];
+        }
 
         $this->line(sprintf('<fg=%s>              ______ _           __ _            _____ _____ _____  </>', $colors[0]));
         $this->line(sprintf('<fg=%s>             |  ____(_)         / _| |          |_   _|_   _|_   _| </>', $colors[1]));
@@ -141,6 +148,7 @@ class OutputsInstructions extends Command
         $this->line(sprintf('<fg=%s>             |_|    |_|_|  \___|_| |_|\__, |    |_____|_____|_____| </>', $colors[5]));
         $this->line(sprintf('<fg=%s>                                       __/ |                        </>', $colors[6]));
         $this->line(sprintf('<fg=%s>                                      |___/                         </>', $colors[7]));
+        $this->someQuote();
     }
 
     /**
@@ -185,7 +193,7 @@ class OutputsInstructions extends Command
      */
     private function installInstructions(): void
     {
-        $version = (string) config('firefly.version');
+        $version = (string)config('firefly.version');
 
         /** @var array $config */
         $config  = config('upgrade.text.install');
@@ -195,12 +203,12 @@ class OutputsInstructions extends Command
         foreach (array_keys($config) as $compare) {
             // if string starts with:
             if (str_starts_with($version, $compare)) {
-                $text = (string) $config[$compare];
+                $text = (string)$config[$compare];
             }
         }
 
         // validate some settings.
-        if ('' === $text && 'local' === (string) config('app.env')) {
+        if ('' === $text && 'local' === (string)config('app.env')) {
             $text = 'Please set APP_ENV=production for a safer environment.';
         }
 
@@ -232,5 +240,41 @@ class OutputsInstructions extends Command
         $this->donationText();
         $this->boxed('');
         $this->showLine();
+    }
+
+    private function someQuote(): void
+    {
+        $lines = [
+            '"Forgive yourself for not being at peace."',
+            '"Doesn\'t look like anything to me."',
+            '"Be proud of what you make."',
+            '"Be there or forever wonder."',
+            '"A year from now you will wish you had started today."',
+            '🇺🇦 Слава Україні!',
+            '🇺🇦 Slava Ukraini!',
+        ];
+
+        // fuck the Russian aggression in Ukraine.
+
+        // There is no point even trying to be neutral, because you can’t. When I say you can’t be neutral on
+        // a moving train, it means the world is already moving in certain directions. Children are going
+        // hungry, wars are taking place. In a situation like that, to be neutral or to try to be neutral,
+        // to stand aside, not to take a stand, not to participate, is to collaborate with whatever is
+        // going on, to allow that to happen.
+
+        if ('ru_RU' === config('firefly.default_language')) {
+            $lines = [
+                '🇺🇦 Слава Україні!',
+                '🇺🇦 Slava Ukraini!',
+            ];
+        }
+
+        try {
+            $random = random_int(0, count($lines) - 1);
+        } catch (RandomException) {
+            $random = 0;
+        }
+        $this->line(sprintf('       %s', $lines[$random]));
+
     }
 }

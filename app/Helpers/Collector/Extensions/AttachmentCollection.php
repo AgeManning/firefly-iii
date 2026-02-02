@@ -27,8 +27,8 @@ namespace FireflyIII\Helpers\Collector\Extensions;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Models\Attachment;
 use FireflyIII\Models\TransactionJournal;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Trait AttachmentCollection
@@ -41,7 +41,6 @@ trait AttachmentCollection
         $this->withAttachmentInformation();
 
         /**
-         * @param int   $index
          * @param array $object
          *
          * @return bool
@@ -55,7 +54,7 @@ trait AttachmentCollection
                         strtolower((string) $attachment['title']),
                         strtolower($name)
                     );
-                    if (true === $result) {
+                    if ($result) {
                         return true;
                     }
                 }
@@ -73,7 +72,7 @@ trait AttachmentCollection
      */
     public function hasAttachments(): GroupCollectorInterface
     {
-        app('log')->debug('Add filter on attachment ID.');
+        Log::debug('Add filter on attachment ID.');
         $this->joinAttachmentTables();
         $this->query->whereNotNull('attachments.attachable_id');
         $this->query->whereNull('attachments.deleted_at');
@@ -94,7 +93,7 @@ trait AttachmentCollection
                     static function (EloquentBuilder $q1): void { // @phpstan-ignore-line
                         $q1->where('attachments.attachable_type', TransactionJournal::class);
                         // $q1->where('attachments.uploaded', true);
-                        $q1->whereNull('attachments.deleted_at');
+                        // $q1->whereNull('attachments.deleted_at');
                         $q1->orWhereNull('attachments.attachable_type');
                     }
                 )
@@ -107,6 +106,7 @@ trait AttachmentCollection
         $this->fields[] = 'attachments.id as attachment_id';
         $this->fields[] = 'attachments.filename as attachment_filename';
         $this->fields[] = 'attachments.title as attachment_title';
+        $this->fields[] = 'attachments.deleted_at as attachment_deleted_at';
         $this->fields[] = 'attachments.uploaded as attachment_uploaded';
         $this->joinAttachmentTables();
 
@@ -119,7 +119,6 @@ trait AttachmentCollection
         $this->withAttachmentInformation();
 
         /**
-         * @param int   $index
          * @param array $object
          *
          * @return bool
@@ -135,7 +134,7 @@ trait AttachmentCollection
                         strtolower((string) $attachment['title']),
                         strtolower($name)
                     );
-                    if (true === $result) {
+                    if ($result) {
                         return true;
                     }
                 }
@@ -154,7 +153,6 @@ trait AttachmentCollection
         $this->withAttachmentInformation();
 
         /**
-         * @param int   $index
          * @param array $object
          *
          * @return bool
@@ -170,7 +168,7 @@ trait AttachmentCollection
                         strtolower((string) $attachment['title']),
                         strtolower($name)
                     );
-                    if (true === $result) {
+                    if ($result) {
                         return true;
                     }
                 }
@@ -189,7 +187,6 @@ trait AttachmentCollection
         $this->withAttachmentInformation();
 
         /**
-         * @param int   $index
          * @param array $object
          *
          * @return bool
@@ -205,7 +202,7 @@ trait AttachmentCollection
                         strtolower((string) $attachment['title']),
                         strtolower($name)
                     );
-                    if (true === $result) {
+                    if ($result) {
                         return true;
                     }
                 }
@@ -231,7 +228,7 @@ trait AttachmentCollection
                         strtolower((string) $attachment['title']),
                         strtolower($name)
                     );
-                    if (true === $result) {
+                    if ($result) {
                         return true;
                     }
                 }
@@ -254,7 +251,7 @@ trait AttachmentCollection
                 /** @var array $attachment */
                 foreach ($transaction['attachments'] as $attachment) {
                     $result = $attachment['filename'] === $name || $attachment['title'] === $name;
-                    if (true === $result) {
+                    if ($result) {
                         return true;
                     }
                 }
@@ -277,7 +274,7 @@ trait AttachmentCollection
                 /** @var array $attachment */
                 foreach ($transaction['attachments'] as $attachment) {
                     $result = $attachment['filename'] !== $name && $attachment['title'] !== $name;
-                    if (true === $result) {
+                    if ($result) {
                         return true;
                     }
                 }
@@ -303,7 +300,7 @@ trait AttachmentCollection
                         strtolower((string) $attachment['title']),
                         strtolower($name)
                     );
-                    if (true === $result) {
+                    if ($result) {
                         return true;
                     }
                 }
@@ -513,13 +510,13 @@ trait AttachmentCollection
      */
     public function hasNoAttachments(): GroupCollectorInterface
     {
-        app('log')->debug('Add filter on no attachments.');
+        Log::debug('Add filter on no attachments.');
         $this->joinAttachmentTables();
 
-        $this->query->where(static function (Builder $q1): void { // @phpstan-ignore-line
+        $this->query->where(static function (EloquentBuilder $q1): void { // @phpstan-ignore-line
             $q1
                 ->whereNull('attachments.attachable_id')
-                ->orWhere(static function (Builder $q2): void {
+                ->orWhere(static function (EloquentBuilder $q2): void {
                     $q2
                         ->whereNotNull('attachments.attachable_id')
                         ->whereNotNull('attachments.deleted_at')

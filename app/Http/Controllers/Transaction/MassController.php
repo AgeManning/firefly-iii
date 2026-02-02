@@ -23,7 +23,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Transaction;
 
-use InvalidArgumentException;
+use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Enums\TransactionTypeEnum;
@@ -42,6 +42,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View as IlluminateView;
+use InvalidArgumentException;
+use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class MassController.
@@ -78,7 +80,7 @@ class MassController extends Controller
         // put previous url in session
         $this->rememberPreviousUrl('transactions.mass-delete.url');
 
-        return view('transactions.mass.delete', compact('journals', 'subTitle'));
+        return view('transactions.mass.delete', ['journals' => $journals, 'subTitle' => $subTitle]);
     }
 
     /**
@@ -86,31 +88,31 @@ class MassController extends Controller
      *
      * @return Application|Redirector|RedirectResponse
      */
-    public function destroy(MassDeleteJournalRequest $request)
+    public function destroy(MassDeleteJournalRequest $request): Redirector|RedirectResponse
     {
-        app('log')->debug(sprintf('Now in %s', __METHOD__));
+        Log::debug(sprintf('Now in %s', __METHOD__));
         $ids   = $request->get('confirm_mass_delete');
         $count = 0;
         if (is_array($ids)) {
-            app('log')->debug('Array of IDs', $ids);
+            Log::debug('Array of IDs', $ids);
 
             /** @var string $journalId */
             foreach ($ids as $journalId) {
-                app('log')->debug(sprintf('Searching for ID #%d', $journalId));
+                Log::debug(sprintf('Searching for ID #%d', $journalId));
 
                 /** @var null|TransactionJournal $journal */
                 $journal = $this->repository->find((int) $journalId);
                 if (null !== $journal && (int) $journalId === $journal->id) {
                     $this->repository->destroyJournal($journal);
                     ++$count;
-                    app('log')->debug(sprintf('Deleted transaction journal #%d', $journalId));
+                    Log::debug(sprintf('Deleted transaction journal #%d', $journalId));
 
                     continue;
                 }
-                app('log')->debug(sprintf('Could not find transaction journal #%d', $journalId));
+                Log::debug(sprintf('Could not find transaction journal #%d', $journalId));
             }
         }
-        app('preferences')->mark();
+        Preferences::mark();
         session()->flash('success', trans_choice('firefly.mass_deleted_transactions_success', $count));
 
         // redirect to previous URL:
@@ -141,24 +143,22 @@ class MassController extends Controller
 
         // reverse amounts
         foreach ($journals as $index => $journal) {
-            $journals[$index]['amount']         = app('steam')->bcround(app('steam')->positive($journal['amount']), $journal['currency_decimal_places']);
+            $journals[$index]['amount']         = Steam::bcround(Steam::positive($journal['amount']), $journal['currency_decimal_places']);
             $journals[$index]['foreign_amount'] = null === $journal['foreign_amount']
-                ? null : app('steam')->positive($journal['foreign_amount']);
+                ? null : Steam::positive($journal['foreign_amount']);
         }
 
         $this->rememberPreviousUrl('transactions.mass-edit.url');
 
-        return view('transactions.mass.edit', compact('journals', 'subTitle', 'withdrawalSources', 'depositDestinations', 'budgets'));
+        return view('transactions.mass.edit', ['journals' => $journals, 'subTitle' => $subTitle, 'withdrawalSources' => $withdrawalSources, 'depositDestinations' => $depositDestinations, 'budgets' => $budgets]);
     }
 
     /**
      * Mass update of journals.
      *
-     * @return Redirector|RedirectResponse
-     *
      * @throws FireflyException
      */
-    public function update(MassEditJournalRequest $request)
+    public function update(MassEditJournalRequest $request): Redirector|RedirectResponse
     {
         $journalIds = $request->get('journals');
         if (!is_array($journalIds)) {
@@ -179,7 +179,7 @@ class MassController extends Controller
             }
         }
 
-        app('preferences')->mark();
+        Preferences::mark();
         session()->flash('success', trans_choice('firefly.mass_edited_transactions_success', $count));
 
         // redirect to previous URL:
@@ -211,7 +211,7 @@ class MassController extends Controller
             'amount'           => $this->getStringFromRequest($request, $journal->id, 'amount'),
             'foreign_amount'   => $this->getStringFromRequest($request, $journal->id, 'foreign_amount'),
         ];
-        app('log')->debug(sprintf('Will update journal #%d with data.', $journal->id), $data);
+        Log::debug(sprintf('Will update journal #%d with data.', $journal->id), $data);
 
         // call service to update.
         $service->setData($data);

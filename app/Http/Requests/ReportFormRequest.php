@@ -35,6 +35,7 @@ use FireflyIII\Support\Request\ChecksLogin;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Safe\Exceptions\PcreException;
 
 use function Safe\preg_match;
 
@@ -134,6 +135,7 @@ class ReportFormRequest extends FormRequest
      * Validate end date.
      *
      * @throws FireflyException
+     * @throws PcreException
      */
     public function getEndDate(): Carbon
     {
@@ -146,13 +148,13 @@ class ReportFormRequest extends FormRequest
             // if regex for YYYY-MM-DD:
             $pattern = '/^(19|20)\d\d-(0[1-9]|1[012])-(0[1-9]|[12][\d]|3[01])$/';
             $result  = preg_match($pattern, $string);
-            if (false !== $result && 0 !== $result) {
+            if (0 !== $result) {
                 try {
                     $date = new Carbon($parts[1]);
                 } catch (Exception $e) { // intentional generic exception
                     $error = sprintf('"%s" is not a valid date range: %s', $range, $e->getMessage());
-                    app('log')->error($error);
-                    app('log')->error($e->getTraceAsString());
+                    Log::error($error);
+                    Log::error($e->getTraceAsString());
 
                     throw new FireflyException($error, 0, $e);
                 }
@@ -160,7 +162,7 @@ class ReportFormRequest extends FormRequest
                 return $date;
             }
             $error   = sprintf('"%s" is not a valid date range: %s', $range, 'invalid format :(');
-            app('log')->error($error);
+            Log::error($error);
 
             throw new FireflyException($error, 0);
         }
@@ -172,6 +174,7 @@ class ReportFormRequest extends FormRequest
      * Validate start date.
      *
      * @throws FireflyException
+     * @throws PcreException
      */
     public function getStartDate(): Carbon
     {
@@ -184,13 +187,13 @@ class ReportFormRequest extends FormRequest
             // if regex for YYYY-MM-DD:
             $pattern = '/^(19|20)\d\d-(0[1-9]|1[012])-(0[1-9]|[12][\d]|3[01])$/';
             $result  = preg_match($pattern, $string);
-            if (false !== $result && 0 !== $result) {
+            if (0 !== $result) {
                 try {
                     $date = new Carbon($parts[0]);
                 } catch (Exception $e) { // intentional generic exception
                     $error = sprintf('"%s" is not a valid date range: %s', $range, $e->getMessage());
-                    app('log')->error($error);
-                    app('log')->error($e->getTraceAsString());
+                    Log::error($error);
+                    Log::error($e->getTraceAsString());
 
                     throw new FireflyException($error, 0, $e);
                 }
@@ -198,7 +201,7 @@ class ReportFormRequest extends FormRequest
                 return $date;
             }
             $error   = sprintf('"%s" is not a valid date range: %s', $range, 'invalid format :(');
-            app('log')->error($error);
+            Log::error($error);
 
             throw new FireflyException($error, 0);
         }
@@ -216,15 +219,15 @@ class ReportFormRequest extends FormRequest
         $set        = $this->get('tag');
         $collection = new Collection();
         if (is_array($set)) {
-            app('log')->debug('Set is:', $set);
+            Log::debug('Set is:', $set);
         }
         if (!is_array($set)) {
-            app('log')->debug(sprintf('Set is not an array! "%s"', $set));
+            Log::debug(sprintf('Set is not an array! "%s"', $set));
 
             return $collection;
         }
         foreach ($set as $tagTag) {
-            app('log')->debug(sprintf('Now searching for "%s"', $tagTag));
+            Log::debug(sprintf('Now searching for "%s"', $tagTag));
             $tag = $repository->findByTag($tagTag);
             if (null !== $tag) {
                 $collection->push($tag);

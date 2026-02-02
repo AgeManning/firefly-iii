@@ -23,8 +23,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Json;
 
-use Deprecated;
 use Carbon\Carbon;
+use Deprecated;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
@@ -35,8 +35,10 @@ use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\Currency\CurrencyRepositoryInterface;
 use FireflyIII\Support\CacheProperties;
 use FireflyIII\Support\Facades\Amount;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Controllers\DateCalculation;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Class BoxController.
@@ -51,7 +53,7 @@ class BoxController extends Controller
     #[Deprecated]
     public function available(): JsonResponse
     {
-        return response()->json([]);
+        return response()->json();
     }
 
     /**
@@ -68,7 +70,7 @@ class BoxController extends Controller
         $cache     = new CacheProperties();
         $cache->addProperty($start);
         $cache->addProperty($end);
-        $cache->addProperty($this->convertToNative);
+        $cache->addProperty($this->convertToPrimary);
         $cache->addProperty('box-balance');
         if ($cache->has()) {
             return response()->json($cache->get());
@@ -77,7 +79,7 @@ class BoxController extends Controller
         $incomes   = [];
         $expenses  = [];
         $sums      = [];
-        $currency  = $this->defaultCurrency;
+        $currency  = $this->primaryCurrency;
 
         // collect income of user:
         /** @var GroupCollectorInterface $collector */
@@ -89,12 +91,12 @@ class BoxController extends Controller
 
         /** @var array $journal */
         foreach ($set as $journal) {
-            $currencyId           = $this->convertToNative && $this->defaultCurrency->id !== (int) $journal['currency_id'] ? $this->defaultCurrency->id : (int) $journal['currency_id'];
+            $currencyId           = $this->convertToPrimary && $this->primaryCurrency->id !== (int) $journal['currency_id'] ? $this->primaryCurrency->id : (int) $journal['currency_id'];
             $amount               = Amount::getAmountFromJournal($journal);
             $incomes[$currencyId] ??= '0';
-            $incomes[$currencyId] = bcadd($incomes[$currencyId], (string) app('steam')->positive($amount));
+            $incomes[$currencyId] = bcadd($incomes[$currencyId], Steam::positive($amount));
             $sums[$currencyId]    ??= '0';
-            $sums[$currencyId]    = bcadd($sums[$currencyId], (string) app('steam')->positive($amount));
+            $sums[$currencyId]    = bcadd($sums[$currencyId], Steam::positive($amount));
         }
 
         // collect expenses
@@ -107,7 +109,7 @@ class BoxController extends Controller
 
         /** @var array $journal */
         foreach ($set as $journal) {
-            $currencyId            = $this->convertToNative ? $this->defaultCurrency->id : (int) $journal['currency_id'];
+            $currencyId            = $this->convertToPrimary ? $this->primaryCurrency->id : (int) $journal['currency_id'];
             $amount                = Amount::getAmountFromJournal($journal);
             $expenses[$currencyId] ??= '0';
             $expenses[$currencyId] = bcadd($expenses[$currencyId], $amount);
@@ -119,15 +121,15 @@ class BoxController extends Controller
         $keys      = array_keys($sums);
         foreach ($keys as $currencyId) {
             $currency              = $repository->find($currencyId);
-            $sums[$currencyId]     = app('amount')->formatAnything($currency, $sums[$currencyId], false);
-            $incomes[$currencyId]  = app('amount')->formatAnything($currency, $incomes[$currencyId] ?? '0', false);
-            $expenses[$currencyId] = app('amount')->formatAnything($currency, $expenses[$currencyId] ?? '0', false);
+            $sums[$currencyId]     = Amount::formatAnything($currency, $sums[$currencyId], false);
+            $incomes[$currencyId]  = Amount::formatAnything($currency, $incomes[$currencyId] ?? '0', false);
+            $expenses[$currencyId] = Amount::formatAnything($currency, $expenses[$currencyId] ?? '0', false);
         }
         if (0 === count($sums)) {
-            $currency                             = $this->defaultCurrency;
-            $sums[$this->defaultCurrency->id]     = app('amount')->formatAnything($this->defaultCurrency, '0', false);
-            $incomes[$this->defaultCurrency->id]  = app('amount')->formatAnything($this->defaultCurrency, '0', false);
-            $expenses[$this->defaultCurrency->id] = app('amount')->formatAnything($this->defaultCurrency, '0', false);
+            $currency                             = $this->primaryCurrency;
+            $sums[$this->primaryCurrency->id]     = Amount::formatAnything($this->primaryCurrency, '0', false);
+            $incomes[$this->primaryCurrency->id]  = Amount::formatAnything($this->primaryCurrency, '0', false);
+            $expenses[$this->primaryCurrency->id] = Amount::formatAnything($this->primaryCurrency, '0', false);
         }
 
         $response  = [
@@ -164,15 +166,15 @@ class BoxController extends Controller
         $allAccounts       = $accountRepository->getActiveAccountsByType(
             [AccountTypeEnum::DEFAULT->value, AccountTypeEnum::ASSET->value, AccountTypeEnum::LOAN->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::MORTGAGE->value]
         );
-        app('log')->debug(sprintf('Found %d accounts.', $allAccounts->count()));
+        Log::debug(sprintf('Found %d accounts.', $allAccounts->count()));
 
         // filter list on preference of being included.
         $filtered          = $allAccounts->filter(
-            static function (Account $account) use ($accountRepository) {
+            static function (Account $account) use ($accountRepository): bool {
                 $includeNetWorth = $accountRepository->getMetaValue($account, 'include_net_worth');
-                $result          = null === $includeNetWorth ? true : '1' === $includeNetWorth;
+                $result          = null === $includeNetWorth || '1' === $includeNetWorth;
                 if (false === $result) {
-                    app('log')->debug(sprintf('Will not include "%s" in net worth charts.', $account->name));
+                    Log::debug(sprintf('Will not include "%s" in net worth charts.', $account->name));
                 }
 
                 return $result;
@@ -182,10 +184,10 @@ class BoxController extends Controller
         $netWorthSet       = $netWorthHelper->byAccounts($filtered, $date);
         $return            = [];
         foreach ($netWorthSet as $key => $data) {
-            if ('native' === $key) {
+            if ('primary' === $key) {
                 continue;
             }
-            $return[$data['currency_id']] = app('amount')->formatFlat($data['currency_symbol'], $data['currency_decimal_places'], $data['balance'], false);
+            $return[$data['currency_id']] = Amount::formatFlat($data['currency_symbol'], $data['currency_decimal_places'], $data['balance'], false);
         }
         $return            = [
             'net_worths' => array_values($return),

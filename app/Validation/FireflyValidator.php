@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace FireflyIII\Validation;
 
+use ErrorException;
+use FireflyIII\Support\Facades\Preferences;
+use Config;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Account;
@@ -45,12 +48,14 @@ use PragmaRX\Google2FA\Exceptions\IncompatibleWithGoogleAuthenticatorException;
 use PragmaRX\Google2FA\Exceptions\InvalidCharactersException;
 use PragmaRX\Google2FA\Exceptions\SecretKeyTooShortException;
 use PragmaRX\Google2FALaravel\Facade;
-use Config;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
+use Safe\Exceptions\JsonException;
 use ValueError;
 
-use function Safe\preg_match;
 use function Safe\iconv;
 use function Safe\json_encode;
+use function Safe\preg_match;
 
 /**
  * Class FireflyValidator.
@@ -65,6 +70,8 @@ class FireflyValidator extends Validator
      * @throws IncompatibleWithGoogleAuthenticatorException
      * @throws InvalidCharactersException
      * @throws SecretKeyTooShortException
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      *
      * @SuppressWarnings("PHPMD.UnusedFormalParameter")
      */
@@ -79,7 +86,7 @@ class FireflyValidator extends Validator
 
             return false;
         }
-        $secretPreference = app('preferences')->get('temp-mfa-secret');
+        $secretPreference = Preferences::get('temp-mfa-secret');
         $secret           = $secretPreference->data ?? '';
         if (is_array($secret)) {
             $secret = '';
@@ -118,11 +125,8 @@ class FireflyValidator extends Validator
         }
         $regex  = '/^[a-z]{6}[0-9a-z]{2}([0-9a-z]{3})?\z/i';
         $result = preg_match($regex, $value);
-        if (false === $result || 0 === $result) {
-            return false;
-        }
 
-        return true;
+        return 0 !== $result;
     }
 
     public function validateExistingMfaCode(mixed $attribute, mixed $value): bool
@@ -207,7 +211,12 @@ class FireflyValidator extends Validator
         $value   = strtoupper($value);
 
         // replace characters outside of ASCI range.
-        $value   = (string) iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        try {
+            $value = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        } catch (ErrorException $e) {
+            Log::error(sprintf('Could not convert IBAN "%s" to safe characters. Future steps may fail.', $value));
+            Log::error($e->getMessage());
+        }
         $search  = [' ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
         $replace = ['', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35'];
 
@@ -454,8 +463,9 @@ class FireflyValidator extends Validator
      *
      * @SuppressWarnings("PHPMD.UnusedFormalParameter")
      */
-    public function validateSecurePassword($attribute, $value): bool
+    public function validateSecurePassword($attribute, ?string $value): bool
     {
+        $value  = (string)$value;
         $verify = false;
         if (array_key_exists('verify_password', $this->data)) {
             $verify = 1 === (int) $this->data['verify_password'];
@@ -627,6 +637,8 @@ class FireflyValidator extends Validator
      * @param mixed $attribute
      * @param mixed $value
      * @param mixed $parameters
+     *
+     * @throws JsonException
      *
      * @SuppressWarnings("PHPMD.UnusedFormalParameter")
      */

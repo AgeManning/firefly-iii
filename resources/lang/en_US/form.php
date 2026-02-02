@@ -26,7 +26,7 @@ declare(strict_types=1);
 
 return [
     // new user:
-    'administration_currency'      => 'Native currency',
+    'administration_currency'      => 'Primary currency',
     'bank_name'                    => 'Bank name',
     'bank_balance'                 => 'Balance',
     'current_balance'              => 'Current balance',
@@ -66,9 +66,13 @@ return [
     'opening_balance'              => 'Opening balance',
     'tag_mode'                      => 'Tag mode',
     'virtual_balance'              => 'Virtual balance',
-
-
-
+    'run_after_form' => 'Run this rule',
+    'valid_url_protocols' => 'Valid URL protocols',
+    'allow_webhooks' => 'Allow webhooks',
+    'enable_external_rates' => 'Enable external exchange rates',
+    'enable_external_map' => 'Enable external map',
+    'use_running_balance' => 'Calculate running balances',
+    'enable_exchange_rates' => 'Enable exchange rates',
     'targetamount'                 => 'Target amount',
     'target_amount'                => 'Target amount',
     'account_role'                 => 'Account role',

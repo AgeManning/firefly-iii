@@ -23,17 +23,22 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Recurring;
 
+use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Recurrence;
 use FireflyIII\Repositories\Recurring\RecurringRepositoryInterface;
 use FireflyIII\Support\Http\Controllers\GetConfigurationData;
+use FireflyIII\Support\JsonApi\Enrichments\RecurringEnrichment;
 use FireflyIII\Transformers\RecurrenceTransformer;
+use FireflyIII\User;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\View\View;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 use Symfony\Component\HttpFoundation\ParameterBag;
 
 /**
@@ -43,7 +48,7 @@ class IndexController extends Controller
 {
     use GetConfigurationData;
 
-    private RecurringRepositoryInterface $recurringRepos;
+    private RecurringRepositoryInterface $repository;
 
     /**
      * IndexController constructor.
@@ -58,7 +63,7 @@ class IndexController extends Controller
                 app('view')->share('mainTitleIcon', 'fa-paint-brush');
                 app('view')->share('title', (string) trans('firefly.recurrences'));
 
-                $this->recurringRepos = app(RecurringRepositoryInterface::class);
+                $this->repository = app(RecurringRepositoryInterface::class);
 
                 return $next($request);
             }
@@ -72,18 +77,27 @@ class IndexController extends Controller
      * @return Factory|View
      *
      * @throws FireflyException
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
-    public function index(Request $request)
+    public function index(Request $request): Factory|\Illuminate\Contracts\View\View
     {
         $page        = 0 === (int) $request->get('page') ? 1 : (int) $request->get('page');
-        $pageSize    = (int) app('preferences')->get('listPageSize', 50)->data;
-        $collection  = $this->recurringRepos->get();
+        $pageSize    = (int) Preferences::get('listPageSize', 50)->data;
+        $collection  = $this->repository->get();
         $today       = today(config('app.timezone'));
         $year        = today(config('app.timezone'));
 
         // split collection
         $total       = $collection->count();
         $recurrences = $collection->slice(($page - 1) * $pageSize, $pageSize);
+
+        // enrich
+        /** @var User $admin */
+        $admin       = auth()->user();
+        $enrichment  = new RecurringEnrichment();
+        $enrichment->setUser($admin);
+        $recurrences = $enrichment->enrich($recurrences);
 
         /** @var RecurrenceTransformer $transformer */
         $transformer = app(RecurrenceTransformer::class);
@@ -121,6 +135,6 @@ class IndexController extends Controller
 
         $this->verifyRecurringCronJob();
 
-        return view('recurring.index', compact('paginator', 'today', 'page', 'pageSize', 'total'));
+        return view('recurring.index', ['paginator' => $paginator, 'today' => $today, 'page' => $page, 'pageSize' => $pageSize, 'total' => $total]);
     }
 }

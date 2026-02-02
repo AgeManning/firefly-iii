@@ -25,6 +25,7 @@ namespace FireflyIII\Handlers\Events;
 
 use Carbon\Carbon;
 use Database\Seeders\ExchangeRateSeeder;
+use Exception;
 use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Events\ActuallyLoggedIn;
 use FireflyIII\Events\Admin\InvitationCreated;
@@ -44,19 +45,19 @@ use FireflyIII\Models\UserRole;
 use FireflyIII\Notifications\Admin\UserRegistration as AdminRegistrationNotification;
 use FireflyIII\Notifications\Security\UserFailedLoginAttempt;
 use FireflyIII\Notifications\Test\UserTestNotificationEmail;
-use FireflyIII\Notifications\Test\UserTestNotificationNtfy;
 use FireflyIII\Notifications\Test\UserTestNotificationPushover;
 use FireflyIII\Notifications\Test\UserTestNotificationSlack;
 use FireflyIII\Notifications\User\UserLogin;
 use FireflyIII\Notifications\User\UserNewPassword;
 use FireflyIII\Notifications\User\UserRegistration as UserRegistrationNotification;
 use FireflyIII\Repositories\User\UserRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\User;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
-use Exception;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 /**
  * Class UserEventHandler.
@@ -77,7 +78,7 @@ class UserEventHandler
 
         // first user ever?
         if (1 === $repository->count()) {
-            app('log')->debug('User count is one, attach role.');
+            Log::debug('User count is one, attach role.');
             $repository->attachRole($event->user, 'owner');
         }
     }
@@ -101,10 +102,10 @@ class UserEventHandler
             if (null === $role) {
                 // create role, does not exist. Very strange situation so let's raise a big fuss about it.
                 $role = $repository->createRole('owner', 'Site Owner', 'User runs this instance of FF3');
-                app('log')->error('Could not find role "owner". This is weird.');
+                Log::error('Could not find role "owner". This is weird.');
             }
 
-            app('log')->info(sprintf('Gave user #%d role #%d ("%s")', $user->id, $role->id, $role->name));
+            Log::info(sprintf('Gave user #%d role #%d ("%s")', $user->id, $role->id, $role->name));
             // give user the role
             $repository->attachRole($user, 'owner');
         }
@@ -129,11 +130,11 @@ class UserEventHandler
         $groupTitle          = $user->email;
         $index               = 1;
 
-        /** @var UserGroup $group */
+        /** @var null|UserGroup $group */
         $group               = null;
 
         // create a new group.
-        while (true === $groupExists) { // @phpstan-ignore-line
+        while ($groupExists) { // @phpstan-ignore-line
             $groupExists = UserGroup::where('title', $groupTitle)->count() > 0;
             if (false === $groupExists) {
                 $group = UserGroup::create(['title' => $groupTitle]);
@@ -165,8 +166,6 @@ class UserEventHandler
 
     /**
      * Set the demo user back to English.
-     *
-     * @throws FireflyException
      */
     public function demoUserBackToEnglish(Login $event): void
     {
@@ -177,15 +176,13 @@ class UserEventHandler
         $user       = $event->user;
         if ($repository->hasRole($user, 'demo')) {
             // set user back to English.
-            app('preferences')->setForUser($user, 'language', 'en_US');
-            app('preferences')->setForUser($user, 'locale', 'equal');
-            app('preferences')->mark();
+            Preferences::setForUser($user, 'language', 'en_US');
+            Preferences::setForUser($user, 'locale', 'equal');
+            Preferences::setForUser($user, 'anonymous', false);
+            Preferences::mark();
         }
     }
 
-    /**
-     * @throws FireflyException
-     */
     public function notifyNewIPAddress(DetectedNewIPAddress $event): void
     {
         $user = $event->user;
@@ -194,7 +191,7 @@ class UserEventHandler
             return; // do not email demo user.
         }
 
-        $list = app('preferences')->getForUser($user, 'login_ip_history', [])->data;
+        $list = Preferences::getForUser($user, 'login_ip_history', [])->data;
         if (!is_array($list)) {
             $list = [];
         }
@@ -207,28 +204,28 @@ class UserEventHandler
                 } catch (Exception $e) {
                     $message = $e->getMessage();
                     if (str_contains($message, 'Bcc')) {
-                        app('log')->warning('[Bcc] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
+                        Log::warning('[Bcc] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
 
                         return;
                     }
                     if (str_contains($message, 'RFC 2822')) {
-                        app('log')->warning('[RFC] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
+                        Log::warning('[RFC] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
 
                         return;
                     }
-                    app('log')->error($e->getMessage());
-                    app('log')->error($e->getTraceAsString());
+                    Log::error($e->getMessage());
+                    Log::error($e->getTraceAsString());
                 }
             }
             $list[$index]['notified'] = true;
         }
 
-        app('preferences')->setForUser($user, 'login_ip_history', $list);
+        Preferences::setForUser($user, 'login_ip_history', $list);
     }
 
     public function sendAdminRegistrationNotification(RegisteredUser $event): void
     {
-        $sendMail = (bool) app('fireflyconfig')->get('notification_admin_new_reg', true)->data;
+        $sendMail = (bool)FireflyConfig::get('notification_admin_new_reg', true)->data;
         if ($sendMail) {
             $owner = $event->owner;
 
@@ -237,17 +234,17 @@ class UserEventHandler
             } catch (Exception $e) {
                 $message = $e->getMessage();
                 if (str_contains($message, 'Bcc')) {
-                    app('log')->warning('[Bcc] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
+                    Log::warning('[Bcc] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
 
                     return;
                 }
                 if (str_contains($message, 'RFC 2822')) {
-                    app('log')->warning('[RFC] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
+                    Log::warning('[RFC] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
 
                     return;
                 }
-                app('log')->error($e->getMessage());
-                app('log')->error($e->getTraceAsString());
+                Log::error($e->getMessage());
+                Log::error($e->getTraceAsString());
             }
         }
     }
@@ -263,14 +260,14 @@ class UserEventHandler
         $newEmail = $event->newEmail;
         $oldEmail = $event->oldEmail;
         $user     = $event->user;
-        $token    = app('preferences')->getForUser($user, 'email_change_confirm_token', 'invalid');
+        $token    = Preferences::getForUser($user, 'email_change_confirm_token', 'invalid');
         $url      = route('profile.confirm-email-change', [$token->data]);
 
         try {
             Mail::to($newEmail)->send(new ConfirmEmailChangeMail($newEmail, $oldEmail, $url));
         } catch (Exception $e) {
-            app('log')->error($e->getMessage());
-            app('log')->error($e->getTraceAsString());
+            Log::error($e->getMessage());
+            Log::error($e->getTraceAsString());
 
             throw new FireflyException($e->getMessage(), 0, $e);
         }
@@ -287,15 +284,15 @@ class UserEventHandler
         $newEmail = $event->newEmail;
         $oldEmail = $event->oldEmail;
         $user     = $event->user;
-        $token    = app('preferences')->getForUser($user, 'email_change_undo_token', 'invalid');
-        $hashed   = hash('sha256', sprintf('%s%s', (string) config('app.key'), $oldEmail));
+        $token    = Preferences::getForUser($user, 'email_change_undo_token', 'invalid');
+        $hashed   = hash('sha256', sprintf('%s%s', (string)config('app.key'), $oldEmail));
         $url      = route('profile.undo-email-change', [$token->data, $hashed]);
 
         try {
             Mail::to($oldEmail)->send(new UndoEmailChangeMail($newEmail, $oldEmail, $url));
         } catch (Exception $e) {
-            app('log')->error($e->getMessage());
-            app('log')->error($e->getTraceAsString());
+            Log::error($e->getMessage());
+            Log::error($e->getTraceAsString());
 
             throw new FireflyException($e->getMessage(), 0, $e);
         }
@@ -308,17 +305,17 @@ class UserEventHandler
         } catch (Exception $e) {
             $message = $e->getMessage();
             if (str_contains($message, 'Bcc')) {
-                app('log')->warning('[Bcc] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
+                Log::warning('[Bcc] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
 
                 return;
             }
             if (str_contains($message, 'RFC 2822')) {
-                app('log')->warning('[RFC] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
+                Log::warning('[RFC] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
 
                 return;
             }
-            app('log')->error($e->getMessage());
-            app('log')->error($e->getTraceAsString());
+            Log::error($e->getMessage());
+            Log::error($e->getTraceAsString());
         }
     }
 
@@ -332,17 +329,17 @@ class UserEventHandler
         } catch (Exception $e) {
             $message = $e->getMessage();
             if (str_contains($message, 'Bcc')) {
-                app('log')->warning('[Bcc] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
+                Log::warning('[Bcc] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
 
                 return;
             }
             if (str_contains($message, 'RFC 2822')) {
-                app('log')->warning('[RFC] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
+                Log::warning('[RFC] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
 
                 return;
             }
-            app('log')->error($e->getMessage());
-            app('log')->error($e->getTraceAsString());
+            Log::error($e->getMessage());
+            Log::error($e->getTraceAsString());
         }
     }
 
@@ -358,8 +355,8 @@ class UserEventHandler
         try {
             Mail::to($invitee)->send(new InvitationMail($invitee, $admin, $url));
         } catch (Exception $e) {
-            app('log')->error($e->getMessage());
-            app('log')->error($e->getTraceAsString());
+            Log::error($e->getMessage());
+            Log::error($e->getTraceAsString());
 
             throw new FireflyException($e->getMessage(), 0, $e);
         }
@@ -371,24 +368,24 @@ class UserEventHandler
      */
     public function sendRegistrationMail(RegisteredUser $event): void
     {
-        $sendMail = (bool) app('fireflyconfig')->get('notification_user_new_reg', true)->data;
+        $sendMail = (bool)FireflyConfig::get('notification_user_new_reg', true)->data;
         if ($sendMail) {
             try {
                 Notification::send($event->user, new UserRegistrationNotification());
             } catch (Exception $e) {
                 $message = $e->getMessage();
                 if (str_contains($message, 'Bcc')) {
-                    app('log')->warning('[Bcc] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
+                    Log::warning('[Bcc] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
 
                     return;
                 }
                 if (str_contains($message, 'RFC 2822')) {
-                    app('log')->warning('[RFC] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
+                    Log::warning('[RFC] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
 
                     return;
                 }
-                app('log')->error($e->getMessage());
-                app('log')->error($e->getTraceAsString());
+                Log::error($e->getMessage());
+                Log::error($e->getTraceAsString());
             }
         }
     }
@@ -411,10 +408,10 @@ class UserEventHandler
 
                 break;
 
-            case 'ntfy':
-                $class = UserTestNotificationNtfy::class;
-
-                break;
+                //            case 'ntfy':
+                //                $class = UserTestNotificationNtfy::class;
+                //
+                //                break;
 
             case 'pushover':
                 $class = UserTestNotificationPushover::class;
@@ -422,7 +419,7 @@ class UserEventHandler
                 break;
 
             default:
-                app('log')->error(sprintf('Unknown channel "%s" in (user) sendTestNotification method.', $event->channel));
+                Log::error(sprintf('Unknown channel "%s" in (user) sendTestNotification method.', $event->channel));
 
                 return;
         }
@@ -433,59 +430,56 @@ class UserEventHandler
         } catch (Exception $e) {
             $message = $e->getMessage();
             if (str_contains($message, 'Bcc')) {
-                app('log')->warning('[Bcc] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
+                Log::warning('[Bcc] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
 
                 return;
             }
             if (str_contains($message, 'RFC 2822')) {
-                app('log')->warning('[RFC] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
+                Log::warning('[RFC] Could not send notification. Please validate your email settings, use the .env.example file as a guide.');
 
                 return;
             }
-            app('log')->error($e->getMessage());
-            app('log')->error($e->getTraceAsString());
+            Log::error($e->getMessage());
+            Log::error($e->getTraceAsString());
         }
         Log::debug(sprintf('If you see no errors above this line, test notification was sent over channel "%s"', $event->channel));
     }
 
-    /**
-     * @throws FireflyException
-     */
     public function storeUserIPAddress(ActuallyLoggedIn $event): void
     {
-        app('log')->debug('Now in storeUserIPAddress');
+        Log::debug('Now in storeUserIPAddress');
         $user       = $event->user;
 
         if ($user->hasRole('demo')) {
-            app('log')->debug('Do not log demo user logins');
+            Log::debug('Do not log demo user logins');
 
             return;
         }
 
         try {
             /** @var array $preference */
-            $preference = app('preferences')->getForUser($user, 'login_ip_history', [])->data;
+            $preference = Preferences::getForUser($user, 'login_ip_history', [])->data;
         } catch (FireflyException $e) {
             // don't care.
-            app('log')->error($e->getMessage());
+            Log::error($e->getMessage());
 
             return;
         }
         $inArray    = false;
         $ip         = request()->ip();
-        app('log')->debug(sprintf('User logging in from IP address %s', $ip));
+        Log::debug(sprintf('User logging in from IP address %s', $ip));
 
         // update array if in array
         foreach ($preference as $index => $row) {
             if ($row['ip'] === $ip) {
-                app('log')->debug('Found IP in array, refresh time.');
+                Log::debug('Found IP in array, refresh time.');
                 $preference[$index]['time'] = now(config('app.timezone'))->format('Y-m-d H:i:s');
                 $inArray                    = true;
             }
             // clean up old entries (6 months)
             $carbon = Carbon::createFromFormat('Y-m-d H:i:s', $preference[$index]['time']);
             if ($carbon instanceof Carbon && $carbon->diffInMonths(today(), true) > 6) {
-                app('log')->debug(sprintf('Entry for %s is very old, remove it.', $row['ip']));
+                Log::debug(sprintf('Entry for %s is very old, remove it.', $row['ip']));
                 unset($preference[$index]);
             }
         }
@@ -500,8 +494,8 @@ class UserEventHandler
         $preference = array_values($preference);
 
         /** @var bool $send */
-        $send       = app('preferences')->getForUser($user, 'notification_user_login', true)->data;
-        app('preferences')->setForUser($user, 'login_ip_history', $preference);
+        $send       = Preferences::getForUser($user, 'notification_user_login', true)->data;
+        Preferences::setForUser($user, 'login_ip_history', $preference);
 
         if (false === $inArray && true === $send) {
             event(new DetectedNewIPAddress($user));

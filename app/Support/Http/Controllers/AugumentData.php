@@ -110,8 +110,8 @@ trait AugumentData
         $grouped    = $accounts->groupBy('id')->toArray();
         $return     = [];
         foreach ($accountIds as $combinedId) {
-            $parts     = explode('-', (string) $combinedId);
-            $accountId = (int) $parts[0];
+            $parts     = explode('-', (string)$combinedId);
+            $accountId = (int)$parts[0];
             if (array_key_exists($accountId, $grouped)) {
                 $return[$accountId] = $grouped[$accountId][0]['name'];
             }
@@ -136,7 +136,7 @@ trait AugumentData
                 $return[$budgetId] = $grouped[$budgetId][0]['name'];
             }
         }
-        $return[0]  = (string) trans('firefly.no_budget');
+        $return[0]  = (string)trans('firefly.no_budget');
 
         return $return;
     }
@@ -152,13 +152,13 @@ trait AugumentData
         $grouped    = $categories->groupBy('id')->toArray();
         $return     = [];
         foreach ($categoryIds as $combinedId) {
-            $parts      = explode('-', (string) $combinedId);
-            $categoryId = (int) $parts[0];
+            $parts      = explode('-', (string)$combinedId);
+            $categoryId = (int)$parts[0];
             if (array_key_exists($categoryId, $grouped)) {
                 $return[$categoryId] = $grouped[$categoryId][0]['name'];
             }
         }
-        $return[0]  = (string) trans('firefly.no_category');
+        $return[0]  = (string)trans('firefly.no_category');
 
         return $return;
     }
@@ -182,7 +182,7 @@ trait AugumentData
         $cache->addProperty($start);
         $cache->addProperty($end);
         $cache->addProperty($budget->id);
-        $cache->addProperty($this->convertToNative);
+        $cache->addProperty($this->convertToPrimary);
         $cache->addProperty('get-limits');
 
         if ($cache->has()) {
@@ -191,37 +191,37 @@ trait AugumentData
 
         $set              = $blRepository->getBudgetLimits($budget, $start, $end);
 
-        $budgetCollection = new Collection([$budget]);
+        $budgetCollection = new Collection()->push($budget);
 
-        // merge sets based on a key, in case of convert to native
+        // merge sets based on a key, in case of convert to primary currency
         $limits           = new Collection();
 
         /** @var BudgetLimit $entry */
         foreach ($set as $entry) {
             Log::debug(sprintf('Now at budget limit #%d', $entry->id));
-            $currency            = $entry->transactionCurrency;
-            if ($this->convertToNative) {
+            $currency        = $entry->transactionCurrency;
+            if ($this->convertToPrimary) {
                 // the sumExpenses method already handles this.
-                $currency = $this->defaultCurrency;
+                $currency = $this->primaryCurrency;
             }
 
             // clone because these objects change each other.
-            $currentStart        = clone $entry->start_date;
-            $currentEnd          = null === $entry->end_date ? null : clone $entry->end_date;
+            $currentStart    = clone $entry->start_date;
+            $currentEnd      = null === $entry->end_date ? null : clone $entry->end_date;
 
             if (null === $currentEnd) {
                 $currentEnd = clone $currentStart;
                 $currentEnd->addMonth();
             }
-            // native amount.
-            $expenses            = $opsRepository->sumExpenses($currentStart, $currentEnd, null, $budgetCollection, $entry->transactionCurrency, $this->convertToNative);
-            $spent               = $expenses[$currency->id]['sum'] ?? '0';
-            $entry->native_spent = $spent;
+            // primary currency amount.
+            $expenses        = $opsRepository->sumExpenses($currentStart, $currentEnd, null, $budgetCollection, $entry->transactionCurrency, $this->convertToPrimary);
+            $spent           = $expenses[$currency->id]['sum'] ?? '0';
+            $entry->pc_spent = $spent;
 
             // normal amount:
-            $expenses            = $opsRepository->sumExpenses($currentStart, $currentEnd, null, $budgetCollection, $entry->transactionCurrency, false);
-            $spent               = $expenses[$entry->transactionCurrency->id]['sum'] ?? '0';
-            $entry->spent        = $spent;
+            $expenses        = $opsRepository->sumExpenses($currentStart, $currentEnd, null, $budgetCollection, $entry->transactionCurrency);
+            $spent           = $expenses[$entry->transactionCurrency->id]['sum'] ?? '0';
+            $entry->spent    = $spent;
 
             $limits->push($entry);
         }
@@ -249,7 +249,7 @@ trait AugumentData
             }
 
             $grouped[$name] ??= '0';
-            $grouped[$name] = bcadd((string) $journal['amount'], $grouped[$name]);
+            $grouped[$name] = bcadd((string)$journal['amount'], $grouped[$name]);
         }
 
         return $grouped;
@@ -272,7 +272,7 @@ trait AugumentData
         ];
         // loop to support multi currency
         foreach ($journals as $journal) {
-            $currencyId                              = (int) $journal['currency_id'];
+            $currencyId                              = (int)$journal['currency_id'];
 
             // if not set, set to zero:
             if (!array_key_exists($currencyId, $sum['per_currency'])) {
@@ -287,8 +287,8 @@ trait AugumentData
             }
 
             // add amount
-            $sum['per_currency'][$currencyId]['sum'] = bcadd($sum['per_currency'][$currencyId]['sum'], (string) $journal['amount']);
-            $sum['grand_sum']                        = bcadd($sum['grand_sum'], (string) $journal['amount']);
+            $sum['per_currency'][$currencyId]['sum'] = bcadd($sum['per_currency'][$currencyId]['sum'], (string)$journal['amount']);
+            $sum['grand_sum']                        = bcadd($sum['grand_sum'], (string)$journal['amount']);
         }
 
         return $sum;

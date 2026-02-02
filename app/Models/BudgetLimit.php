@@ -23,26 +23,28 @@ declare(strict_types=1);
 
 namespace FireflyIII\Models;
 
+use Carbon\Carbon;
 use FireflyIII\Casts\SeparateTimezoneCaster;
-use FireflyIII\Events\Model\BudgetLimit\Created;
-use FireflyIII\Events\Model\BudgetLimit\Deleted;
-use FireflyIII\Events\Model\BudgetLimit\Updated;
+use FireflyIII\Handlers\Observer\BudgetLimitObserver;
 use FireflyIII\Support\Models\ReturnsIntegerIdTrait;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
+/**
+ * Class BudgetLimit
+ *
+ * @property TransactionCurrency $transactionCurrency
+ * @property Carbon              $start_date
+ * @property null|Carbon         $end_date
+ */
+#[ObservedBy([BudgetLimitObserver::class])]
 class BudgetLimit extends Model
 {
     use ReturnsIntegerIdTrait;
-    protected $dispatchesEvents
-                        = [
-            'created' => Created::class,
-            'updated' => Updated::class,
-            'deleted' => Deleted::class,
-        ];
 
     protected $fillable = ['budget_id', 'start_date', 'end_date', 'start_date_tz', 'end_date_tz', 'amount', 'transaction_currency_id', 'native_amount'];
 
@@ -54,7 +56,7 @@ class BudgetLimit extends Model
     public static function routeBinder(string $value): self
     {
         if (auth()->check()) {
-            $budgetLimitId = (int) $value;
+            $budgetLimitId = (int)$value;
             $budgetLimit   = self::where('budget_limits.id', $budgetLimitId)
                 ->leftJoin('budgets', 'budgets.id', '=', 'budget_limits.budget_id')
                 ->where('budgets.user_id', auth()->user()->id)
@@ -92,21 +94,14 @@ class BudgetLimit extends Model
     protected function amount(): Attribute
     {
         return Attribute::make(
-            get: static fn ($value) => (string) $value,
+            get: static fn ($value): string => (string)$value,
         );
     }
 
     protected function budgetId(): Attribute
     {
         return Attribute::make(
-            get: static fn ($value) => (int) $value,
-        );
-    }
-
-    protected function transactionCurrencyId(): Attribute
-    {
-        return Attribute::make(
-            get: static fn ($value) => (int) $value,
+            get: static fn ($value): int => (int)$value,
         );
     }
 
@@ -121,5 +116,12 @@ class BudgetLimit extends Model
             'amount'        => 'string',
             'native_amount' => 'string',
         ];
+    }
+
+    protected function transactionCurrencyId(): Attribute
+    {
+        return Attribute::make(
+            get: static fn ($value): int => (int)$value,
+        );
     }
 }

@@ -24,11 +24,12 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Account;
 
-use FireflyIII\Models\Location;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\AccountFormRequest;
 use FireflyIII\Models\Account;
+use FireflyIII\Models\Location;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Http\Controllers\ModelInformation;
 use Illuminate\Contracts\View\Factory;
@@ -37,6 +38,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class EditController
@@ -76,7 +78,7 @@ class EditController extends Controller
      *
      * @return Factory|Redirector|RedirectResponse|View
      */
-    public function edit(Request $request, Account $account, AccountRepositoryInterface $repository)
+    public function edit(Request $request, Account $account, AccountRepositoryInterface $repository): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
         if (!$this->isEditableAccount($account)) {
             return $this->redirectAccountToAccount($account);
@@ -108,11 +110,10 @@ class EditController extends Controller
         ];
 
         // interest calculation periods:
-        $interestPeriods      = [
-            'daily'   => (string) trans('firefly.interest_calc_daily'),
-            'monthly' => (string) trans('firefly.interest_calc_monthly'),
-            'yearly'  => (string) trans('firefly.interest_calc_yearly'),
-        ];
+        $interestPeriods      = [];
+        foreach (config('firefly.interest_periods') as $period) {
+            $interestPeriods[$period] = trans(sprintf('firefly.interest_calc_%s', $period));
+        }
 
         // put previous url in session if not redirect from store (not "return_to_edit").
         if (true !== session('accounts.edit.fromUpdate')) {
@@ -125,7 +126,7 @@ class EditController extends Controller
             $openingBalanceAmount = '';
         }
         $openingBalanceDate   = $repository->getOpeningBalanceDate($account);
-        $currency             = $this->repository->getAccountCurrency($account) ?? $this->defaultCurrency;
+        $currency             = $this->repository->getAccountCurrency($account) ?? $this->primaryCurrency;
 
         // include this account in net-worth charts?
         $includeNetWorth      = $repository->getMetaValue($account, 'include_net_worth');
@@ -148,9 +149,9 @@ class EditController extends Controller
             'BIC'                     => $repository->getMetaValue($account, 'BIC'),
             'opening_balance_date'    => substr((string) $openingBalanceDate, 0, 10),
             'liability_type_id'       => $account->account_type_id,
-            'opening_balance'         => app('steam')->bcround($openingBalanceAmount, $currency->decimal_places),
+            'opening_balance'         => Steam::bcround($openingBalanceAmount, $currency->decimal_places),
             'liability_direction'     => $this->repository->getMetaValue($account, 'liability_direction'),
-            'virtual_balance'         => app('steam')->bcround($virtualBalance, $currency->decimal_places),
+            'virtual_balance'         => Steam::bcround($virtualBalance, $currency->decimal_places),
             'currency_id'             => $currency->id,
             'include_net_worth'       => $hasOldInput ? (bool) $request->old('include_net_worth') : $includeNetWorth,
             'interest'                => $repository->getMetaValue($account, 'interest'),
@@ -164,7 +165,7 @@ class EditController extends Controller
 
         $request->session()->flash('preFilled', $preFilled);
 
-        return view('accounts.edit', compact('account', 'currency', 'canEditCurrency', 'showNetWorth', 'subTitle', 'subTitleIcon', 'locations', 'liabilityDirections', 'objectType', 'roles', 'preFilled', 'liabilityTypes', 'interestPeriods'));
+        return view('accounts.edit', ['account' => $account, 'currency' => $currency, 'canEditCurrency' => $canEditCurrency, 'showNetWorth' => $showNetWorth, 'subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'locations' => $locations, 'liabilityDirections' => $liabilityDirections, 'objectType' => $objectType, 'roles' => $roles, 'preFilled' => $preFilled, 'liabilityTypes' => $liabilityTypes, 'interestPeriods' => $interestPeriods]);
     }
 
     /**
@@ -206,7 +207,7 @@ class EditController extends Controller
 
             $redirect = redirect(route('accounts.edit', [$account->id]))->withInput(['return_to_edit' => 1]);
         }
-        app('preferences')->mark();
+        Preferences::mark();
 
         return $redirect;
     }

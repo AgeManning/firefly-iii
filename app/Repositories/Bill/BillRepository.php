@@ -23,22 +23,25 @@ declare(strict_types=1);
 
 namespace FireflyIII\Repositories\Bill;
 
-use FireflyIII\Models\ObjectGroup;
 use Carbon\Carbon;
+use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Factory\BillFactory;
 use FireflyIII\Models\Attachment;
 use FireflyIII\Models\Bill;
 use FireflyIII\Models\Note;
+use FireflyIII\Models\ObjectGroup;
 use FireflyIII\Models\Rule;
 use FireflyIII\Models\Transaction;
 use FireflyIII\Models\TransactionJournal;
+use FireflyIII\Models\TransactionType;
 use FireflyIII\Repositories\Journal\JournalRepositoryInterface;
 use FireflyIII\Repositories\ObjectGroup\CreatesObjectGroups;
 use FireflyIII\Services\Internal\Destroy\BillDestroyService;
 use FireflyIII\Services\Internal\Update\BillUpdateService;
 use FireflyIII\Support\CacheProperties;
 use FireflyIII\Support\Facades\Amount;
+use FireflyIII\Support\Facades\Navigation;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupInterface;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupTrait;
 use Illuminate\Database\Query\JoinClause;
@@ -47,6 +50,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Override;
 
 /**
  * Class BillRepository.
@@ -121,7 +125,7 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
         if (null !== $billId) {
             $searchResult = $this->find($billId);
             if ($searchResult instanceof Bill) {
-                app('log')->debug(sprintf('Found bill based on #%d, will return it.', $billId));
+                Log::debug(sprintf('Found bill based on #%d, will return it.', $billId));
 
                 return $searchResult;
             }
@@ -129,12 +133,12 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
         if (null !== $billName) {
             $searchResult = $this->findByName($billName);
             if ($searchResult instanceof Bill) {
-                app('log')->debug(sprintf('Found bill based on "%s", will return it.', $billName));
+                Log::debug(sprintf('Found bill based on "%s", will return it.', $billName));
 
                 return $searchResult;
             }
         }
-        app('log')->debug('Found no bill in findBill()');
+        Log::debug('Found no bill in findBill()');
 
         return null;
     }
@@ -166,7 +170,7 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
         $disk = Storage::disk('upload');
 
         return $set->each(
-            static function (Attachment $attachment) use ($disk) {  // @phpstan-ignore-line
+            static function (Attachment $attachment) use ($disk): Attachment {  // @phpstan-ignore-line
                 $notes                   = $attachment->notes()->first();
                 $attachment->file_exists = $disk->exists($attachment->fileName());
                 $attachment->notes_text  = null !== $notes ? $notes->text : '';
@@ -243,7 +247,7 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
         /** @var null|Note $note */
         $note = $bill->notes()->first();
 
-        return (string) $note?->text;
+        return (string)$note?->text;
     }
 
     public function getOverallAverage(Bill $bill): array
@@ -259,24 +263,24 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
         /** @var TransactionJournal $journal */
         foreach ($journals as $journal) {
             /** @var Transaction $transaction */
-            $transaction                       = $journal->transactions()->where('amount', '<', 0)->first();
-            $currencyId                        = (int) $journal->transaction_currency_id;
-            $currency                          = $journal->transactionCurrency;
+            $transaction                   = $journal->transactions()->where('amount', '<', 0)->first();
+            $currencyId                    = (int)$journal->transaction_currency_id;
+            $currency                      = $journal->transactionCurrency;
             $result[$currencyId] ??= [
                 'sum'                     => '0',
-                'native_sum'              => '0',
+                'pc_sum'                  => '0',
                 'count'                   => 0,
                 'avg'                     => '0',
-                'native_avg'              => '0',
+                'pc_avg'                  => '0',
                 'currency_id'             => $currency->id,
                 'currency_code'           => $currency->code,
                 'currency_symbol'         => $currency->symbol,
                 'currency_decimal_places' => $currency->decimal_places,
             ];
-            $result[$currencyId]['sum']        = bcadd($result[$currencyId]['sum'], (string) $transaction->amount);
-            $result[$currencyId]['native_sum'] = bcadd($result[$currencyId]['native_sum'], $transaction->native_amount ?? '0');
-            if ($journal->foreign_currency_id === Amount::getNativeCurrency()->id) {
-                $result[$currencyId]['native_sum'] = bcadd($result[$currencyId]['native_sum'], (string) $transaction->amount);
+            $result[$currencyId]['sum']    = bcadd($result[$currencyId]['sum'], (string)$transaction->amount);
+            $result[$currencyId]['pc_sum'] = bcadd($result[$currencyId]['pc_sum'], $transaction->native_amount ?? '0');
+            if ($journal->foreign_currency_id === Amount::getPrimaryCurrency()->id) {
+                $result[$currencyId]['pc_sum'] = bcadd($result[$currencyId]['pc_sum'], (string)$transaction->amount);
             }
             ++$result[$currencyId]['count'];
         }
@@ -287,8 +291,8 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
          * @var array $arr
          */
         foreach ($result as $currencyId => $arr) {
-            $result[$currencyId]['avg']        = bcdiv((string) $arr['sum'], (string) $arr['count']);
-            $result[$currencyId]['native_avg'] = bcdiv((string) $arr['native_sum'], (string) $arr['count']);
+            $result[$currencyId]['avg']    = bcdiv((string)$arr['sum'], (string)$arr['count']);
+            $result[$currencyId]['pc_avg'] = bcdiv((string)$arr['pc_sum'], (string)$arr['count']);
         }
 
         return $result;
@@ -307,16 +311,28 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
      */
     public function getPaidDatesInRange(Bill $bill, Carbon $start, Carbon $end): Collection
     {
-        // app('log')->debug('Now in getPaidDatesInRange()');
+        // \Illuminate\Support\Facades\Log::debug('Now in getPaidDatesInRange()');
 
         Log::debug(sprintf('Search for linked journals between %s and %s', $start->toW3cString(), $end->toW3cString()));
 
         return $bill->transactionJournals()
+            ->leftJoin('transactions', 'transactions.transaction_journal_id', '=', 'transaction_journals.id')
+            ->leftJoin('transaction_currencies AS currency', 'currency.id', '=', 'transactions.transaction_currency_id')
+            ->leftJoin('transaction_currencies AS foreign_currency', 'foreign_currency.id', '=', 'transactions.foreign_currency_id')
+            ->where('transactions.amount', '>', 0)
             ->before($end)->after($start)->get(
                 [
                     'transaction_journals.id',
                     'transaction_journals.date',
                     'transaction_journals.transaction_group_id',
+                    'transactions.transaction_currency_id',
+                    'currency.code AS transaction_currency_code',
+                    'currency.decimal_places AS transaction_currency_decimal_places',
+                    'transactions.foreign_currency_id',
+                    'foreign_currency.code AS foreign_currency_code',
+                    'foreign_currency.decimal_places AS foreign_currency_decimal_places',
+                    'transactions.amount',
+                    'transactions.foreign_amount',
                 ]
             )
         ;
@@ -381,15 +397,15 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
         /** @var TransactionJournal $journal */
         foreach ($journals as $journal) {
             /** @var null|Transaction $transaction */
-            $transaction                       = $journal->transactions()->where('amount', '<', 0)->first();
+            $transaction                   = $journal->transactions()->where('amount', '<', 0)->first();
             if (null === $transaction) {
                 continue;
             }
-            $currencyId                        = (int) $journal->transaction_currency_id;
-            $currency                          = $journal->transactionCurrency;
+            $currencyId                    = (int)$journal->transaction_currency_id;
+            $currency                      = $journal->transactionCurrency;
             $result[$currencyId] ??= [
                 'sum'                     => '0',
-                'native_sum'              => '0',
+                'pc_sum'                  => '0',
                 'count'                   => 0,
                 'avg'                     => '0',
                 'currency_id'             => $currency->id,
@@ -397,10 +413,10 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
                 'currency_symbol'         => $currency->symbol,
                 'currency_decimal_places' => $currency->decimal_places,
             ];
-            $result[$currencyId]['sum']        = bcadd($result[$currencyId]['sum'], (string) $transaction->amount);
-            $result[$currencyId]['native_sum'] = bcadd($result[$currencyId]['native_sum'], $transaction->native_amount ?? '0');
-            if ($journal->foreign_currency_id === Amount::getNativeCurrency()->id) {
-                $result[$currencyId]['native_sum'] = bcadd($result[$currencyId]['native_sum'], (string) $transaction->amount);
+            $result[$currencyId]['sum']    = bcadd($result[$currencyId]['sum'], (string)$transaction->amount);
+            $result[$currencyId]['pc_sum'] = bcadd($result[$currencyId]['pc_sum'], $transaction->native_amount ?? '0');
+            if ($journal->foreign_currency_id === Amount::getPrimaryCurrency()->id) {
+                $result[$currencyId]['pc_sum'] = bcadd($result[$currencyId]['pc_sum'], (string)$transaction->amount);
             }
             ++$result[$currencyId]['count'];
         }
@@ -411,8 +427,8 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
          * @var array $arr
          */
         foreach ($result as $currencyId => $arr) {
-            $result[$currencyId]['avg']        = bcdiv((string) $arr['sum'], (string) $arr['count']);
-            $result[$currencyId]['native_avg'] = bcdiv((string) $arr['native_sum'], (string) $arr['count']);
+            $result[$currencyId]['avg']    = bcdiv((string)$arr['sum'], (string)$arr['count']);
+            $result[$currencyId]['pc_avg'] = bcdiv((string)$arr['pc_sum'], (string)$arr['count']);
         }
 
         return $result;
@@ -425,10 +441,10 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
     {
         /** @var Transaction $transaction */
         foreach ($transactions as $transaction) {
-            $journal          = $bill->user->transactionJournals()->find((int) $transaction['transaction_journal_id']);
+            $journal          = $bill->user->transactionJournals()->find((int)$transaction['transaction_journal_id']);
             $journal->bill_id = $bill->id;
             $journal->save();
-            app('log')->debug(sprintf('Linked journal #%d to bill #%d', $journal->id, $bill->id));
+            Log::debug(sprintf('Linked journal #%d to bill #%d', $journal->id, $bill->id));
         }
     }
 
@@ -447,15 +463,15 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
         // find the most recent date for this bill NOT in the future. Cache this date:
         $start        = clone $bill->date;
         $start->startOfDay();
-        app('log')->debug('nextExpectedMatch: Start is '.$start->format('Y-m-d'));
+        Log::debug('nextExpectedMatch: Start is '.$start->format('Y-m-d'));
 
         while ($start < $date) {
-            app('log')->debug(sprintf('$start (%s) < $date (%s)', $start->format('Y-m-d H:i:s'), $date->format('Y-m-d H:i:s')));
-            $start = app('navigation')->addPeriod($start, $bill->repeat_freq, $bill->skip);
-            app('log')->debug('Start is now '.$start->format('Y-m-d H:i:s'));
+            Log::debug(sprintf('$start (%s) < $date (%s)', $start->format('Y-m-d H:i:s'), $date->format('Y-m-d H:i:s')));
+            $start = Navigation::addPeriod($start, $bill->repeat_freq, $bill->skip);
+            Log::debug('Start is now '.$start->format('Y-m-d H:i:s'));
         }
 
-        $end          = app('navigation')->addPeriod($start, $bill->repeat_freq, $bill->skip);
+        $end          = Navigation::addPeriod($start, $bill->repeat_freq, $bill->skip);
         $end->endOfDay();
 
         // see if the bill was paid in this period.
@@ -463,12 +479,12 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
 
         if ($journalCount > 0) {
             // this period had in fact a bill. The new start is the current end, and we create a new end.
-            app('log')->debug(sprintf('Journal count is %d, so start becomes %s', $journalCount, $end->format('Y-m-d')));
+            Log::debug(sprintf('Journal count is %d, so start becomes %s', $journalCount, $end->format('Y-m-d')));
             $start = clone $end;
-            $end   = app('navigation')->addPeriod($start, $bill->repeat_freq, $bill->skip);
+            $end   = Navigation::addPeriod($start, $bill->repeat_freq, $bill->skip);
         }
-        app('log')->debug('nextExpectedMatch: Final start is '.$start->format('Y-m-d'));
-        app('log')->debug('nextExpectedMatch: Matching end is '.$end->format('Y-m-d'));
+        Log::debug('nextExpectedMatch: Final start is '.$start->format('Y-m-d'));
+        Log::debug('nextExpectedMatch: Matching end is '.$end->format('Y-m-d'));
 
         $cache->store($start);
 
@@ -498,7 +514,7 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
     {
         $query = sprintf('%%%s%%', $query);
 
-        return $this->user->bills()->whereLike('name', $query)->take($limit)->get();
+        return $this->user->bills()->orderBy('name', 'ASC')->whereLike('name', $query)->take($limit)->get();
     }
 
     public function setObjectGroup(Bill $bill, string $objectGroupTitle): Bill
@@ -520,19 +536,19 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
     public function sumPaidInRange(Carbon $start, Carbon $end): array
     {
         Log::debug(sprintf('sumPaidInRange from %s to %s', $start->toW3cString(), $end->toW3cString()));
-        $bills           = $this->getActiveBills();
-        $return          = [];
-        $convertToNative = Amount::convertToNative($this->user);
-        $default         = app('amount')->getNativeCurrency();
+        $bills            = $this->getActiveBills();
+        $return           = [];
+        $convertToPrimary = Amount::convertToPrimary($this->user);
+        $primary          = Amount::getPrimaryCurrency();
 
         /** @var Bill $bill */
         foreach ($bills as $bill) {
 
             /** @var Collection $set */
             $set       = $bill->transactionJournals()->after($start)->before($end)->get(['transaction_journals.*']);
-            $currency  = $convertToNative && $bill->transactionCurrency->id !== $default->id ? $default : $bill->transactionCurrency;
-            $return[(int) $currency->id] ??= [
-                'id'             => (string) $currency->id,
+            $currency  = $convertToPrimary && $bill->transactionCurrency->id !== $primary->id ? $primary : $bill->transactionCurrency;
+            $return[(int)$currency->id] ??= [
+                'id'             => (string)$currency->id,
                 'name'           => $currency->name,
                 'symbol'         => $currency->symbol,
                 'code'           => $currency->code,
@@ -544,9 +560,9 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
             /** @var TransactionJournal $transactionJournal */
             foreach ($set as $transactionJournal) {
                 // grab currency from transaction.
-                $transactionCurrency                           = $transactionJournal->transactionCurrency;
-                $return[(int) $transactionCurrency->id] ??= [
-                    'id'             => (string) $transactionCurrency->id,
+                $transactionCurrency                          = $transactionJournal->transactionCurrency;
+                $return[(int)$transactionCurrency->id] ??= [
+                    'id'             => (string)$transactionCurrency->id,
                     'name'           => $transactionCurrency->name,
                     'symbol'         => $transactionCurrency->symbol,
                     'code'           => $transactionCurrency->code,
@@ -555,7 +571,7 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
                 ];
 
                 // get currency from transaction as well.
-                $return[(int) $transactionCurrency->id]['sum'] = bcadd($return[(int) $transactionCurrency->id]['sum'], Amount::getAmountFromJournalObject($transactionJournal));
+                $return[(int)$transactionCurrency->id]['sum'] = bcadd($return[(int)$transactionCurrency->id]['sum'], Amount::getAmountFromJournalObject($transactionJournal));
                 // $setAmount = bcadd($setAmount, Amount::getAmountFromJournalObject($transactionJournal));
             }
             // Log::debug(sprintf('Bill #%d ("%s") with %d transaction(s) and sum %s %s', $bill->id, $bill->name, $set->count(), $currency->code, $setAmount));
@@ -563,7 +579,7 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
             // Log::debug(sprintf('Total sum is now %s', $return[$currency->id]['sum']));
         }
         // remove empty sets
-        $final           = [];
+        $final            = [];
         foreach ($return as $entry) {
             if (0 === bccomp($entry['sum'], '0')) {
                 continue;
@@ -585,38 +601,38 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
 
     public function sumUnpaidInRange(Carbon $start, Carbon $end): array
     {
-        app('log')->debug(sprintf('Now in sumUnpaidInRange("%s", "%s")', $start->format('Y-m-d'), $end->format('Y-m-d')));
-        $bills           = $this->getActiveBills();
-        $return          = [];
-        $convertToNative = Amount::convertToNative($this->user);
-        $default         = app('amount')->getNativeCurrency();
+        Log::debug(sprintf('Now in sumUnpaidInRange("%s", "%s")', $start->format('Y-m-d'), $end->format('Y-m-d')));
+        $bills            = $this->getActiveBills();
+        $return           = [];
+        $convertToPrimary = Amount::convertToPrimary($this->user);
+        $primary          = Amount::getPrimaryCurrency();
 
         /** @var Bill $bill */
         foreach ($bills as $bill) {
-            //            app('log')->debug(sprintf('Processing bill #%d ("%s")', $bill->id, $bill->name));
+            //            \Illuminate\Support\Facades\Log::debug(sprintf('Processing bill #%d ("%s")', $bill->id, $bill->name));
             $dates    = $this->getPayDatesInRange($bill, $start, $end);
             $count    = $bill->transactionJournals()->after($start)->before($end)->count();
             $total    = $dates->count() - $count;
-            // app('log')->debug(sprintf('Pay dates: %d, count: %d, left: %d', $dates->count(), $count, $total));
-            // app('log')->debug('dates', $dates->toArray());
+            // \Illuminate\Support\Facades\Log::debug(sprintf('Pay dates: %d, count: %d, left: %d', $dates->count(), $count, $total));
+            // \Illuminate\Support\Facades\Log::debug('dates', $dates->toArray());
 
-            $minField = $convertToNative && $bill->transactionCurrency->id !== $default->id ? 'native_amount_min' : 'amount_min';
-            $maxField = $convertToNative && $bill->transactionCurrency->id !== $default->id ? 'native_amount_max' : 'amount_max';
+            $minField = $convertToPrimary && $bill->transactionCurrency->id !== $primary->id ? 'native_amount_min' : 'amount_min';
+            $maxField = $convertToPrimary && $bill->transactionCurrency->id !== $primary->id ? 'native_amount_max' : 'amount_max';
             // Log::debug(sprintf('min field is %s, max field is %s', $minField, $maxField));
 
             if ($total > 0) {
-                $currency                     = $convertToNative && $bill->transactionCurrency->id !== $default->id ? $default : $bill->transactionCurrency;
+                $currency                     = $convertToPrimary && $bill->transactionCurrency->id !== $primary->id ? $primary : $bill->transactionCurrency;
                 $average                      = bcdiv(bcadd($bill->{$maxField} ?? '0', $bill->{$minField} ?? '0'), '2');
                 Log::debug(sprintf('Amount to pay is %s %s (%d times)', $currency->code, $average, $total));
                 $return[$currency->id] ??= [
-                    'id'             => (string) $currency->id,
+                    'id'             => (string)$currency->id,
                     'name'           => $currency->name,
                     'symbol'         => $currency->symbol,
                     'code'           => $currency->code,
                     'decimal_places' => $currency->decimal_places,
                     'sum'            => '0',
                 ];
-                $return[$currency->id]['sum'] = bcadd($return[$currency->id]['sum'], bcmul($average, (string) $total));
+                $return[$currency->id]['sum'] = bcadd($return[$currency->id]['sum'], bcmul($average, (string)$total));
             }
         }
 
@@ -630,21 +646,21 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
     {
         $set          = new Collection();
         $currentStart = clone $start;
-        // app('log')->debug(sprintf('Now at bill "%s" (%s)', $bill->name, $bill->repeat_freq));
-        // app('log')->debug(sprintf('First currentstart is %s', $currentStart->format('Y-m-d')));
+        // \Illuminate\Support\Facades\Log::debug(sprintf('Now at bill "%s" (%s)', $bill->name, $bill->repeat_freq));
+        // \Illuminate\Support\Facades\Log::debug(sprintf('First currentstart is %s', $currentStart->format('Y-m-d')));
 
         while ($currentStart <= $end) {
-            // app('log')->debug(sprintf('Currentstart is now %s.', $currentStart->format('Y-m-d')));
+            // \Illuminate\Support\Facades\Log::debug(sprintf('Currentstart is now %s.', $currentStart->format('Y-m-d')));
             $nextExpectedMatch = $this->nextDateMatch($bill, $currentStart);
-            // app('log')->debug(sprintf('Next Date match after %s is %s', $currentStart->format('Y-m-d'), $nextExpectedMatch->format('Y-m-d')));
+            // \Illuminate\Support\Facades\Log::debug(sprintf('Next Date match after %s is %s', $currentStart->format('Y-m-d'), $nextExpectedMatch->format('Y-m-d')));
             if ($nextExpectedMatch > $end) {// If nextExpectedMatch is after end, we continue
                 break;
             }
             $set->push(clone $nextExpectedMatch);
-            // app('log')->debug(sprintf('Now %d dates in set.', $set->count()));
+            // \Illuminate\Support\Facades\Log::debug(sprintf('Now %d dates in set.', $set->count()));
             $nextExpectedMatch->addDay();
 
-            // app('log')->debug(sprintf('Currentstart (%s) has become %s.', $currentStart->format('Y-m-d'), $nextExpectedMatch->format('Y-m-d')));
+            // \Illuminate\Support\Facades\Log::debug(sprintf('Currentstart (%s) has become %s.', $currentStart->format('Y-m-d'), $nextExpectedMatch->format('Y-m-d')));
 
             $currentStart      = clone $nextExpectedMatch;
         }
@@ -669,7 +685,7 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
         $start = clone $bill->date;
 
         while ($start < $date) {
-            $start = app('navigation')->addPeriod($start, $bill->repeat_freq, $bill->skip);
+            $start = Navigation::addPeriod($start, $bill->repeat_freq, $bill->skip);
         }
         $cache->store($start);
 
@@ -690,5 +706,21 @@ class BillRepository implements BillRepositoryInterface, UserGroupInterface
         $service = app(BillUpdateService::class);
 
         return $service->update($bill, $data);
+    }
+
+    #[Override]
+    public function correctTransfers(): void
+    {
+        /** @var null|TransactionType $withdrawal */
+        $withdrawal = TransactionType::where('type', TransactionTypeEnum::WITHDRAWAL->value)->first();
+        if (null === $withdrawal) {
+            return;
+        }
+        $this->user
+            ->transactionJournals()
+            ->whereNotNull('bill_id')
+            ->where('transaction_type_id', '!=', $withdrawal->id)
+            ->update(['bill_id' => null])
+        ;
     }
 }

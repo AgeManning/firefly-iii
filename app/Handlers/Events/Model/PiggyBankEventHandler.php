@@ -24,13 +24,14 @@ declare(strict_types=1);
 
 namespace FireflyIII\Handlers\Events\Model;
 
+use FireflyIII\Events\Model\PiggyBank\ChangedAmount;
 use FireflyIII\Events\Model\PiggyBank\ChangedName;
 use FireflyIII\Models\Account;
+use FireflyIII\Models\PiggyBankEvent;
 use FireflyIII\Models\Rule;
 use FireflyIII\Models\RuleAction;
 use FireflyIII\Models\TransactionGroup;
-use FireflyIII\Events\Model\PiggyBank\ChangedAmount;
-use FireflyIII\Models\PiggyBankEvent;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Class PiggyBankEventHandler
@@ -70,7 +71,7 @@ class PiggyBankEventHandler
                 ->exists()
             ;
             if ($exists) {
-                app('log')->warning('Already have event for this journal and piggy, will not create another.');
+                Log::warning('Already have event for this journal and piggy, will not create another.');
 
                 return;
             }

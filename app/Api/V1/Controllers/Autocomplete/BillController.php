@@ -25,11 +25,12 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Autocomplete;
 
 use FireflyIII\Api\V1\Controllers\Controller;
-use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteRequest;
+use FireflyIII\Api\V1\Requests\Autocomplete\AutocompleteApiRequest;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Bill;
 use FireflyIII\Repositories\Bill\BillRepositoryInterface;
-use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * Class BillController
@@ -37,6 +38,7 @@ use Illuminate\Http\JsonResponse;
 class BillController extends Controller
 {
     private BillRepositoryInterface $repository;
+    protected array $acceptedRoles = [UserRoleEnum::READ_SUBSCRIPTIONS];
 
     /**
      * BillController constructor.
@@ -44,33 +46,24 @@ class BillController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                /** @var User $user */
-                $user             = auth()->user();
-                $this->repository = app(BillRepositoryInterface::class);
-                $this->repository->setUser($user);
+        $this->middleware(function (Request $request, $next) {
+            $this->validateUserGroup($request);
+            $this->repository = app(BillRepositoryInterface::class);
+            $this->repository->setUser($this->user);
+            $this->repository->setUserGroup($this->userGroup);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
      * Documentation for this endpoint is at:
      * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/autocomplete/getBillsAC
      */
-    public function bills(AutocompleteRequest $request): JsonResponse
+    public function bills(AutocompleteApiRequest $request): JsonResponse
     {
-        $data     = $request->getData();
-        $result   = $this->repository->searchBill($data['query'], $this->parameters->get('limit'));
-        $filtered = $result->map(
-            static fn (Bill $item) => [
-                'id'     => (string) $item->id,
-                'name'   => $item->name,
-                'active' => $item->active,
-            ]
-        );
+        $result   = $this->repository->searchBill($request->attributes->get('query'), $request->attributes->get('limit'));
+        $filtered = $result->map(static fn (Bill $item): array => ['id'     => (string) $item->id, 'name'   => $item->name, 'active' => $item->active]);
 
         return response()->api($filtered->toArray());
     }

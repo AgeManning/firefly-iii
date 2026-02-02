@@ -6,11 +6,14 @@
 
     <div class="row">
         <div class="col-lg-12 col-md-12 col-sm-12">
-            <p>
+            <div class="btn-group">
                 <a href="{{ route('rule-groups.create') }}" id="new_rule_group" class="btn btn-success">{{ 'new_rule_group'|_ }}</a>
-            </p>
+                <a href="{{ route('rules.create') }}" class="btn btn-success new_rule">{{ 'new_rule'|_ }}</a>
+            </div>
+            <p></p>
         </div>
     </div>
+
 
     {% if ruleGroups|length == 1 and ruleGroups[0].rules.count() == 0 %}
         {% include 'partials.empty' with {objectType: 'default', type: 'rules',route: route('rules.create')} %}
@@ -61,6 +64,10 @@
                     <div class="box-body">
                         <p>
                             <em>{{ ruleGroup.description }}</em>
+                        </p>
+                        <p>
+                            <a href="{{ route('rules.create', ruleGroup.id) }}"
+                               class="btn btn-success new_rule">{{ 'new_rule'|_ }}</a>
                         </p>
 
                         {% if ruleGroup.rules.count() > 0 %}
@@ -205,6 +212,6 @@
         var moveRuleGroupUrl = '{{ route('rule-groups.move') }}';
         var duplicateRuleUrl = '{{ route('rules.duplicate') }}';
     </script>
-    <script type="text/javascript" src="v1/js/lib/jquery-ui.min.js?v={{ FF_VERSION }}" nonce="{{ JS_NONCE }}"></script>
-    <script type="text/javascript" src="v1/js/ff/rules/index.js?v={{ FF_VERSION }}" nonce="{{ JS_NONCE }}"></script>
+    <script type="text/javascript" src="v1/js/lib/jquery-ui.min.js?v={{ FF_BUILD_TIME }}" nonce="{{ JS_NONCE }}"></script>
+    <script type="text/javascript" src="v1/js/ff/rules/index.js?v={{ FF_BUILD_TIME }}" nonce="{{ JS_NONCE }}"></script>
 {% endblock %}

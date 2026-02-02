@@ -24,23 +24,25 @@ declare(strict_types=1);
 
 namespace FireflyIII\Support\Chart\Category;
 
+use FireflyIII\Support\Facades\Navigation;
 use Carbon\Carbon;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Models\Category;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\Category\OperationsRepositoryInterface;
 use Illuminate\Support\Collection;
+use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class WholePeriodChartGenerator
  */
 class WholePeriodChartGenerator
 {
-    public bool $convertToNative;
+    public bool $convertToPrimary;
 
     public function generate(Category $category, Carbon $start, Carbon $end): array
     {
-        $collection        = new Collection([$category]);
+        $collection        = new Collection()->push($category);
 
         /** @var OperationsRepositoryInterface $opsRepository */
         $opsRepository     = app(OperationsRepositoryInterface::class);
@@ -59,10 +61,10 @@ class WholePeriodChartGenerator
 
         while ($current <= $end) {
             $key          = $current->format('Y-m-d');
-            $currentEnd   = app('navigation')->endOfPeriod($current, $step);
+            $currentEnd   = Navigation::endOfPeriod($current, $step);
             $spent[$key]  = $opsRepository->sumExpenses($current, $currentEnd, $accounts, $collection);
             $earned[$key] = $opsRepository->sumIncome($current, $currentEnd, $accounts, $collection);
-            $current      = app('navigation')->addPeriod($current, $step, 0);
+            $current      = Navigation::addPeriod($current, $step);
         }
 
         $currencies        = $this->extractCurrencies($spent) + $this->extractCurrencies($earned);
@@ -73,14 +75,14 @@ class WholePeriodChartGenerator
             $code                                      = $currency['currency_code'];
             $name                                      = $currency['currency_name'];
             $chartData[sprintf('spent-in-%s', $code)]  = [
-                'label'           => (string) trans('firefly.box_spent_in_currency', ['currency' => $name]),
+                'label'           => (string)trans('firefly.box_spent_in_currency', ['currency' => $name]),
                 'entries'         => [],
                 'type'            => 'bar',
                 'backgroundColor' => 'rgba(219, 68, 55, 0.5)', // red
             ];
 
             $chartData[sprintf('earned-in-%s', $code)] = [
-                'label'           => (string) trans('firefly.box_earned_in_currency', ['currency' => $name]),
+                'label'           => (string)trans('firefly.box_earned_in_currency', ['currency' => $name]),
                 'entries'         => [],
                 'type'            => 'bar',
                 'backgroundColor' => 'rgba(0, 141, 76, 0.5)', // green
@@ -91,7 +93,7 @@ class WholePeriodChartGenerator
 
         while ($current <= $end) {
             $key     = $current->format('Y-m-d');
-            $label   = app('navigation')->periodShow($current, $step);
+            $label   = Navigation::periodShow($current, $step);
 
             /** @var array $currency */
             foreach ($currencies as $currency) {
@@ -101,10 +103,10 @@ class WholePeriodChartGenerator
                 $earnedInfoKey                                = sprintf('earned-in-%s', $code);
                 $spentAmount                                  = $spent[$key][$currencyId]['sum'] ?? '0';
                 $earnedAmount                                 = $earned[$key][$currencyId]['sum'] ?? '0';
-                $chartData[$spentInfoKey]['entries'][$label]  = app('steam')->bcround($spentAmount, $currency['currency_decimal_places']);
-                $chartData[$earnedInfoKey]['entries'][$label] = app('steam')->bcround($earnedAmount, $currency['currency_decimal_places']);
+                $chartData[$spentInfoKey]['entries'][$label]  = Steam::bcround($spentAmount, $currency['currency_decimal_places']);
+                $chartData[$earnedInfoKey]['entries'][$label] = Steam::bcround($earnedAmount, $currency['currency_decimal_places']);
             }
-            $current = app('navigation')->addPeriod($current, $step, 0);
+            $current = Navigation::addPeriod($current, $step);
         }
 
         return $chartData;

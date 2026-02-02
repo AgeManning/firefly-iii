@@ -24,8 +24,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Support\Form;
 
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
-use Carbon\Exceptions\InvalidDateException;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use Illuminate\Support\MessageBag;
 use Throwable;
@@ -46,24 +46,35 @@ trait FormSupport
         unset($options['autocomplete'], $options['placeholder']);
 
         try {
-            $html = view('form.multi-select', compact('classes', 'name', 'label', 'selected', 'options', 'list'))->render();
+            $html = view('form.multi-select', ['classes' => $classes, 'name' => $name, 'label' => $label, 'selected' => $selected, 'options' => $options, 'list' => $list])->render();
         } catch (Throwable $e) {
-            app('log')->debug(sprintf('Could not render multi-select(): %s', $e->getMessage()));
+            Log::debug(sprintf('Could not render multi-select(): %s', $e->getMessage()));
             $html = 'Could not render multi-select.';
         }
 
         return $html;
     }
 
-    protected function label(string $name, ?array $options = null): string
+    /**
+     * @param mixed $selected
+     */
+    public function select(string $name, ?array $list = null, $selected = null, ?array $options = null): string
     {
-        $options ??= [];
-        if (array_key_exists('label', $options)) {
-            return $options['label'];
-        }
-        $name = str_replace('[]', '', $name);
+        $list ??= [];
+        $label    = $this->label($name, $options);
+        $options  = $this->expandOptionArray($name, $label, $options);
+        $classes  = $this->getHolderClasses($name);
+        $selected = $this->fillFieldValue($name, $selected);
+        unset($options['autocomplete'], $options['placeholder']);
 
-        return (string) trans('form.'.$name);
+        try {
+            $html = view('form.select', ['classes' => $classes, 'name' => $name, 'label' => $label, 'selected' => $selected, 'options' => $options, 'list' => $list])->render();
+        } catch (Throwable $e) {
+            Log::debug(sprintf('Could not render select(): %s', $e->getMessage()));
+            $html = 'Could not render select.';
+        }
+
+        return $html;
     }
 
     /**
@@ -76,22 +87,9 @@ trait FormSupport
         $options['class']        = 'form-control';
         $options['id']           = 'ffInput_'.$name;
         $options['autocomplete'] = 'off';
-        $options['placeholder']  = ucfirst((string) $label);
+        $options['placeholder']  = ucfirst((string)$label);
 
         return $options;
-    }
-
-    protected function getHolderClasses(string $name): string
-    {
-        // Get errors from session:
-        /** @var null|MessageBag $errors */
-        $errors = session('errors');
-
-        if (null !== $errors && $errors->has($name)) {
-            return 'form-group has-error has-feedback';
-        }
-
-        return 'form-group';
     }
 
     /**
@@ -117,28 +115,6 @@ trait FormSupport
         return $value;
     }
 
-    /**
-     * @param mixed $selected
-     */
-    public function select(string $name, ?array $list = null, $selected = null, ?array $options = null): string
-    {
-        $list ??= [];
-        $label    = $this->label($name, $options);
-        $options  = $this->expandOptionArray($name, $label, $options);
-        $classes  = $this->getHolderClasses($name);
-        $selected = $this->fillFieldValue($name, $selected);
-        unset($options['autocomplete'], $options['placeholder']);
-
-        try {
-            $html = view('form.select', compact('classes', 'name', 'label', 'selected', 'options', 'list'))->render();
-        } catch (Throwable $e) {
-            app('log')->debug(sprintf('Could not render select(): %s', $e->getMessage()));
-            $html = 'Could not render select.';
-        }
-
-        return $html;
-    }
-
     protected function getAccountRepository(): AccountRepositoryInterface
     {
         return app(AccountRepositoryInterface::class);
@@ -146,15 +122,30 @@ trait FormSupport
 
     protected function getDate(): Carbon
     {
-        /** @var Carbon $date */
-        $date = null;
+        return today(config('app.timezone'));
+    }
 
-        try {
-            $date = today(config('app.timezone'));
-        } catch (InvalidDateException $e) {  // @phpstan-ignore-line
-            app('log')->error($e->getMessage());
+    protected function getHolderClasses(string $name): string
+    {
+        // Get errors from session:
+        /** @var null|MessageBag $errors */
+        $errors = session('errors');
+
+        if (null !== $errors && $errors->has($name)) {
+            return 'form-group has-error has-feedback';
         }
 
-        return $date;
+        return 'form-group';
+    }
+
+    protected function label(string $name, ?array $options = null): string
+    {
+        $options ??= [];
+        if (array_key_exists('label', $options)) {
+            return $options['label'];
+        }
+        $name = str_replace('[]', '', $name);
+
+        return (string)trans('form.'.$name);
     }
 }

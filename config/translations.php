@@ -57,6 +57,7 @@ return [
                 'liability_direction_credit_short',
                 'liability_direction_null_short',
                 'interest_calc_yearly',
+                'loading',
                 'interest_calc_',
                 'interest_calc_null',
                 'interest_calc_daily',
@@ -65,6 +66,7 @@ return [
                 'interest_calc_half-year',
                 'interest_calc_quarterly',
                 'spent',
+                'budgeted',
                 'administration_owner',
                 'administration_you',
                 'administration_role_owner',
@@ -245,12 +247,21 @@ return [
                 'multi_account_warning_withdrawal',
                 'multi_account_warning_deposit',
                 'multi_account_warning_transfer',
+
+                'webhook_trigger_ANY',
                 'webhook_trigger_STORE_TRANSACTION',
                 'webhook_trigger_UPDATE_TRANSACTION',
                 'webhook_trigger_DESTROY_TRANSACTION',
+
+                'webhook_trigger_STORE_BUDGET',
+                'webhook_trigger_UPDATE_BUDGET',
+                'webhook_trigger_DESTROY_BUDGET',
+                'webhook_trigger_STORE_UPDATE_BUDGET_LIMIT',
+
                 'webhook_response_TRANSACTIONS',
+                'webhook_response_RELEVANT',
                 'webhook_response_ACCOUNTS',
-                'webhook_response_none_NONE',
+                'webhook_response_NONE',
                 'webhook_delivery_JSON',
                 'actions',
                 'meta_data',
@@ -314,7 +325,7 @@ return [
             'list'    => [
                 'title',
                 'active',
-                'native_currency',
+                'primary_currency',
                 'trigger',
                 'response',
                 'delivery',
@@ -332,6 +343,7 @@ return [
     'languages' => [
         // currently enabled languages
         'af_ZA',
+        'ar_SA',
         'bg_BG',
         'cs_CZ',
         'da_DK',

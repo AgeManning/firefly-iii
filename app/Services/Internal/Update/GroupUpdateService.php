@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Services\Internal\Update;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Events\TriggeredAuditLog;
 use FireflyIII\Exceptions\DuplicateTransactionException;
 use FireflyIII\Exceptions\FireflyException;
@@ -77,13 +78,11 @@ class GroupUpdateService
         if (1 === count($transactions) && 1 === $transactionGroup->transactionJournals()->count()) {
             /** @var TransactionJournal $first */
             $first = $transactionGroup->transactionJournals()->first();
-            Log::debug(
-                sprintf('Will now update journal #%d (only journal in group #%d)', $first->id, $transactionGroup->id)
-            );
+            Log::debug(sprintf('Will now update journal #%d (only journal in group #%d)', $first->id, $transactionGroup->id));
             $this->updateTransactionJournal($transactionGroup, $first, reset($transactions));
             $transactionGroup->touch();
             $transactionGroup->refresh();
-            app('preferences')->mark();
+            Preferences::mark();
 
             return $transactionGroup;
         }
@@ -98,26 +97,25 @@ class GroupUpdateService
             Log::error('There were no transactions updated or created. Will not delete anything.');
             $transactionGroup->touch();
             $transactionGroup->refresh();
-            app('preferences')->mark();
+            Preferences::mark();
 
             return $transactionGroup;
         }
 
         $result       = array_diff($existing, $updated);
         Log::debug('Result of DIFF: ', $result);
-        if (count($result) > 0) {
-            /** @var string $deletedId */
-            foreach ($result as $deletedId) {
-                /** @var TransactionJournal $journal */
-                $journal = $transactionGroup->transactionJournals()->find((int) $deletedId);
 
-                /** @var JournalDestroyService $service */
-                $service = app(JournalDestroyService::class);
-                $service->destroy($journal);
-            }
+        /** @var string $deletedId */
+        foreach ($result as $deletedId) {
+            /** @var TransactionJournal $journal */
+            $journal = $transactionGroup->transactionJournals()->find((int) $deletedId);
+
+            /** @var JournalDestroyService $service */
+            $service = app(JournalDestroyService::class);
+            $service->destroy($journal);
         }
 
-        app('preferences')->mark();
+        Preferences::mark();
         $transactionGroup->touch();
         $transactionGroup->refresh();
 

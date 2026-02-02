@@ -27,15 +27,15 @@ use FireflyIII\Events\ActuallyLoggedIn;
 use FireflyIII\Events\Admin\InvitationCreated;
 use FireflyIII\Events\DestroyedTransactionGroup;
 use FireflyIII\Events\DetectedNewIPAddress;
-use FireflyIII\Events\Model\BudgetLimit\Created;
-use FireflyIII\Events\Model\BudgetLimit\Deleted;
-use FireflyIII\Events\Model\BudgetLimit\Updated;
+use FireflyIII\Events\Model\Bill\WarnUserAboutBill;
+use FireflyIII\Events\Model\Bill\WarnUserAboutOverdueSubscriptions;
 use FireflyIII\Events\Model\PiggyBank\ChangedAmount;
 use FireflyIII\Events\Model\PiggyBank\ChangedName;
 use FireflyIII\Events\Model\Rule\RuleActionFailedOnArray;
 use FireflyIII\Events\Model\Rule\RuleActionFailedOnObject;
+use FireflyIII\Events\Model\TransactionGroup\TriggeredStoredTransactionGroup;
 use FireflyIII\Events\NewVersionAvailable;
-use FireflyIII\Events\Preferences\UserGroupChangedDefaultCurrency;
+use FireflyIII\Events\Preferences\UserGroupChangedPrimaryCurrency;
 use FireflyIII\Events\RegisteredUser;
 use FireflyIII\Events\RequestedNewPassword;
 use FireflyIII\Events\RequestedReportOnJournals;
@@ -58,47 +58,6 @@ use FireflyIII\Events\TriggeredAuditLog;
 use FireflyIII\Events\UpdatedAccount;
 use FireflyIII\Events\UpdatedTransactionGroup;
 use FireflyIII\Events\UserChangedEmail;
-use FireflyIII\Events\WarnUserAboutBill;
-use FireflyIII\Handlers\Observer\AccountObserver;
-use FireflyIII\Handlers\Observer\AttachmentObserver;
-use FireflyIII\Handlers\Observer\AutoBudgetObserver;
-use FireflyIII\Handlers\Observer\AvailableBudgetObserver;
-use FireflyIII\Handlers\Observer\BillObserver;
-use FireflyIII\Handlers\Observer\BudgetLimitObserver;
-use FireflyIII\Handlers\Observer\BudgetObserver;
-use FireflyIII\Handlers\Observer\CategoryObserver;
-use FireflyIII\Handlers\Observer\PiggyBankEventObserver;
-use FireflyIII\Handlers\Observer\PiggyBankObserver;
-use FireflyIII\Handlers\Observer\RecurrenceObserver;
-use FireflyIII\Handlers\Observer\RecurrenceTransactionObserver;
-use FireflyIII\Handlers\Observer\RuleGroupObserver;
-use FireflyIII\Handlers\Observer\RuleObserver;
-use FireflyIII\Handlers\Observer\TagObserver;
-use FireflyIII\Handlers\Observer\TransactionGroupObserver;
-use FireflyIII\Handlers\Observer\TransactionJournalObserver;
-use FireflyIII\Handlers\Observer\TransactionObserver;
-use FireflyIII\Handlers\Observer\WebhookMessageObserver;
-use FireflyIII\Handlers\Observer\WebhookObserver;
-use FireflyIII\Models\Account;
-use FireflyIII\Models\Attachment;
-use FireflyIII\Models\AutoBudget;
-use FireflyIII\Models\AvailableBudget;
-use FireflyIII\Models\Bill;
-use FireflyIII\Models\Budget;
-use FireflyIII\Models\BudgetLimit;
-use FireflyIII\Models\Category;
-use FireflyIII\Models\PiggyBank;
-use FireflyIII\Models\PiggyBankEvent;
-use FireflyIII\Models\Recurrence;
-use FireflyIII\Models\RecurrenceTransaction;
-use FireflyIII\Models\Rule;
-use FireflyIII\Models\RuleGroup;
-use FireflyIII\Models\Tag;
-use FireflyIII\Models\Transaction;
-use FireflyIII\Models\TransactionGroup;
-use FireflyIII\Models\TransactionJournal;
-use FireflyIII\Models\Webhook;
-use FireflyIII\Models\WebhookMessage;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 use Laravel\Passport\Events\AccessTokenCreated;
@@ -114,151 +73,146 @@ class EventServiceProvider extends ServiceProvider
     protected $listen
         = [
             // is a User related event.
-            RegisteredUser::class                  => [
+            RegisteredUser::class                    => [
                 'FireflyIII\Handlers\Events\UserEventHandler@sendRegistrationMail',
                 'FireflyIII\Handlers\Events\UserEventHandler@sendAdminRegistrationNotification',
                 'FireflyIII\Handlers\Events\UserEventHandler@attachUserRole',
                 'FireflyIII\Handlers\Events\UserEventHandler@createGroupMembership',
                 'FireflyIII\Handlers\Events\UserEventHandler@createExchangeRates',
             ],
-            UserAttemptedLogin::class              => [
+            UserAttemptedLogin::class                => [
                 'FireflyIII\Handlers\Events\UserEventHandler@sendLoginAttemptNotification',
             ],
             // is a User related event.
-            Login::class                           => [
+            Login::class                             => [
                 'FireflyIII\Handlers\Events\UserEventHandler@checkSingleUserIsAdmin',
                 'FireflyIII\Handlers\Events\UserEventHandler@demoUserBackToEnglish',
             ],
-            ActuallyLoggedIn::class                => [
+            ActuallyLoggedIn::class                  => [
                 'FireflyIII\Handlers\Events\UserEventHandler@storeUserIPAddress',
             ],
-            DetectedNewIPAddress::class            => [
+            DetectedNewIPAddress::class              => [
                 'FireflyIII\Handlers\Events\UserEventHandler@notifyNewIPAddress',
             ],
-            RequestedVersionCheckStatus::class     => [
+            RequestedVersionCheckStatus::class       => [
                 'FireflyIII\Handlers\Events\VersionCheckEventHandler@checkForUpdates',
             ],
-            RequestedReportOnJournals::class       => [
+            RequestedReportOnJournals::class         => [
                 'FireflyIII\Handlers\Events\AutomationHandler@reportJournals',
             ],
 
             // is a User related event.
-            RequestedNewPassword::class            => [
+            RequestedNewPassword::class              => [
                 'FireflyIII\Handlers\Events\UserEventHandler@sendNewPassword',
             ],
-            UserTestNotificationChannel::class     => [
+            UserTestNotificationChannel::class       => [
                 'FireflyIII\Handlers\Events\UserEventHandler@sendTestNotification',
             ],
             // is a User related event.
-            UserChangedEmail::class                => [
+            UserChangedEmail::class                  => [
                 'FireflyIII\Handlers\Events\UserEventHandler@sendEmailChangeConfirmMail',
                 'FireflyIII\Handlers\Events\UserEventHandler@sendEmailChangeUndoMail',
             ],
             // admin related
-            OwnerTestNotificationChannel::class    => [
+            OwnerTestNotificationChannel::class      => [
                 'FireflyIII\Handlers\Events\AdminEventHandler@sendTestNotification',
             ],
-            NewVersionAvailable::class             => [
+            NewVersionAvailable::class               => [
                 'FireflyIII\Handlers\Events\AdminEventHandler@sendNewVersion',
             ],
-            InvitationCreated::class               => [
+            InvitationCreated::class                 => [
                 'FireflyIII\Handlers\Events\AdminEventHandler@sendInvitationNotification',
                 'FireflyIII\Handlers\Events\UserEventHandler@sendRegistrationInvite',
             ],
-            UnknownUserAttemptedLogin::class       => [
+            UnknownUserAttemptedLogin::class         => [
                 'FireflyIII\Handlers\Events\AdminEventHandler@sendLoginAttemptNotification',
             ],
 
             // is a Transaction Journal related event.
-            StoredTransactionGroup::class          => [
+            StoredTransactionGroup::class            => [
                 'FireflyIII\Handlers\Events\StoredGroupEventHandler@runAllHandlers',
             ],
+            TriggeredStoredTransactionGroup::class   => [
+                'FireflyIII\Handlers\Events\StoredGroupEventHandler@triggerRulesManually',
+            ],
             // is a Transaction Journal related event.
-            UpdatedTransactionGroup::class         => [
+            UpdatedTransactionGroup::class           => [
                 'FireflyIII\Handlers\Events\UpdatedGroupEventHandler@runAllHandlers',
             ],
-            DestroyedTransactionGroup::class       => [
+            DestroyedTransactionGroup::class         => [
                 'FireflyIII\Handlers\Events\DestroyedGroupEventHandler@runAllHandlers',
             ],
             // API related events:
-            AccessTokenCreated::class              => [
+            AccessTokenCreated::class                => [
                 'FireflyIII\Handlers\Events\APIEventHandler@accessTokenCreated',
             ],
 
             // Webhook related event:
-            RequestedSendWebhookMessages::class    => [
+            RequestedSendWebhookMessages::class      => [
                 'FireflyIII\Handlers\Events\WebhookEventHandler@sendWebhookMessages',
             ],
 
             // account related events:
-            StoredAccount::class                   => [
+            StoredAccount::class                     => [
                 'FireflyIII\Handlers\Events\StoredAccountEventHandler@recalculateCredit',
             ],
-            UpdatedAccount::class                  => [
+            UpdatedAccount::class                    => [
                 'FireflyIII\Handlers\Events\UpdatedAccountEventHandler@recalculateCredit',
             ],
 
             // bill related events:
-            WarnUserAboutBill::class               => [
+            WarnUserAboutBill::class                 => [
                 'FireflyIII\Handlers\Events\BillEventHandler@warnAboutBill',
+            ],
+            WarnUserAboutOverdueSubscriptions::class => [
+                'FireflyIII\Handlers\Events\BillEventHandler@warnAboutOverdueSubscriptions',
             ],
 
             // audit log events:
-            TriggeredAuditLog::class               => [
+            TriggeredAuditLog::class                 => [
                 'FireflyIII\Handlers\Events\AuditEventHandler@storeAuditEvent',
             ],
             // piggy bank related events:
-            ChangedAmount::class                   => [
+            ChangedAmount::class                     => [
                 'FireflyIII\Handlers\Events\Model\PiggyBankEventHandler@changePiggyAmount',
             ],
-            ChangedName::class                     => [
+            ChangedName::class                       => [
                 'FireflyIII\Handlers\Events\Model\PiggyBankEventHandler@changedPiggyBankName',
             ],
 
-            // budget related events: CRUD budget limit
-            Created::class                         => [
-                'FireflyIII\Handlers\Events\Model\BudgetLimitHandler@created',
-            ],
-            Updated::class                         => [
-                'FireflyIII\Handlers\Events\Model\BudgetLimitHandler@updated',
-            ],
-            Deleted::class                         => [
-                'FireflyIII\Handlers\Events\Model\BudgetLimitHandler@deleted',
-            ],
-
             // rule actions
-            RuleActionFailedOnArray::class         => [
+            RuleActionFailedOnArray::class           => [
                 'FireflyIII\Handlers\Events\Model\RuleHandler@ruleActionFailedOnArray',
             ],
-            RuleActionFailedOnObject::class        => [
+            RuleActionFailedOnObject::class          => [
                 'FireflyIII\Handlers\Events\Model\RuleHandler@ruleActionFailedOnObject',
             ],
 
             // security related
-            EnabledMFA::class                      => [
+            EnabledMFA::class                        => [
                 'FireflyIII\Handlers\Events\Security\MFAHandler@sendMFAEnabledMail',
             ],
-            DisabledMFA::class                     => [
+            DisabledMFA::class                       => [
                 'FireflyIII\Handlers\Events\Security\MFAHandler@sendMFADisabledMail',
             ],
-            MFANewBackupCodes::class               => [
+            MFANewBackupCodes::class                 => [
                 'FireflyIII\Handlers\Events\Security\MFAHandler@sendNewMFABackupCodesMail',
             ],
-            MFAUsedBackupCode::class               => [
+            MFAUsedBackupCode::class                 => [
                 'FireflyIII\Handlers\Events\Security\MFAHandler@sendUsedBackupCodeMail',
             ],
-            MFABackupFewLeft::class                => [
+            MFABackupFewLeft::class                  => [
                 'FireflyIII\Handlers\Events\Security\MFAHandler@sendBackupFewLeftMail',
             ],
-            MFABackupNoLeft::class                 => [
+            MFABackupNoLeft::class                   => [
                 'FireflyIII\Handlers\Events\Security\MFAHandler@sendBackupNoLeftMail',
             ],
-            MFAManyFailedAttempts::class           => [
+            MFAManyFailedAttempts::class             => [
                 'FireflyIII\Handlers\Events\Security\MFAHandler@sendMFAFailedAttemptsMail',
             ],
             // preferences
-            UserGroupChangedDefaultCurrency::class => [
-                'FireflyIII\Handlers\Events\PreferencesEventHandler@resetNativeAmounts',
+            UserGroupChangedPrimaryCurrency::class   => [
+                'FireflyIII\Handlers\Events\PreferencesEventHandler@resetPrimaryCurrencyAmounts',
             ],
         ];
 
@@ -266,32 +220,5 @@ class EventServiceProvider extends ServiceProvider
      * Register any events for your application.
      */
     #[Override]
-    public function boot(): void
-    {
-        $this->registerObservers();
-    }
-
-    private function registerObservers(): void
-    {
-        Attachment::observe(new AttachmentObserver());
-        Account::observe(new AccountObserver());
-        AutoBudget::observe(new AutoBudgetObserver());
-        AvailableBudget::observe(new AvailableBudgetObserver());
-        Bill::observe(new BillObserver());
-        Budget::observe(new BudgetObserver());
-        BudgetLimit::observe(new BudgetLimitObserver());
-        Category::observe(new CategoryObserver());
-        PiggyBank::observe(new PiggyBankObserver());
-        PiggyBankEvent::observe(new PiggyBankEventObserver());
-        Recurrence::observe(new RecurrenceObserver());
-        RecurrenceTransaction::observe(new RecurrenceTransactionObserver());
-        Rule::observe(new RuleObserver());
-        RuleGroup::observe(new RuleGroupObserver());
-        Tag::observe(new TagObserver());
-        Transaction::observe(new TransactionObserver());
-        TransactionJournal::observe(new TransactionJournalObserver());
-        TransactionGroup::observe(new TransactionGroupObserver());
-        Webhook::observe(new WebhookObserver());
-        WebhookMessage::observe(new WebhookMessageObserver());
-    }
+    public function boot(): void {}
 }

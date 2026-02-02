@@ -24,15 +24,18 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Controllers\System;
 
-use FireflyIII\Support\Facades\FireflyConfig;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
 use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\System\UpdateRequest;
+use FireflyIII\Enums\WebhookDelivery;
+use FireflyIII\Enums\WebhookResponse;
+use FireflyIII\Enums\WebhookTrigger;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Repositories\User\UserRepositoryInterface;
 use FireflyIII\Support\Binder\EitherConfigKey;
+use FireflyIII\Support\Facades\FireflyConfig;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -107,8 +110,8 @@ class ConfigurationController extends Controller
 
         return [
             'is_demo_site'            => $isDemoSite?->data,
-            'permission_update_check' => null === $updateCheck ? null : (int) $updateCheck->data,
-            'last_update_check'       => null === $lastCheck ? null : (int) $lastCheck->data,
+            'permission_update_check' => null === $updateCheck ? null : (int)$updateCheck->data,
+            'last_update_check'       => null === $lastCheck ? null : (int)$lastCheck->data,
             'single_user_mode'        => $singleUser?->data,
         ];
     }
@@ -130,7 +133,6 @@ class ConfigurationController extends Controller
      */
     public function show(string $configKey): JsonResponse
     {
-        $data     = [];
         $dynamic  = $this->getDynamicConfiguration();
         $shortKey = str_replace('configuration.', '', $configKey);
         if (str_starts_with($configKey, 'configuration.')) {
@@ -139,14 +141,25 @@ class ConfigurationController extends Controller
                 'value'    => $dynamic[$shortKey],
                 'editable' => true,
             ];
+
+            return response()->api(['data' => $data])->header('Content-Type', self::JSON_CONTENT_TYPE);
         }
-        if (!str_starts_with($configKey, 'configuration.')) {
+        if (str_starts_with($configKey, 'webhook.')) {
             $data = [
                 'title'    => $configKey,
-                'value'    => config($configKey),
+                'value'    => $this->getWebhookConfiguration($configKey),
                 'editable' => false,
             ];
+
+            return response()->api(['data' => $data])->header('Content-Type', self::JSON_CONTENT_TYPE);
         }
+
+        // fallback
+        $data     = [
+            'title'    => $configKey,
+            'value'    => config($shortKey),
+            'editable' => false,
+        ];
 
         return response()->api(['data' => $data])->header('Content-Type', self::JSON_CONTENT_TYPE);
     }
@@ -181,5 +194,40 @@ class ConfigurationController extends Controller
         ];
 
         return response()->api(['data' => $data])->header('Content-Type', self::CONTENT_TYPE);
+    }
+
+    private function getWebhookConfiguration(string $configKey): array
+    {
+        switch ($configKey) {
+            case 'webhook.triggers':
+                $cases = WebhookTrigger::cases();
+                $data  = [];
+                foreach ($cases as $c) {
+                    $data[$c->name] = $c->value;
+                }
+
+                return $data;
+
+            case 'webhook.responses':
+                $cases = WebhookResponse::cases();
+                $data  = [];
+                foreach ($cases as $c) {
+                    $data[$c->name] = $c->value;
+                }
+
+                return $data;
+
+            case 'webhook.deliveries':
+                $cases = WebhookDelivery::cases();
+                $data  = [];
+                foreach ($cases as $c) {
+                    $data[$c->name] = $c->value;
+                }
+
+                return $data;
+
+            default:
+                throw new FireflyException(sprintf('Unknown webhook configuration key "%s".', $configKey));
+        }
     }
 }

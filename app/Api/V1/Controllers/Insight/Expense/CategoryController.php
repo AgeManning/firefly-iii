@@ -63,10 +63,6 @@ class CategoryController extends Controller
         );
     }
 
-    /**
-     * This endpoint is documented at:
-     * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/insight/insightTransferCategory
-     */
     public function category(GenericRequest $request): JsonResponse
     {
         $start         = $request->getStart();
@@ -80,7 +76,7 @@ class CategoryController extends Controller
 
         /** @var Category $category */
         foreach ($categories as $category) {
-            $expenses = $this->opsRepository->sumExpenses($start, $end, $assetAccounts, new Collection([$category]));
+            $expenses = $this->opsRepository->sumExpenses($start, $end, $assetAccounts, new Collection()->push($category));
 
             /** @var array $expense */
             foreach ($expenses as $expense) {
@@ -98,10 +94,6 @@ class CategoryController extends Controller
         return response()->json($result);
     }
 
-    /**
-     * This endpoint is documented at:
-     * https://api-docs.firefly-iii.org/?urls.primaryName=2.0.0%20(v1)#/insight/insightTransferNoCategory
-     */
     public function noCategory(GenericRequest $request): JsonResponse
     {
         $start         = $request->getStart();

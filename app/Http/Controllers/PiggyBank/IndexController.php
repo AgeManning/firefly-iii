@@ -25,15 +25,16 @@ declare(strict_types=1);
 namespace FireflyIII\Http\Controllers\PiggyBank;
 
 use Carbon\Carbon;
-use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\PiggyBank;
 use FireflyIII\Repositories\ObjectGroup\OrganisesObjectGroups;
 use FireflyIII\Repositories\PiggyBank\PiggyBankRepositoryInterface;
 use FireflyIII\Support\JsonApi\Enrichments\AccountEnrichment;
+use FireflyIII\Support\JsonApi\Enrichments\PiggyBankEnrichment;
 use FireflyIII\Transformers\AccountTransformer;
 use FireflyIII\Transformers\PiggyBankTransformer;
+use FireflyIII\User;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -75,17 +76,14 @@ class IndexController extends Controller
      * TODO very complicated function.
      *
      * @return Factory|View
-     *
-     * @throws FireflyException
      */
-    public function index()
+    public function index(): Factory|\Illuminate\Contracts\View\View
     {
         $this->cleanupObjectGroups();
         $this->piggyRepos->resetOrder();
         $collection = $this->piggyRepos->getPiggyBanks();
 
-        /** @var Carbon $end */
-        $end        = session('end', today(config('app.timezone'))->endOfMonth());
+        session('end', today(config('app.timezone'))->endOfMonth());
 
         // transform piggies using the transformer:
         // $parameters         = new ParameterBag();
@@ -104,7 +102,7 @@ class IndexController extends Controller
 
         ksort($piggyBanks);
 
-        return view('piggy-banks.index', compact('piggyBanks', 'accounts'));
+        return view('piggy-banks.index', ['piggyBanks' => $piggyBanks, 'accounts' => $accounts]);
     }
 
     private function groupPiggyBanks(Collection $collection): array
@@ -113,6 +111,13 @@ class IndexController extends Controller
         $transformer = app(PiggyBankTransformer::class);
         $transformer->setParameters(new ParameterBag());
         $piggyBanks  = [];
+
+        // enrich
+        /** @var User $admin */
+        $admin       = auth()->user();
+        $enrichment  = new PiggyBankEnrichment();
+        $enrichment->setUser($admin);
+        $collection  = $enrichment->enrich($collection);
 
         /** @var PiggyBank $piggy */
         foreach ($collection as $piggy) {
@@ -148,7 +153,7 @@ class IndexController extends Controller
         // enrich each account.
         $enrichment         = new AccountEnrichment();
         $enrichment->setUser(auth()->user());
-        $enrichment->setNative($this->defaultCurrency);
+        $enrichment->setDate($end);
         $return             = [];
 
         /** @var PiggyBank $piggy */
@@ -170,14 +175,6 @@ class IndexController extends Controller
                     $return[$accountId]['target']  = '0';
                     $return[$accountId]['to_save'] = '0';
                 }
-
-                // calculate new interesting fields:
-                //                $return[$accountId]['left']             -= $array['current_amount'];
-                //                $return[$accountId]['saved']            += $array['current_amount'];
-                //                $return[$accountId]['target']           += $array['target_amount'];
-                //                $return[$accountId]['to_save']          += ($array['target_amount'] - $array['current_amount']);
-                //                $return['account_name']                    = $account['name'];
-
             }
         }
 
@@ -193,7 +190,7 @@ class IndexController extends Controller
                 // loop all accounts in this piggy bank subtract the current amount from "left to save" in the $accounts array.
                 /** @var array $piggyAccount */
                 foreach ($piggyBank['accounts'] as $piggyAccount) {
-                    $accountId = $piggyAccount['id'];
+                    $accountId = $piggyAccount['account_id'];
                     if (array_key_exists($accountId, $accounts)) {
                         $accounts[$accountId]['left']    = bcsub((string) $accounts[$accountId]['left'], (string) $piggyAccount['current_amount']);
                         $accounts[$accountId]['saved']   = bcadd((string) $accounts[$accountId]['saved'], (string) $piggyAccount['current_amount']);

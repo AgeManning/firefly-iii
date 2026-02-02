@@ -71,8 +71,6 @@ interface AccountRepositoryInterface
 
     public function findByName(string $name, array $types): ?Account;
 
-    public function getAccountBalances(Account $account): Collection;
-
     public function getAccountCurrency(Account $account): ?TransactionCurrency;
 
     /**
@@ -117,7 +115,7 @@ interface AccountRepositoryInterface
     /**
      * Returns the amount of the opening balance for this account.
      */
-    public function getOpeningBalanceAmount(Account $account, bool $convertToNative): ?string;
+    public function getOpeningBalanceAmount(Account $account, bool $convertToPrimary): ?string;
 
     /**
      * Return date of opening balance as string or null.

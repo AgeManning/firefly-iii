@@ -29,6 +29,7 @@ use FireflyIII\Models\PiggyBank;
 use FireflyIII\Repositories\Attachment\AttachmentRepositoryInterface;
 use FireflyIII\Support\Http\Api\ExchangeRateConverter;
 use Illuminate\Support\Facades\Log;
+use FireflyIII\Support\Facades\Amount;
 
 /**
  * Class PiggyBankObserver
@@ -38,10 +39,10 @@ class PiggyBankObserver
     public function created(PiggyBank $piggyBank): void
     {
         Log::debug('Observe "created" of a piggy bank.');
-        $this->updateNativeAmount($piggyBank);
+        $this->updatePrimaryCurrencyAmount($piggyBank);
     }
 
-    private function updateNativeAmount(PiggyBank $piggyBank): void
+    private function updatePrimaryCurrencyAmount(PiggyBank $piggyBank): void
     {
         $group                           = $piggyBank->accounts()->first()?->user->userGroup;
         if (null === $group) {
@@ -49,7 +50,7 @@ class PiggyBankObserver
 
             return;
         }
-        $userCurrency                    = app('amount')->getNativeCurrencyByUserGroup($group);
+        $userCurrency                    = Amount::getPrimaryCurrencyByUserGroup($group);
         $piggyBank->native_target_amount = null;
         if ($piggyBank->transactionCurrency->id !== $userCurrency->id) {
             $converter                       = new ExchangeRateConverter();
@@ -58,7 +59,7 @@ class PiggyBankObserver
             $piggyBank->native_target_amount = $converter->convert($piggyBank->transactionCurrency, $userCurrency, today(), $piggyBank->target_amount);
         }
         $piggyBank->saveQuietly();
-        Log::debug('Piggy bank native target amount is updated.');
+        Log::debug('Piggy bank primary currency target amount is updated.');
     }
 
     /**
@@ -66,7 +67,7 @@ class PiggyBankObserver
      */
     public function deleting(PiggyBank $piggyBank): void
     {
-        app('log')->debug('Observe "deleting" of a piggy bank.');
+        Log::debug('Observe "deleting" of a piggy bank.');
 
         $repository = app(AttachmentRepositoryInterface::class);
         $repository->setUser($piggyBank->accounts()->first()->user);
@@ -85,6 +86,6 @@ class PiggyBankObserver
     public function updated(PiggyBank $piggyBank): void
     {
         Log::debug('Observe "updated" of a piggy bank.');
-        $this->updateNativeAmount($piggyBank);
+        $this->updatePrimaryCurrencyAmount($piggyBank);
     }
 }

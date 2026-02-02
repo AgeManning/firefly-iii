@@ -24,11 +24,12 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Budget;
 
-use FireflyIII\Models\AutoBudget;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Enums\AutoBudgetType;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\BudgetFormUpdateRequest;
+use FireflyIII\Models\AutoBudget;
 use FireflyIII\Models\Budget;
 use FireflyIII\Repositories\Budget\BudgetRepositoryInterface;
 use Illuminate\Contracts\View\Factory;
@@ -36,6 +37,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class EditController
@@ -69,7 +71,7 @@ class EditController extends Controller
      *
      * @return Factory|View
      */
-    public function edit(Request $request, Budget $budget)
+    public function edit(Request $request, Budget $budget): Factory|\Illuminate\Contracts\View\View
     {
         $subTitle          = (string) trans('firefly.edit_budget', ['name' => $budget->name]);
         $autoBudget        = $this->repository->getAutoBudget($budget);
@@ -94,7 +96,8 @@ class EditController extends Controller
         $hasOldInput       = null !== $request->old('_token');
         $preFilled         = [
             'active'                  => $hasOldInput ? (bool) $request->old('active') : $budget->active,
-            'auto_budget_currency_id' => $hasOldInput ? (int) $request->old('auto_budget_currency_id') : $this->defaultCurrency->id,
+            'auto_budget_currency_id' => $hasOldInput ? (int) $request->old('auto_budget_currency_id') : $this->primaryCurrency->id,
+            'notes'                   => $this->repository->getNoteText($budget),
         ];
         if ($autoBudget instanceof AutoBudget) {
             $amount                          = $hasOldInput ? $request->old('auto_budget_amount') : $autoBudget->amount;
@@ -102,7 +105,7 @@ class EditController extends Controller
                 $amount = '0';
             }
             $amount                          = (string) $amount;
-            $preFilled['auto_budget_amount'] = app('steam')->bcround($amount, $autoBudget->transactionCurrency->decimal_places);
+            $preFilled['auto_budget_amount'] = Steam::bcround($amount, $autoBudget->transactionCurrency->decimal_places);
         }
 
         // put previous url in session if not redirect from store (not "return_to_edit").
@@ -112,7 +115,7 @@ class EditController extends Controller
         $request->session()->forget('budgets.edit.fromUpdate');
         $request->session()->flash('preFilled', $preFilled);
 
-        return view('budgets.edit', compact('budget', 'subTitle', 'autoBudgetTypes', 'autoBudgetPeriods', 'autoBudget'));
+        return view('budgets.edit', ['budget' => $budget, 'subTitle' => $subTitle, 'autoBudgetTypes' => $autoBudgetTypes, 'autoBudgetPeriods' => $autoBudgetPeriods, 'autoBudget' => $autoBudget]);
     }
 
     /**
@@ -125,7 +128,7 @@ class EditController extends Controller
 
         $request->session()->flash('success', (string) trans('firefly.updated_budget', ['name' => $budget->name]));
         $this->repository->cleanupBudgets();
-        app('preferences')->mark();
+        Preferences::mark();
 
         Log::channel('audit')->info(sprintf('Updated budget #%d.', $budget->id), $data);
 

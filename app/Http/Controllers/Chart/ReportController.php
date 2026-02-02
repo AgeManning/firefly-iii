@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Chart;
 
+use FireflyIII\Support\Facades\Navigation;
 use Carbon\Carbon;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Generator\Chart\Basic\GeneratorInterface;
@@ -32,6 +33,7 @@ use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\CacheProperties;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Controllers\BasicDataSupport;
 use FireflyIII\Support\Http\Controllers\ChartGeneration;
 use Illuminate\Http\JsonResponse;
@@ -73,7 +75,7 @@ class ReportController extends Controller
         if ($cache->has()) {
             return response()->json($cache->get());
         }
-        $locale            = app('steam')->getLocale();
+        $locale            = Steam::getLocale();
         $current           = clone $start;
         $chartData         = [];
 
@@ -85,7 +87,7 @@ class ReportController extends Controller
         /** @var AccountRepositoryInterface $accountRepository */
         $accountRepository = app(AccountRepositoryInterface::class);
         $filtered          = $accounts->filter(
-            static function (Account $account) use ($accountRepository) {
+            static function (Account $account) use ($accountRepository): bool {
                 $includeNetWorth = $accountRepository->getMetaValue($account, 'include_net_worth');
                 $result          = null === $includeNetWorth ? true : '1' === $includeNetWorth;
                 if (false === $result) {
@@ -108,7 +110,7 @@ class ReportController extends Controller
             // loop result, add to array.
             /** @var array $netWorthItem */
             foreach ($result as $key => $netWorthItem) {
-                if ('native' === $key) {
+                if ('primary' === $key) {
                     continue;
                 }
                 $currencyId                                = $netWorthItem['currency_id'];
@@ -153,9 +155,9 @@ class ReportController extends Controller
 
         Log::debug('Going to do operations for accounts ', $accounts->pluck('id')->toArray());
         Log::debug(sprintf('Period: %s to %s', $start->toW3cString(), $end->toW3cString()));
-        $format         = app('navigation')->preferredCarbonFormat($start, $end);
-        $titleFormat    = app('navigation')->preferredCarbonLocalizedFormat($start, $end);
-        $preferredRange = app('navigation')->preferredRangeFormat($start, $end);
+        $format         = Navigation::preferredCarbonFormat($start, $end);
+        $titleFormat    = Navigation::preferredCarbonLocalizedFormat($start, $end);
+        $preferredRange = Navigation::preferredRangeFormat($start, $end);
         $ids            = $accounts->pluck('id')->toArray();
         $data           = [];
         $chartData      = [];
@@ -193,7 +195,7 @@ class ReportController extends Controller
             ];
             // in our outgoing?
             $key                              = 'spent';
-            $amount                           = app('steam')->positive($journal['amount']);
+            $amount                           = Steam::positive($journal['amount']);
 
             // deposit = incoming
             // transfer or reconcile or opening balance, and these accounts are the destination.
@@ -207,7 +209,7 @@ class ReportController extends Controller
                     && in_array($journal['destination_account_id'], $ids, true))) {
                 $key = 'earned';
             }
-            $data[$currencyId][$period][$key] = bcadd((string) $data[$currencyId][$period][$key], (string) $amount);
+            $data[$currencyId][$period][$key] = bcadd((string) $data[$currencyId][$period][$key], $amount);
         }
 
         // loop this data, make chart bars for each currency:
@@ -241,7 +243,7 @@ class ReportController extends Controller
 
             // #8374. Sloppy fix for yearly charts. Not really interested in a better fix with v2 layout and all.
             if ('1Y' === $preferredRange) {
-                $currentEnd = app('navigation')->endOfPeriod($currentEnd, $preferredRange);
+                $currentEnd = Navigation::endOfPeriod($currentEnd, $preferredRange);
             }
             Log::debug('Start of sub-loop');
             while ($currentStart <= $currentEnd) {
@@ -250,8 +252,8 @@ class ReportController extends Controller
                 $title        = $currentStart->isoFormat($titleFormat);
                 // #8663 make sure the period exists in the data previously collected.
                 if (array_key_exists($key, $currency)) {
-                    $income['entries'][$title]  = app('steam')->bcround($currency[$key]['earned'] ?? '0', $currency['currency_decimal_places']);
-                    $expense['entries'][$title] = app('steam')->bcround($currency[$key]['spent'] ?? '0', $currency['currency_decimal_places']);
+                    $income['entries'][$title]  = Steam::bcround($currency[$key]['earned'] ?? '0', $currency['currency_decimal_places']);
+                    $expense['entries'][$title] = Steam::bcround($currency[$key]['spent'] ?? '0', $currency['currency_decimal_places']);
                 }
                 // #9477 if the period is not in the data, add it with zero values.
                 if (!array_key_exists($key, $currency)) {
@@ -259,7 +261,7 @@ class ReportController extends Controller
                     $expense['entries'][$title] = '0';
 
                 }
-                $currentStart = app('navigation')->addPeriod($currentStart, $preferredRange, 0);
+                $currentStart = Navigation::addPeriod($currentStart, $preferredRange);
             }
             Log::debug('End of sub-loop');
 

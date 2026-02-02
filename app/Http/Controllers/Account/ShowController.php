@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Account;
 
+use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
@@ -40,6 +41,9 @@ use Illuminate\Routing\Redirector;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Class ShowController
@@ -77,11 +81,15 @@ class ShowController extends Controller
      *
      * @return Factory|Redirector|RedirectResponse|View
      *
+     * @throws ContainerExceptionInterface
      * @throws FireflyException
-     *                                              */
-    public function show(Request $request, Account $account, ?Carbon $start = null, ?Carbon $end = null)
+     * @throws NotFoundExceptionInterface
+     */
+    public function show(Request $request, Account $account, ?Carbon $start = null, ?Carbon $end = null): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
-
+        if (0 === $account->id) {
+            throw new NotFoundHttpException();
+        }
         $objectType       = config(sprintf('firefly.shortNamesByFullName.%s', $account->accountType->type));
 
         if (!$this->isEditableAccount($account)) {
@@ -99,43 +107,51 @@ class ShowController extends Controller
 
         // make sure dates are end of day and start of day:
         $start->startOfDay();
-        $end->endOfDay();
+        $end->endOfDay()->milli(0);
 
         $location         = $this->repository->getLocation($account);
         $attachments      = $this->repository->getAttachments($account);
         $today            = today(config('app.timezone'));
         $subTitleIcon     = config(sprintf('firefly.subIconsByIdentifier.%s', $account->accountType->type));
         $page             = (int) $request->get('page');
-        $pageSize         = (int) app('preferences')->get('listPageSize', 50)->data;
+        $pageSize         = (int) Preferences::get('listPageSize', 50)->data;
         $accountCurrency  = $this->repository->getAccountCurrency($account);
-        $currency         = $accountCurrency ?? $this->defaultCurrency;
+        $currency         = $accountCurrency ?? $this->primaryCurrency;
         $fStart           = $start->isoFormat($this->monthAndDayFormat);
         $fEnd             = $end->isoFormat($this->monthAndDayFormat);
         $subTitle         = (string) trans('firefly.journals_in_period_for_account', ['name' => $account->name, 'start' => $fStart, 'end' => $fEnd]);
         $chartUrl         = route('chart.account.period', [$account->id, $start->format('Y-m-d'), $end->format('Y-m-d')]);
         $firstTransaction = $this->repository->oldestJournalDate($account) ?? $start;
 
-        Log::debug('Start period overview');
-        Timer::start('period-overview');
+        // go back max 3 years.
+        $threeYearsAgo    = clone $start;
+        $threeYearsAgo->startOfYear()->subYears(3);
+        if ($firstTransaction->lt($threeYearsAgo)) {
+            $firstTransaction = clone $threeYearsAgo;
+        }
 
+        Log::debug('Start period overview');
+        $timer            = Timer::getInstance();
+        $timer->start('period-overview');
         $periods          = $this->getAccountPeriodOverview($account, $firstTransaction, $end);
 
         Log::debug('End period overview');
-        Timer::stop('period-overview');
+        $timer->stop('period-overview');
 
         // if layout = v2, overrule the page title.
         if ('v1' !== config('view.layout')) {
             $subTitle = (string) trans('firefly.all_journals_for_account', ['name' => $account->name]);
         }
         Log::debug('Collect transactions');
-        Timer::start('collection');
+        $timer->start('collection');
 
         /** @var GroupCollectorInterface $collector */
         $collector        = app(GroupCollectorInterface::class);
         $collector
-            ->setAccounts(new Collection([$account]))
+            ->setAccounts(new Collection()->push($account))
             ->setLimit($pageSize)
             ->setPage($page)
+            ->withAttachmentInformation()
             ->withAPIInformation()
             ->setRange($start, $end)
         ;
@@ -146,47 +162,19 @@ class ShowController extends Controller
 
 
         Log::debug('End collect transactions');
-        Timer::stop('collection');
-
-        // enrich data in arrays.
-
-        // enrich
-        //        $enrichment   = new TransactionGroupEnrichment();
-        //        $enrichment->setUser(auth()->user());
-        //        $groups->setCollection($enrichment->enrich($groups->getCollection()));
-
-
+        $timer->stop('collection');
         $groups->setPath(route('accounts.show', [$account->id, $start->format('Y-m-d'), $end->format('Y-m-d')]));
         $showAll          = false;
-        // correct
-        $now              = today()->endOfDay();
+        $now              = now();
         if ($now->gt($end) || $now->lt($start)) {
             $now = $end;
         }
 
-        Log::debug(sprintf('show: Call finalAccountBalance with date/time "%s"', $now->toIso8601String()));
-        $balances         = Steam::filterAccountBalance(Steam::finalAccountBalance($account, $now), $account, $this->convertToNative, $accountCurrency);
+        // 2025-10-08 replace finalAccountBalance with accountsBalancesOptimized.
+        $balances         = Steam::accountsBalancesOptimized(new Collection()->push($account), $now)[$account->id];
+        // $balances         = Steam::filterAccountBalance(Steam::finalAccountBalance($account, $now), $account, $this->convertToPrimary, $accountCurrency);
 
-        return view(
-            'accounts.show',
-            compact(
-                'account',
-                'showAll',
-                'objectType',
-                'currency',
-                'today',
-                'periods',
-                'subTitleIcon',
-                'groups',
-                'attachments',
-                'subTitle',
-                'start',
-                'end',
-                'chartUrl',
-                'location',
-                'balances'
-            )
-        );
+        return view('accounts.show', ['account' => $account, 'showAll' => $showAll, 'objectType' => $objectType, 'currency' => $currency, 'today' => $today, 'periods' => $periods, 'subTitleIcon' => $subTitleIcon, 'groups' => $groups, 'attachments' => $attachments, 'subTitle' => $subTitle, 'start' => $start, 'end' => $end, 'chartUrl' => $chartUrl, 'location' => $location, 'balances' => $balances]);
     }
 
     /**
@@ -194,66 +182,56 @@ class ShowController extends Controller
      *
      * @return Factory|Redirector|RedirectResponse|View
      *
-     * @throws FireflyException
-     *                                              */
-    public function showAll(Request $request, Account $account)
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
+     */
+    public function showAll(Request $request, Account $account): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
         if (!$this->isEditableAccount($account)) {
             return $this->redirectAccountToAccount($account);
         }
-        $location        = $this->repository->getLocation($account);
-        $isLiability     = $this->repository->isLiability($account);
-        $attachments     = $this->repository->getAttachments($account);
-        $objectType      = config(sprintf('firefly.shortNamesByFullName.%s', $account->accountType->type));
-        $end             = today(config('app.timezone'));
-        $today           = today(config('app.timezone'));
-        $accountCurrency = $this->repository->getAccountCurrency($account);
-        $start           = $this->repository->oldestJournalDate($account) ?? today(config('app.timezone'))->startOfMonth();
-        $subTitleIcon    = config('firefly.subIconsByIdentifier.'.$account->accountType->type);
-        $page            = (int) $request->get('page');
-        $pageSize        = (int) app('preferences')->get('listPageSize', 50)->data;
-        $currency        = $this->repository->getAccountCurrency($account) ?? $this->defaultCurrency;
-        $subTitle        = (string) trans('firefly.all_journals_for_account', ['name' => $account->name]);
-        $periods         = new Collection();
+        $location     = $this->repository->getLocation($account);
+        $isLiability  = $this->repository->isLiability($account);
+        $attachments  = $this->repository->getAttachments($account);
+        $objectType   = config(sprintf('firefly.shortNamesByFullName.%s', $account->accountType->type));
+        $end          = today(config('app.timezone'));
+        $today        = today(config('app.timezone'));
+        $this->repository->getAccountCurrency($account);
+        $start        = $this->repository->oldestJournalDate($account) ?? today(config('app.timezone'))->startOfMonth();
+        $subTitleIcon = config('firefly.subIconsByIdentifier.'.$account->accountType->type);
+        $page         = (int) $request->get('page');
+        $pageSize     = (int) Preferences::get('listPageSize', 50)->data;
+        $currency     = $this->repository->getAccountCurrency($account) ?? $this->primaryCurrency;
+        $subTitle     = (string) trans('firefly.all_journals_for_account', ['name' => $account->name]);
+        $periods      = new Collection();
 
         $end->endOfDay();
 
         /** @var GroupCollectorInterface $collector */
-        $collector       = app(GroupCollectorInterface::class);
-        $collector->setAccounts(new Collection([$account]))->setLimit($pageSize)->setPage($page)->withAccountInformation()->withCategoryInformation();
+        $collector    = app(GroupCollectorInterface::class);
+        $collector->setAccounts(new Collection()->push($account))->setLimit($pageSize)->setPage($page)->withAccountInformation()->withCategoryInformation();
 
         // this search will not include transaction groups where this asset account (or liability)
         // is just part of ONE of the journals. To force this:
         $collector->setExpandGroupSearch(true);
 
-        $groups          = $collector->getPaginatedGroups();
+        $groups       = $collector->getPaginatedGroups();
         $groups->setPath(route('accounts.show.all', [$account->id]));
-        $chartUrl        = route('chart.account.period', [$account->id, $start->format('Y-m-d'), $end->format('Y-m-d')]);
-        $showAll         = true;
+        $chartUrl     = route('chart.account.period', [$account->id, $start->format('Y-m-d'), $end->format('Y-m-d')]);
+        $showAll      = true;
         // correct
-        Log::debug(sprintf('showAll: Call finalAccountBalance with date/time "%s"', $end->toIso8601String()));
-        $balances        = Steam::filterAccountBalance(Steam::finalAccountBalance($account, $end), $account, $this->convertToNative, $accountCurrency);
+        Log::debug(sprintf('showAll: Call accountsBalancesOptimized with date/time "%s"', $end->toIso8601String()));
 
-        return view(
-            'accounts.show',
-            compact(
-                'account',
-                'showAll',
-                'location',
-                'objectType',
-                'isLiability',
-                'attachments',
-                'currency',
-                'today',
-                'chartUrl',
-                'periods',
-                'subTitleIcon',
-                'groups',
-                'subTitle',
-                'start',
-                'end',
-                'balances'
-            )
-        );
+        $now          = now();
+        if ($now->gt($end) || $now->lt($start)) {
+            $now = $end;
+        }
+
+        // 2025-10-08 replace finalAccountBalance with accountsBalancesOptimized.
+        // $balances = Steam::finalAccountBalance($account, $end);
+        // $balances        = Steam::filterAccountBalance($balances, $account, $this->convertToPrimary, $accountCurrency);
+        $balances     = Steam::accountsBalancesOptimized(new Collection()->push($account), $now)[$account->id];
+
+        return view('accounts.show', ['account' => $account, 'showAll' => $showAll, 'location' => $location, 'objectType' => $objectType, 'isLiability' => $isLiability, 'attachments' => $attachments, 'currency' => $currency, 'today' => $today, 'chartUrl' => $chartUrl, 'periods' => $periods, 'subTitleIcon' => $subTitleIcon, 'groups' => $groups, 'subTitle' => $subTitle, 'start' => $start, 'end' => $end, 'balances' => $balances]);
     }
 }

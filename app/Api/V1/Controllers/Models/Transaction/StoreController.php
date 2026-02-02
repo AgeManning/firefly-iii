@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Controllers\Models\Transaction;
 
+use Illuminate\Http\Request;
 use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Models\Transaction\StoreRequest;
 use FireflyIII\Enums\UserRoleEnum;
@@ -33,6 +34,7 @@ use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Repositories\TransactionGroup\TransactionGroupRepositoryInterface;
 use FireflyIII\Rules\IsDuplicateTransaction;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Http\Api\TransactionFilter;
 use FireflyIII\Support\JsonApi\Enrichments\TransactionGroupEnrichment;
 use FireflyIII\Transformers\TransactionGroupTransformer;
@@ -42,6 +44,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use League\Fractal\Resource\Item;
+use Symfony\Component\HttpKernel\Exception\GoneHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Class StoreController
@@ -60,7 +64,7 @@ class StoreController extends Controller
     {
         parent::__construct();
         $this->middleware(
-            function ($request, $next) {
+            function (Request $request, $next) {
                 /** @var User $admin */
                 $admin                 = auth()->user();
                 $userGroup             = $this->validateUserGroup($request);
@@ -80,7 +84,7 @@ class StoreController extends Controller
      *
      * Store a new transaction.
      *
-     * @throws FireflyException|ValidationException
+     * @throws FireflyException|GoneHttpException|ValidationException
      */
     public function store(StoreRequest $request): JsonResponse
     {
@@ -107,7 +111,7 @@ class StoreController extends Controller
 
             throw new ValidationException($validator);
         }
-        app('preferences')->mark();
+        Preferences::mark();
         $applyRules         = $data['apply_rules'] ?? true;
         $fireWebhooks       = $data['fire_webhooks'] ?? true;
         event(new StoredTransactionGroup($transactionGroup, $applyRules, $fireWebhooks));
@@ -131,7 +135,7 @@ class StoreController extends Controller
 
         $selectedGroup      = $collector->getGroups()->first();
         if (null === $selectedGroup) {
-            throw new FireflyException('200032: Cannot find transaction. Possibly, a rule deleted this transaction after its creation.');
+            throw HttpException::fromStatusCode(410, '200032: Cannot find transaction. Possibly, a rule deleted this transaction after its creation.');
         }
 
         // enrich

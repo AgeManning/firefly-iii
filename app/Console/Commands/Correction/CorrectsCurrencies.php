@@ -36,6 +36,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\Console\Command\Command as CommandAlias;
+use FireflyIII\Support\Facades\Amount;
 
 class CorrectsCurrencies extends Command
 {
@@ -63,10 +64,10 @@ class CorrectsCurrencies extends Command
         $repos           = app(CurrencyRepositoryInterface::class);
 
         // first check if the user has any default currency (not necessarily the case, so can be forced).
-        $defaultCurrency = app('amount')->getNativeCurrencyByUserGroup($userGroup);
+        $primaryCurrency = Amount::getPrimaryCurrencyByUserGroup($userGroup);
 
         Log::debug(sprintf('Now correcting currencies for user group #%d', $userGroup->id));
-        $found           = [$defaultCurrency->id];
+        $found           = [$primaryCurrency->id];
 
         // get all meta entries
         $meta            = AccountMeta::leftJoin('accounts', 'accounts.id', '=', 'account_meta.account_id')
@@ -115,7 +116,7 @@ class CorrectsCurrencies extends Command
         $found           = array_values(
             array_filter(
                 $found,
-                static fn (int $currencyId) => 0 !== $currencyId
+                static fn (int $currencyId): bool => 0 !== $currencyId
             )
         );
 

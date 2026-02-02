@@ -28,11 +28,14 @@ use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Models\Webhook\UpdateRequest;
 use FireflyIII\Models\Webhook;
 use FireflyIII\Repositories\Webhook\WebhookRepositoryInterface;
+use FireflyIII\Support\JsonApi\Enrichments\WebhookEnrichment;
 use FireflyIII\Transformers\WebhookTransformer;
+use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use League\Fractal\Resource\Item;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 /**
  * Class UpdateController
@@ -61,7 +64,7 @@ class UpdateController extends Controller
     public function update(Webhook $webhook, UpdateRequest $request): JsonResponse
     {
         $data        = $request->getData();
-        if (false === config('firefly.allow_webhooks')) {
+        if (false === FireflyConfig::get('allow_webhooks', config('firefly.allow_webhooks'))->data) {
             Log::channel('audit')->info(sprintf('User tries to update webhook #%d, but webhooks are DISABLED.', $webhook->id), $data);
 
             throw new NotFoundHttpException('Webhooks are not enabled.');
@@ -69,6 +72,15 @@ class UpdateController extends Controller
 
         $webhook     = $this->repository->update($webhook, $data);
         $manager     = $this->getManager();
+
+        // enrich
+        /** @var User $admin */
+        $admin       = auth()->user();
+        $enrichment  = new WebhookEnrichment();
+        $enrichment->setUser($admin);
+
+        /** @var Webhook $webhook */
+        $webhook     = $enrichment->enrichSingle($webhook);
 
         Log::channel('audit')->info(sprintf('User updates webhook #%d', $webhook->id), $data);
 

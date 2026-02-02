@@ -23,6 +23,8 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
 
+use function Safe\define;
+
 if (!defined('DATEFORMAT')) {
     define('DATEFORMAT', '(19|20)[0-9]{2}-?[0-9]{2}-?[0-9]{2}');
 }
@@ -40,7 +42,7 @@ Route::group(
         Route::get('/authorize', ['uses' => 'AuthorizationController@authorize', 'as' => 'authorizations.authorize', 'middleware' => 'user-full-auth']);
 
         // the rest
-        $guard = config('passport.guard', null);
+        $guard = config('passport.guard');
         Route::middleware(['web', null !== $guard ? 'auth:'.$guard : 'auth'])->group(function (): void {
             Route::post('/token/refresh', ['uses' => 'TransientTokenController@refresh', 'as' => 'token.refresh']);
             Route::post('/authorize', ['uses' => 'ApproveAuthorizationController@approve', 'as' => 'authorizations.approve']);
@@ -119,9 +121,10 @@ Route::group(
         Route::post('logout', ['uses' => 'Auth\LoginController@logout', 'as' => 'logout']);
         Route::get('flush', ['uses' => 'DebugController@flush', 'as' => 'flush']);
         Route::get('routes', ['uses' => 'DebugController@routes', 'as' => 'routes']);
-        Route::get('debug', 'DebugController@index')->name('debug');
     }
 );
+
+
 
 // For the two factor routes, the user must be logged in, but NOT 2FA. Account confirmation does not matter here.
 Route::group(
@@ -133,6 +136,16 @@ Route::group(
 );
 
 // For all other routes, the user must be fully authenticated and have an activated account.
+
+// For some other routes, it is only relevant that the user is authenticated.
+Route::group(
+    ['middleware' => 'user-full-auth', 'namespace' => 'FireflyIII\Http\Controllers'],
+    static function (): void {
+        Route::get('debug', 'DebugController@index')->name('debug');
+        Route::get('debug/api-test', 'DebugController@apiTest')->name('api-test');
+    }
+);
+
 
 // Home Controller.
 Route::group(
@@ -1438,7 +1451,7 @@ Route::group(
     static function (): void {
         Route::get('', ['uses' => 'UserGroup\IndexController@index', 'as' => 'index']);
         Route::get('create', ['uses' => 'UserGroup\CreateController@create', 'as' => 'create']);
-        Route::get('edit/{userGroup}', ['uses' => 'UserGroup\EditController@edit', 'as' => 'edit']);
+        Route::get('edit/{userGroup?}', ['uses' => 'UserGroup\EditController@edit', 'as' => 'edit']);
         // Route::get('show/{userGroup}', ['uses' => 'UserGroup\ShowController@show', 'as' => 'show']);
 
         //        Route::post('rescan/{bill}', ['uses' => 'Bill\ShowController@rescan', 'as' => 'rescan']);

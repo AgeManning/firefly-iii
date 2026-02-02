@@ -202,7 +202,7 @@ class StoreRequest extends FormRequest
                 $inactiveIndex = $index;
             }
         }
-        if (true === $allInactive) {
+        if ($allInactive) {
             $validator->errors()->add(sprintf('triggers.%d.active', $inactiveIndex), (string) trans('validation.at_least_one_active_trigger'));
         }
     }
@@ -231,7 +231,7 @@ class StoreRequest extends FormRequest
                 $inactiveIndex = $index;
             }
         }
-        if (true === $allInactive) {
+        if ($allInactive) {
             $validator->errors()->add(sprintf('actions.%d.active', $inactiveIndex), (string) trans('validation.at_least_one_active_action'));
         }
     }

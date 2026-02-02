@@ -20,7 +20,7 @@
                         <div class="form-group">
                             <label for="query" class="col-sm-1 control-label">{{ 'search_query'|_ }}</label>
                             <div class="col-sm-10">
-                                <input autocomplete="off" maxlength="255" type="text" name="search" id="query" value="{{ fullQuery }}" class="form-control" spellcheck="false"
+                                <input autocomplete="off" type="text" name="search" id="query" value="{{ fullQuery }}" class="form-control" spellcheck="false"
                                        placeholder="{{ fullQuery }}">
                             </div>
                         </div>
@@ -167,7 +167,7 @@
         var cloneAndEditUrl = '{{ route('transactions.clone') }}?redirect=edit';
     </script>
     {# required for groups.twig #}
-    <script type="text/javascript" src="v1/js/ff/list/groups.js?v={{ FF_VERSION }}" nonce="{{ JS_NONCE }}"></script>
-    <script type="text/javascript" src="v1/js/ff/search/index.js?v={{ FF_VERSION }}" nonce="{{ JS_NONCE }}"></script>
+    <script type="text/javascript" src="v1/js/ff/list/groups.js?v={{ FF_BUILD_TIME }}" nonce="{{ JS_NONCE }}"></script>
+    <script type="text/javascript" src="v1/js/ff/search/index.js?v={{ FF_BUILD_TIME }}" nonce="{{ JS_NONCE }}"></script>
 
 {% endblock %}

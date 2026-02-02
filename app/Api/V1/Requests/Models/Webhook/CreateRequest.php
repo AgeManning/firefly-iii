@@ -24,11 +24,14 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Requests\Models\Webhook;
 
+use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Webhook;
 use FireflyIII\Rules\IsBoolean;
 use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
+use FireflyIII\Support\Request\ValidatesWebhooks;
 use Illuminate\Foundation\Http\FormRequest;
+use FireflyIII\Support\Facades\FireflyConfig;
 
 /**
  * Class CreateRequest
@@ -37,27 +40,28 @@ class CreateRequest extends FormRequest
 {
     use ChecksLogin;
     use ConvertsDataTypes;
+    use ValidatesWebhooks;
 
     public function getData(): array
     {
-        $triggers           = Webhook::getTriggersForValidation();
-        $responses          = Webhook::getResponsesForValidation();
-        $deliveries         = Webhook::getDeliveriesForValidation();
-
-        $fields             = [
-            'title'    => ['title', 'convertString'],
-            'active'   => ['active', 'boolean'],
-            'trigger'  => ['trigger', 'convertString'],
-            'response' => ['response', 'convertString'],
-            'delivery' => ['delivery', 'convertString'],
-            'url'      => ['url', 'convertString'],
+        $fields               = [
+            'title'  => ['title', 'convertString'],
+            'active' => ['active', 'boolean'],
+            'url'    => ['url', 'convertString'],
         ];
+        $triggers             = $this->get('triggers', []);
+        $responses            = $this->get('responses', []);
+        $deliveries           = $this->get('deliveries', []);
 
-        // this is the way.
-        $return             = $this->getAllData($fields);
-        $return['trigger']  = $triggers[$return['trigger']] ?? (int) $return['trigger'];
-        $return['response'] = $responses[$return['response']] ?? (int) $return['response'];
-        $return['delivery'] = $deliveries[$return['delivery']] ?? (int) $return['delivery'];
+        if (in_array(0, [count($triggers), count($responses), count($deliveries)], true)) {
+            throw new FireflyException('Unexpectedly got no responses, triggers or deliveries.');
+        }
+
+
+        $return               = $this->getAllData($fields);
+        $return['triggers']   = $triggers;
+        $return['responses']  = $responses;
+        $return['deliveries'] = $deliveries;
 
         return $return;
     }
@@ -67,18 +71,24 @@ class CreateRequest extends FormRequest
      */
     public function rules(): array
     {
-        $triggers       = implode(',', array_keys(Webhook::getTriggersForValidation()));
-        $responses      = implode(',', array_keys(Webhook::getResponsesForValidation()));
-        $deliveries     = implode(',', array_keys(Webhook::getDeliveriesForValidation()));
-        $validProtocols = config('firefly.valid_url_protocols');
+        $triggers       = implode(',', array_values(Webhook::getTriggers()));
+        $responses      = implode(',', array_values(Webhook::getResponses()));
+        $deliveries     = implode(',', array_values(Webhook::getDeliveries()));
+        $validProtocols = FireflyConfig::get('valid_url_protocols', config('firefly.valid_url_protocols'))->data;
 
         return [
-            'title'    => 'required|min:1|max:255|uniqueObjectForUser:webhooks,title',
-            'active'   => [new IsBoolean()],
-            'trigger'  => sprintf('required|in:%s', $triggers),
-            'response' => sprintf('required|in:%s', $responses),
-            'delivery' => sprintf('required|in:%s', $deliveries),
-            'url'      => ['required', sprintf('url:%s', $validProtocols), 'uniqueWebhook'],
+            'title'        => 'required|min:1|max:255|uniqueObjectForUser:webhooks,title',
+            'active'       => [new IsBoolean()],
+            'trigger'      => 'prohibited',
+            'triggers'     => 'required|array|min:1|max:10',
+            'triggers.*'   => sprintf('required|in:%s', $triggers),
+            'response'     => 'prohibited',
+            'responses'    => 'required|array|min:1|max:1',
+            'responses.*'  => sprintf('required|in:%s', $responses),
+            'delivery'     => 'prohibited',
+            'deliveries'   => 'required|array|min:1|max:1',
+            'deliveries.*' => sprintf('required|in:%s', $deliveries),
+            'url'          => ['required', sprintf('url:%s', $validProtocols)],
         ];
     }
 }

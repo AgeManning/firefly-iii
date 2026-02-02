@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\RuleGroup;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\RuleGroupFormRequest;
 use FireflyIII\Models\RuleGroup;
@@ -66,7 +67,7 @@ class EditController extends Controller
      *
      * @return Factory|View
      */
-    public function edit(Request $request, RuleGroup $ruleGroup)
+    public function edit(Request $request, RuleGroup $ruleGroup): Factory|\Illuminate\Contracts\View\View
     {
         $subTitle    = (string) trans('firefly.edit_rule_group', ['title' => $ruleGroup->title]);
 
@@ -81,7 +82,7 @@ class EditController extends Controller
         session()->forget('rule-groups.edit.fromUpdate');
         session()->flash('preFilled', $preFilled);
 
-        return view('rules.rule-group.edit', compact('ruleGroup', 'subTitle'));
+        return view('rules.rule-group.edit', ['ruleGroup' => $ruleGroup, 'subTitle' => $subTitle]);
     }
 
     /**
@@ -129,7 +130,7 @@ class EditController extends Controller
         $this->repository->update($ruleGroup, $data);
 
         session()->flash('success', (string) trans('firefly.updated_rule_group', ['title' => $ruleGroup->title]));
-        app('preferences')->mark();
+        Preferences::mark();
         $redirect = redirect($this->getPreviousUrl('rule-groups.edit.url'));
         if (1 === (int) $request->get('return_to_edit')) {
             session()->put('rule-groups.edit.fromUpdate', true);

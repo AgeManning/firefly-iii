@@ -23,8 +23,10 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers;
 
+use FireflyIII\Events\RequestedSendWebhookMessages;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Support\Facades\Amount;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Controllers\RequestInformation;
 use FireflyIII\Support\Http\Controllers\UserNavigation;
@@ -33,11 +35,13 @@ use Illuminate\Foundation\Bus\DispatchesJobs;
 use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\View;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\View;
+use FireflyIII\Support\Facades\FireflyConfig;
 
-use function Safe\realpath;
 use function Safe\ini_get;
+use function Safe\realpath;
 
 /**
  * Class Controller.
@@ -55,12 +59,12 @@ abstract class Controller extends BaseController
 
     // fails on PHP < 8.4
     public protected(set) string $name;
-    protected bool                 $convertToNative = false;
+    protected bool                 $convertToPrimary = false;
     protected string               $dateTimeFormat;
-    protected ?TransactionCurrency $defaultCurrency;
+    protected ?TransactionCurrency $primaryCurrency;
     protected string               $monthAndDayFormat;
     protected string               $monthFormat;
-    protected string               $redirectUrl     = '/';
+    protected string               $redirectUrl      = '/';
 
     /**
      * Controller constructor.
@@ -68,15 +72,16 @@ abstract class Controller extends BaseController
     public function __construct()
     {
         // is site a demo site?
-        $isDemoSiteConfig = app('fireflyconfig')->get('is_demo_site', config('firefly.configuration.is_demo_site', false));
+        $isDemoSiteConfig = FireflyConfig::get('is_demo_site', config('firefly.configuration.is_demo_site', false));
         $isDemoSite       = (bool) $isDemoSiteConfig->data;
         View::share('IS_DEMO_SITE', $isDemoSite);
         View::share('DEMO_USERNAME', config('firefly.demo_username'));
         View::share('DEMO_PASSWORD', config('firefly.demo_password'));
         View::share('FF_VERSION', config('firefly.version'));
+        View::share('FF_BUILD_TIME', config('firefly.build_time'));
 
         // is webhooks enabled?
-        View::share('featuringWebhooks', true === config('firefly.feature_flags.webhooks') && true === config('firefly.allow_webhooks'));
+        View::share('featuringWebhooks', true === config('firefly.feature_flags.webhooks') && true === FireflyConfig::get('allow_webhooks', config('firefly.allow_webhooks'))->data);
 
         // share custom auth guard info.
         $authGuard        = config('firefly.authentication_guard');
@@ -93,8 +98,8 @@ abstract class Controller extends BaseController
         View::share('logoutUrl', $logoutUrl);
 
         // upload size
-        $maxFileSize      = Steam::phpBytes((string) ini_get('upload_max_filesize'));
-        $maxPostSize      = Steam::phpBytes((string) ini_get('post_max_size'));
+        $maxFileSize      = Steam::phpBytes(ini_get('upload_max_filesize'));
+        $maxPostSize      = Steam::phpBytes(ini_get('post_max_size'));
         $uploadSize       = min($maxFileSize, $maxPostSize);
         View::share('uploadSize', $uploadSize);
 
@@ -125,22 +130,32 @@ abstract class Controller extends BaseController
                 $this->monthAndDayFormat = (string) trans('config.month_and_day_js', [], $locale);
                 $this->dateTimeFormat    = (string) trans('config.date_time_js', [], $locale);
                 $darkMode                = 'browser';
-                $this->defaultCurrency   = null;
+                $this->primaryCurrency   = null;
                 // get shown-intro-preference:
                 if (auth()->check()) {
-                    $this->defaultCurrency = Amount::getNativeCurrency();
-                    $language              = Steam::getLanguage();
-                    $locale                = Steam::getLocale();
-                    $darkMode              = app('preferences')->get('darkMode', 'browser')->data;
-                    $this->convertToNative = Amount::convertToNative();
-                    $page                  = $this->getPageName();
-                    $shownDemo             = $this->hasSeenDemo();
+                    View::share('anonymous', Steam::anonymous());
+                    $this->primaryCurrency  = Amount::getPrimaryCurrency();
+                    $language               = Steam::getLanguage();
+                    $locale                 = Steam::getLocale();
+                    $darkMode               = Preferences::get('darkMode', 'browser')->data;
+                    $this->convertToPrimary = Amount::convertToPrimary();
+                    $page                   = $this->getPageName();
+                    $shownDemo              = $this->hasSeenDemo();
                     View::share('language', $language);
                     View::share('locale', $locale);
-                    View::share('convertToNative', $this->convertToNative);
+                    View::share('convertToPrimary', $this->convertToPrimary);
+                    View::share('primaryCurrency', $this->primaryCurrency);
                     View::share('shownDemo', $shownDemo);
                     View::share('current_route_name', $page);
                     View::share('original_route_name', Route::currentRouteName());
+
+                    // lottery to send any remaining webhooks:
+                    if (7 === random_int(1, 10)) {
+                        // trigger event to send them:
+                        Log::debug('send event RequestedSendWebhookMessages through lottery');
+                        event(new RequestedSendWebhookMessages());
+                    }
+
                 }
                 View::share('darkMode', $darkMode);
 

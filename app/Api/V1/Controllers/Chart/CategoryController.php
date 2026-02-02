@@ -25,17 +25,22 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Chart;
 
 use Carbon\Carbon;
-use FireflyIII\Api\V2\Controllers\Controller;
-use FireflyIII\Api\V2\Request\Generic\DateRequest;
+use FireflyIII\Api\V1\Controllers\Controller;
+use FireflyIII\Api\V1\Requests\DateRangeRequest;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Enums\TransactionTypeEnum;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\Currency\CurrencyRepositoryInterface;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Api\CleansChartData;
+use FireflyIII\Support\Http\Api\ExchangeRateConverter;
 use FireflyIII\Support\Http\Api\ValidatesUserGroupTrait;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Class BudgetController
@@ -45,23 +50,25 @@ class CategoryController extends Controller
     use CleansChartData;
     use ValidatesUserGroupTrait;
 
-    private AccountRepositoryInterface  $accountRepos;
+    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY];
+
+    private AccountRepositoryInterface $accountRepos;
     private CurrencyRepositoryInterface $currencyRepos;
 
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->accountRepos  = app(AccountRepositoryInterface::class);
-                $this->currencyRepos = app(CurrencyRepositoryInterface::class);
-                $userGroup           = $this->validateUserGroup($request);
-                $this->accountRepos->setUserGroup($userGroup);
-                $this->currencyRepos->setUserGroup($userGroup);
+        $this->middleware(function (Request $request, $next) {
+            $this->validateUserGroup($request);
+            $this->accountRepos  = app(AccountRepositoryInterface::class);
+            $this->currencyRepos = app(CurrencyRepositoryInterface::class);
+            $this->accountRepos->setUserGroup($this->userGroup);
+            $this->currencyRepos->setUserGroup($this->userGroup);
+            $this->accountRepos->setUser($this->user);
+            $this->currencyRepos->setUser($this->user);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -72,54 +79,109 @@ class CategoryController extends Controller
      *
      * @SuppressWarnings("PHPMD.UnusedFormalParameter")
      */
-    public function dashboard(DateRequest $request): JsonResponse
+    public function overview(DateRangeRequest $request): JsonResponse
     {
         /** @var Carbon $start */
-        $start      = $this->parameters->get('start');
+        $start      = $request->attributes->get('start');
 
         /** @var Carbon $end */
-        $end        = $this->parameters->get('end');
-        $accounts   = $this->accountRepos->getAccountsByType([AccountTypeEnum::DEBT->value, AccountTypeEnum::LOAN->value, AccountTypeEnum::MORTGAGE->value, AccountTypeEnum::ASSET->value, AccountTypeEnum::DEFAULT->value]);
+        $end        = $request->attributes->get('end');
+        $accounts   = $this->accountRepos->getAccountsByType([
+            AccountTypeEnum::DEBT->value,
+            AccountTypeEnum::LOAN->value,
+            AccountTypeEnum::MORTGAGE->value,
+            AccountTypeEnum::ASSET->value,
+        ]);
         $currencies = [];
         $return     = [];
+        $converter  = new ExchangeRateConverter();
 
         // get journals for entire period:
         /** @var GroupCollectorInterface $collector */
         $collector  = app(GroupCollectorInterface::class);
         $collector->setRange($start, $end)->withAccountInformation();
         $collector->setXorAccounts($accounts)->withCategoryInformation();
-        $collector->setTypes([TransactionTypeEnum::WITHDRAWAL->value, TransactionTypeEnum::RECONCILIATION->value]);
+        $collector->setTypes([TransactionTypeEnum::WITHDRAWAL->value, TransactionTypeEnum::DEPOSIT->value]);
         $journals   = $collector->getExtractedJournals();
 
         /** @var array $journal */
         foreach ($journals as $journal) {
-            $currencyId              = (int) $journal['currency_id'];
-            $currency                = $currencies[$currencyId] ?? $this->currencyRepos->find($currencyId);
-            $currencies[$currencyId] = $currency;
-            $categoryName            = $journal['category_name'] ?? (string) trans('firefly.no_category');
-            $amount                  = app('steam')->positive($journal['amount']);
-            $key                     = sprintf('%s-%s', $categoryName, $currency->code);
+            // find journal:
+            $journalCurrencyId              = (int) $journal['currency_id'];
+            $type                           = $journal['transaction_type_type'];
+            $currency                       = $currencies[$journalCurrencyId] ?? $this->currencyRepos->find($journalCurrencyId);
+            $currencies[$journalCurrencyId] = $currency;
+            $currencyId                     = $currency->id;
+            $currencyName                   = $currency->name;
+            $currencyCode                   = $currency->code;
+            $currencySymbol                 = $currency->symbol;
+            $currencyDecimalPlaces          = $currency->decimal_places;
+            $amount                         = Steam::positive((string) $journal['amount']);
+            $pcAmount                       = null;
+
+            // overrule if necessary:
+            if ($this->convertToPrimary && $journalCurrencyId === $this->primaryCurrency->id) {
+                $pcAmount = $amount;
+            }
+            if ($this->convertToPrimary && $journalCurrencyId !== $this->primaryCurrency->id) {
+                $currencyId            = $this->primaryCurrency->id;
+                $currencyName          = $this->primaryCurrency->name;
+                $currencyCode          = $this->primaryCurrency->code;
+                $currencySymbol        = $this->primaryCurrency->symbol;
+                $currencyDecimalPlaces = $this->primaryCurrency->decimal_places;
+                $pcAmount              = $converter->convert($currency, $this->primaryCurrency, $journal['date'], $amount);
+                Log::debug(sprintf('Converted %s %s to %s %s', $journal['currency_code'], $amount, $this->primaryCurrency->code, $pcAmount));
+            }
+
+            $categoryName                   = $journal['category_name'] ?? (string) trans('firefly.no_category');
+            $key                            = sprintf('%s-%s', $categoryName, $currencyCode);
             // create arrays
             $return[$key] ??= [
-                'label'                   => $categoryName,
-                'currency_id'             => (string) $currency->id,
-                'currency_code'           => $currency->code,
-                'currency_name'           => $currency->name,
-                'currency_symbol'         => $currency->symbol,
-                'currency_decimal_places' => $currency->decimal_places,
-                'period'                  => null,
-                'start'                   => $start->toAtomString(),
-                'end'                     => $end->toAtomString(),
-                'amount'                  => '0',
+                'label'                           => $categoryName,
+                'currency_id'                     => (string) $currencyId,
+                'currency_name'                   => $currencyName,
+                'currency_code'                   => $currencyCode,
+                'currency_symbol'                 => $currencySymbol,
+                'currency_decimal_places'         => $currencyDecimalPlaces,
+                'primary_currency_id'             => (string) $this->primaryCurrency->id,
+                'primary_currency_name'           => $this->primaryCurrency->name,
+                'primary_currency_code'           => $this->primaryCurrency->code,
+                'primary_currency_symbol'         => $this->primaryCurrency->symbol,
+                'primary_currency_decimal_places' => $this->primaryCurrency->decimal_places,
+                'period'                          => null,
+                'start_date'                      => $start->toAtomString(),
+                'end_date'                        => $end->toAtomString(),
+                'yAxisID'                         => 0,
+                'type'                            => 'bar',
+                'entries'                         => ['spent'  => '0', 'earned' => '0'],
+                'pc_entries'                      => ['spent'  => '0', 'earned' => '0'],
             ];
 
             // add monies
-            $return[$key]['amount']  = bcadd($return[$key]['amount'], (string) $amount);
+            // expenses to spent
+            if (TransactionTypeEnum::WITHDRAWAL->value === $type) {
+                $return[$key]['entries']['spent'] = bcadd($return[$key]['entries']['spent'], $amount);
+                if (null !== $pcAmount) {
+                    $return[$key]['pc_entries']['spent'] = bcadd($return[$key]['pc_entries']['spent'], $pcAmount);
+                }
+
+                continue;
+            }
+            // positive amount = earned
+            if (TransactionTypeEnum::DEPOSIT->value === $type) {
+                $return[$key]['entries']['earned'] = bcadd($return[$key]['entries']['earned'], $amount);
+                if (null !== $pcAmount) {
+                    $return[$key]['pc_entries']['earned'] = bcadd($return[$key]['pc_entries']['earned'], $pcAmount);
+                }
+            }
         }
         $return     = array_values($return);
 
         // order by amount
-        usort($return, static fn (array $a, array $b) => (float) $a['amount'] < (float) $b['amount'] ? 1 : -1);
+        usort($return, static fn (array $a, array $b): int => ((float) $a['entries']['spent'] + (float) $a['entries']['earned'])
+        < ((float) $b['entries']['spent'] + (float) $b['entries']['earned'])
+            ? 1
+            : -1);
 
         return response()->json($this->clean($return));
     }

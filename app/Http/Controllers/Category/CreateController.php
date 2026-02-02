@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Category;
 
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
 use FireflyIII\Http\Controllers\Controller;
@@ -68,7 +69,7 @@ class CreateController extends Controller
      *
      * @return Factory|View
      */
-    public function create(Request $request)
+    public function create(Request $request): Factory|\Illuminate\Contracts\View\View
     {
         if (true !== session('categories.create.fromStore')) {
             $this->rememberPreviousUrl('categories.create.url');
@@ -76,7 +77,7 @@ class CreateController extends Controller
         $request->session()->forget('categories.create.fromStore');
         $subTitle = (string) trans('firefly.create_new_category');
 
-        return view('categories.create', compact('subTitle'));
+        return view('categories.create', ['subTitle' => $subTitle]);
     }
 
     /**
@@ -92,7 +93,7 @@ class CreateController extends Controller
         $category = $this->repository->store($data);
 
         $request->session()->flash('success', (string) trans('firefly.stored_category', ['name' => $category->name]));
-        app('preferences')->mark();
+        Preferences::mark();
 
         // store attachment(s):
         /** @var null|array $files */
