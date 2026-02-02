@@ -42,6 +42,10 @@ var sessionStart = '{{ session('start').format('Y-m-d') }}';
 var sessionEnd = '{{ session('end').format('Y-m-d') }}';
 var todayText = ' {{ trans('firefly.today')|escape('js') }}';
 
+// fiscal year preferences
+var customFiscalYear = {{ customFiscalYear ? 'true' : 'false' }};
+var fiscalYearStart = '{{ fiscalYearStart|escape('js') }}';
+
 // some formatting stuff:
 var month_and_day_js = "{{ trans('config.month_and_day_js') }}";
 var date_time_js = "{{ trans('config.date_time_js') }}";

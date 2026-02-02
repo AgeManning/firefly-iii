@@ -42,6 +42,37 @@ input.ti-new-tag-input {
     cursor: pointer;
 }
 
+/* Financial Year Navigator */
+#financial-year-nav #fy-indicator {
+    user-select: none;
+}
+
+#financial-year-nav #fy-prev,
+#financial-year-nav #fy-next {
+    cursor: pointer;
+    border-radius: 2px;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+#financial-year-nav #fy-prev:hover,
+#financial-year-nav #fy-next:hover {
+    opacity: 1;
+    text-decoration: none;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+#financial-year-nav #fy-prev.disabled,
+#financial-year-nav #fy-next.disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+#financial-year-nav #fy-display {
+    font-weight: normal;
+}
+
 .info-box-number {
     line-height: 1.4;
 }

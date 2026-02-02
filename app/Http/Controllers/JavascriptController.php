@@ -106,6 +106,11 @@ class JavascriptController extends Controller
         $lang                      = $pref->data;
         $dateRange                 = $this->getDateRangeConfig();
         $uid                       = substr(hash('sha256', sprintf('%s-%s-%s', (string) config('app.key'), auth()->user()->id, auth()->user()->email)), 0, 12);
+        
+        // Get fiscal year preferences
+        $customFiscalYear          = (bool) app('preferences')->get('customFiscalYear', false)->data;
+        $fiscalYearStart           = (string) app('preferences')->get('fiscalYearStart', '01-01')->data;
+        
         $data                      = [
             'currencyCode'         => $currency->code,
             'currencySymbol'       => $currency->symbol,
@@ -115,6 +120,8 @@ class JavascriptController extends Controller
             'locale'               => $locale,
             'dateRangeConfig'      => $dateRange['configuration'],
             'uid'                  => $uid,
+            'customFiscalYear'     => $customFiscalYear,
+            'fiscalYearStart'      => $fiscalYearStart,
         ];
         $request->session()->keep(['two-factor-secret']);
 

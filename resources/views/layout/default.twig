@@ -120,6 +120,14 @@
                         </a>
                     </li>
 
+                    <li class="hidden-sm hidden-xs" id="financial-year-nav">
+                        <span id="fy-indicator" style="display: none; color:#fff; padding: 15px; line-height: 20px; display: block;">
+                            <a href="#" id="fy-prev" style="color:#fff; text-decoration: none; padding: 4px 8px; margin-right: 4px; display: inline-block;">&lt;</a>
+                            <span id="fy-display" style="margin: 0 4px;"></span>
+                            <a href="#" id="fy-next" style="color:#fff; text-decoration: none; padding: 4px 8px; margin-left: 4px; display: inline-block;">&gt;</a>
+                        </span>
+                    </li>
+
                     <li>
                         <span style="color:#fff;padding: 15px;display: block;line-height: 20px;">
                             <span id="daterange"></span>
@@ -247,6 +255,7 @@
 {# Firefly III code #}
 <script type="text/javascript" src="v1/js/ff/firefly.js?v={{ FF_VERSION }}" nonce="{{ JS_NONCE }}"></script>
 <script type="text/javascript" src="v1/js/ff/help.js?v={{ FF_VERSION }}" nonce="{{ JS_NONCE }}"></script>
+<script type="text/javascript" src="v1/js/ff/financial-year-nav.js?v={{ FF_VERSION }}" nonce="{{ JS_NONCE }}"></script>
 {% if not shownDemo %}
     <script type="text/javascript" nonce="{{ JS_NONCE }}">
         var routeForTour = "{{ current_route_name }}";

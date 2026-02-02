@@ -54,6 +54,7 @@
     "/public/v1/js/ff/common/autocomplete.js": "/public/v1/js/ff/common/autocomplete.js",
     "/public/v1/js/ff/currencies/index.js": "/public/v1/js/ff/currencies/index.js",
     "/public/v1/js/ff/export/index.js": "/public/v1/js/ff/export/index.js",
+    "/public/v1/js/ff/financial-year-nav.js": "/public/v1/js/ff/financial-year-nav.js",
     "/public/v1/js/ff/firefly.js": "/public/v1/js/ff/firefly.js",
     "/public/v1/js/ff/guest.js": "/public/v1/js/ff/guest.js",
     "/public/v1/js/ff/help.js": "/public/v1/js/ff/help.js",
