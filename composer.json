@@ -109,7 +109,7 @@
         "spatie/laravel-html": "^3.2",
         "spatie/laravel-ignition": "^2",
         "spatie/period": "^2.4",
-        "phpoffice/phpspreadsheet": "^2.1"
+        "phpoffice/phpspreadsheet": "^2.1",
         "symfony/expression-language": "^8.0",
         "symfony/http-client": "^8.0",
         "symfony/mailgun-mailer": "^8.0",
