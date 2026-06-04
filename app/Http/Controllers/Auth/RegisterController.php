@@ -23,25 +23,22 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Auth;
 
-use FireflyIII\Events\RegisteredUser;
+use FireflyIII\Events\Security\System\NewUserRegistered;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Notifications\Notifiables\OwnerNotifiable;
 use FireflyIII\Repositories\User\UserRepositoryInterface;
+use FireflyIII\Support\Facades\FireflyConfig;
 use FireflyIII\Support\Http\Controllers\CreateStuff;
 use FireflyIII\User;
-use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Foundation\Auth\RegistersUsers;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\NotFoundExceptionInterface;
-use FireflyIII\Support\Facades\FireflyConfig;
 
 /**
  * Class RegisterController
@@ -50,7 +47,7 @@ use FireflyIII\Support\Facades\FireflyConfig;
  * validation and creation. By default this controller uses a trait to
  * provide this functionality without requiring any additional code.
  */
-class RegisterController extends Controller
+final class RegisterController extends Controller
 {
     use CreateStuff;
     use RegistersUsers;
@@ -75,15 +72,7 @@ class RegisterController extends Controller
         }
     }
 
-    /**
-     * Handle a registration request for the application.
-     *
-     * @return Application|Redirector|RedirectResponse
-     *
-     * @throws FireflyException
-     * @throws ValidationException
-     */
-    public function register(Request $request): Redirector|RedirectResponse
+    public function register(Request $request): RedirectResponse
     {
         $allowRegistration = $this->allowedToRegister();
         $inviteCode        = (string) $request->get('invite_code');
@@ -94,11 +83,11 @@ class RegisterController extends Controller
             throw new FireflyException('Registration is currently not available :(');
         }
 
-        $this->validator($request->all())->validate();
-        $user              = $this->createUser($request->all());
+        $this->validator($request->only(['email', 'password', 'password_confirmation']))->validate();
+        $user              = $this->createUser($request->only(['email', 'password']));
         Log::info(sprintf('Registered new user %s', $user->email));
         $owner             = new OwnerNotifiable();
-        event(new RegisteredUser($owner, $user));
+        event(new NewUserRegistered($owner, $user));
 
         $this->guard()->login($user);
 
@@ -111,31 +100,6 @@ class RegisterController extends Controller
         }
 
         return redirect($this->redirectPath());
-    }
-
-    /**
-     * @throws FireflyException
-     */
-    protected function allowedToRegister(): bool
-    {
-        // is allowed to register?
-        $allowRegistration = true;
-
-        try {
-            $singleUserMode = FireflyConfig::get('single_user_mode', config('firefly.configuration.single_user_mode'))->data;
-        } catch (ContainerExceptionInterface|NotFoundExceptionInterface) {
-            $singleUserMode = true;
-        }
-        $userCount         = User::count();
-        $guard             = config('auth.defaults.guard');
-        if (true === $singleUserMode && $userCount > 0 && 'web' === $guard) {
-            $allowRegistration = false;
-        }
-        if ('web' !== $guard) {
-            return false;
-        }
-
-        return $allowRegistration;
     }
 
     /**
@@ -196,5 +160,30 @@ class RegisterController extends Controller
         $email             = $request?->old('email');
 
         return view('auth.register', ['isDemoSite' => $isDemoSite, 'email' => $email, 'pageTitle' => $pageTitle]);
+    }
+
+    /**
+     * @throws FireflyException
+     */
+    private function allowedToRegister(): bool
+    {
+        // is allowed to register?
+        $allowRegistration = true;
+
+        try {
+            $singleUserMode = FireflyConfig::get('single_user_mode', config('firefly.configuration.single_user_mode'))->data;
+        } catch (ContainerExceptionInterface|NotFoundExceptionInterface) {
+            $singleUserMode = true;
+        }
+        $userCount         = User::count();
+        $guard             = config('auth.defaults.guard');
+        if (true === $singleUserMode && $userCount > 0 && 'web' === $guard) {
+            $allowRegistration = false;
+        }
+        if ('web' !== $guard) {
+            return false;
+        }
+
+        return $allowRegistration;
     }
 }

@@ -24,30 +24,27 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Account;
 
-use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\AccountFormRequest;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Http\Controllers\ModelInformation;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
-use Psr\Container\ContainerExceptionInterface;
-use Psr\Container\NotFoundExceptionInterface;
 
 /**
  * Class CreateController
  */
-class CreateController extends Controller
+final class CreateController extends Controller
 {
     use ModelInformation;
 
-    private AttachmentHelperInterface  $attachments;
+    private AttachmentHelperInterface $attachments;
     private AccountRepositoryInterface $repository;
 
     /**
@@ -58,17 +55,15 @@ class CreateController extends Controller
         parent::__construct();
 
         // translations:
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('mainTitleIcon', 'fa-credit-card');
-                app('view')->share('title', (string) trans('firefly.accounts'));
+        $this->middleware(function ($request, $next) {
+            app('view')->share('mainTitleIcon', 'fa-credit-card');
+            app('view')->share('title', (string) trans('firefly.accounts'));
 
-                $this->repository  = app(AccountRepositoryInterface::class);
-                $this->attachments = app(AttachmentHelperInterface::class);
+            $this->repository  = app(AccountRepositoryInterface::class);
+            $this->attachments = app(AttachmentHelperInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -91,10 +86,7 @@ class CreateController extends Controller
                 'has_location' => $hasOldInput && 'true' === old('location_has_location'),
             ],
         ];
-        $liabilityDirections = [
-            'debit'  => trans('firefly.liability_direction_debit'),
-            'credit' => trans('firefly.liability_direction_credit'),
-        ];
+        $liabilityDirections = ['debit' => trans('firefly.liability_direction_debit'), 'credit' => trans('firefly.liability_direction_credit')];
 
         // interest calculation periods:
         $interestPeriods     = [];
@@ -103,13 +95,10 @@ class CreateController extends Controller
         }
 
         // pre fill some data
-        $request->session()->flash(
-            'preFilled',
-            [
-                'currency_id'       => $this->primaryCurrency->id,
-                'include_net_worth' => !$hasOldInput || (bool)$request->old('include_net_worth'),
-            ]
-        );
+        $request->session()->flash('preFilled', [
+            'currency_id'       => $this->primaryCurrency->id,
+            'include_net_worth' => !$hasOldInput || (bool) $request->old('include_net_worth'),
+        ]);
         // issue #8321
         $showNetWorth        = true;
         if ('liabilities' !== $objectType && 'asset' !== $objectType) {
@@ -123,21 +112,20 @@ class CreateController extends Controller
         $request->session()->forget('accounts.create.fromStore');
         Log::channel('audit')->info('Creating new account.');
 
-        return view(
-            'accounts.create',
-            ['subTitleIcon' => $subTitleIcon, 'liabilityDirections' => $liabilityDirections, 'showNetWorth' => $showNetWorth, 'locations' => $locations, 'objectType' => $objectType, 'interestPeriods' => $interestPeriods, 'subTitle' => $subTitle, 'roles' => $roles, 'liabilityTypes' => $liabilityTypes]
-        );
+        return view('accounts.create', [
+            'subTitleIcon'        => $subTitleIcon,
+            'liabilityDirections' => $liabilityDirections,
+            'showNetWorth'        => $showNetWorth,
+            'locations'           => $locations,
+            'objectType'          => $objectType,
+            'interestPeriods'     => $interestPeriods,
+            'subTitle'            => $subTitle,
+            'roles'               => $roles,
+            'liabilityTypes'      => $liabilityTypes,
+        ]);
     }
 
-    /**
-     * Store the new account.
-     *
-     * @return Redirector|RedirectResponse
-     *
-     * @throws ContainerExceptionInterface
-     * @throws NotFoundExceptionInterface
-     */
-    public function store(AccountFormRequest $request)
+    public function store(AccountFormRequest $request): RedirectResponse
     {
         $data      = $request->getAccountData();
         $account   = $this->repository->store($data);

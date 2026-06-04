@@ -33,6 +33,10 @@ use Illuminate\Support\Facades\Log;
  */
 trait WithdrawalValidation
 {
+    abstract protected function canCreateTypes(array $accountTypes): bool;
+
+    abstract protected function findExistingAccount(array $validTypes, array $data): ?Account;
+
     protected function validateGenericSource(array $array): bool
     {
         $accountId   = $array['id'] ?? null;
@@ -40,7 +44,13 @@ trait WithdrawalValidation
         $accountIban = $array['iban'] ?? null;
         Log::debug('Now in validateGenericSource', $array);
         // source can be any of the following types.
-        $validTypes  = [AccountTypeEnum::ASSET->value, AccountTypeEnum::REVENUE->value, AccountTypeEnum::LOAN->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::MORTGAGE->value];
+        $validTypes  = [
+            AccountTypeEnum::ASSET->value,
+            AccountTypeEnum::REVENUE->value,
+            AccountTypeEnum::LOAN->value,
+            AccountTypeEnum::DEBT->value,
+            AccountTypeEnum::MORTGAGE->value,
+        ];
         if (null === $accountId && null === $accountName && null === $accountIban && false === $this->canCreateTypes($validTypes)) {
             // if both values are NULL we return TRUE
             // because we assume the user doesn't want to submit / change anything.
@@ -63,10 +73,6 @@ trait WithdrawalValidation
 
         return true;
     }
-
-    abstract protected function canCreateTypes(array $accountTypes): bool;
-
-    abstract protected function findExistingAccount(array $validTypes, array $data): ?Account;
 
     protected function validateWithdrawalDestination(array $array): bool
     {

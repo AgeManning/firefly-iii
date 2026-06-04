@@ -23,12 +23,12 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers;
 
-use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Http\Requests\NewUserFormRequest;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\Currency\CurrencyRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Http\Controllers\CreateStuff;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
@@ -38,7 +38,7 @@ use Illuminate\View\View;
 /**
  * Class NewUserController.
  */
-class NewUserController extends Controller
+final class NewUserController extends Controller
 {
     use CreateStuff;
 
@@ -51,19 +51,17 @@ class NewUserController extends Controller
     {
         parent::__construct();
 
-        $this->middleware(
-            function ($request, $next) {
-                $this->repository = app(AccountRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            $this->repository = app(AccountRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
      * Form the user gets when he has no data in the system.
      *
-     * @return Factory|Redirector|RedirectResponse|View
+     * @return Factory|RedirectResponse|View
      */
     public function index(): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
@@ -85,7 +83,7 @@ class NewUserController extends Controller
     /**
      * Store his new settings.
      */
-    public function submit(NewUserFormRequest $request, CurrencyRepositoryInterface $currencyRepository): Redirector|RedirectResponse
+    public function submit(NewUserFormRequest $request, CurrencyRepositoryInterface $currencyRepository): RedirectResponse
     {
         $language      = $request->convertString('language');
         if (!array_key_exists($language, config('firefly.languages'))) {
@@ -103,9 +101,9 @@ class NewUserController extends Controller
         }
         $currencyRepository->enable($currency);
 
-        $this->createAssetAccount($request, $currency);              // create normal asset account
+        $this->createAssetAccount($request, $currency); // create normal asset account
         $this->createSavingsAccount($request, $currency, $language); // create savings account
-        $this->createCashWalletAccount($currency, $language);        // create cash wallet account
+        $this->createCashWalletAccount($currency, $language); // create cash wallet account
 
         // store currency preference:
         $currencyRepository->makePrimary($currency);

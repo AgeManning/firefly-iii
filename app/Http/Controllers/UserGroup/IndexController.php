@@ -24,13 +24,13 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\UserGroup;
 
-use Illuminate\Support\Facades\Log;
 use FireflyIII\Http\Controllers\Controller;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
-class IndexController extends Controller
+final class IndexController extends Controller
 {
     /**
      * Show all administrations.

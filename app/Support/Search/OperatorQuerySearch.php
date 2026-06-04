@@ -24,7 +24,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Support\Search;
 
-use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Enums\SearchDirection;
@@ -40,6 +39,8 @@ use FireflyIII\Repositories\Budget\BudgetRepositoryInterface;
 use FireflyIII\Repositories\Category\CategoryRepositoryInterface;
 use FireflyIII\Repositories\Currency\CurrencyRepositoryInterface;
 use FireflyIII\Repositories\Tag\TagRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\ParseDateString;
 use FireflyIII\Support\Search\QueryParser\FieldNode;
 use FireflyIII\Support\Search\QueryParser\Node;
@@ -52,7 +53,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use LogicException;
 use TypeError;
-use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class OperatorQuerySearch
@@ -61,26 +61,28 @@ use FireflyIII\Support\Facades\Steam;
  */
 class OperatorQuerySearch implements SearchInterface
 {
-    protected Carbon                             $date;
-    private readonly AccountRepositoryInterface  $accountRepository;
-    private readonly BillRepositoryInterface     $billRepository;
-    private readonly BudgetRepositoryInterface   $budgetRepository;
+    protected Carbon $date;
+    private readonly AccountRepositoryInterface $accountRepository;
+    private readonly BillRepositoryInterface $billRepository;
+    private readonly BudgetRepositoryInterface $budgetRepository;
     private readonly CategoryRepositoryInterface $categoryRepository;
-    private GroupCollectorInterface              $collector;
+    private GroupCollectorInterface $collector;
     private readonly CurrencyRepositoryInterface $currencyRepository;
-    private array                                $excludeTags    = [];
-    private array                                $includeAnyTags = [];
+    private array $excludeTags      = [];
+    private array $includeAnyTags   = [];
     // added to fix #8632
-    private array                           $includeTags         = [];
-    private array                           $invalidOperators    = [];
-    private int                             $limit               = 25;
-    private readonly Collection             $operators;
-    private int                             $page                = 1;
-    private array                           $prohibitedWords     = [];
-    private readonly float                  $startTime;
+    // private array $includeTags      = [];
+    // added to fix #11473
+    private array $includeAllTags   = [];
+    private array $invalidOperators = [];
+    private int   $limit            = 25;
+    private readonly Collection $operators;
+    private int   $page             = 1;
+    private array $prohibitedWords  = [];
+    private readonly float $startTime;
     private readonly TagRepositoryInterface $tagRepository;
-    private readonly array                  $validOperators;
-    private array                           $words               = [];
+    private readonly array $validOperators;
+    private array $words            = [];
 
     /**
      * OperatorQuerySearch constructor.
@@ -120,11 +122,11 @@ class OperatorQuerySearch implements SearchInterface
             if (str_starts_with($original, '-')) {
                 $return = sprintf('-%s', $config['alias_for']);
             }
-            Log::debug(sprintf('"%s" is an alias for "%s", so return that instead.', $original, $return));
+            // Log::debug(sprintf('"%s" is an alias for "%s", so return that instead.', $original, $return));
 
             return $return;
         }
-        Log::debug(sprintf('"%s" is not an alias.', $operator));
+        // Log::debug(sprintf('"%s" is not an alias.', $operator));
 
         return $original;
     }
@@ -172,11 +174,11 @@ class OperatorQuerySearch implements SearchInterface
      */
     public function parseQuery(string $query): void
     {
-        Log::debug(sprintf('Now in parseQuery("%s")', $query));
+        // Log::debug(sprintf('Now in parseQuery("%s")', $query));
 
         /** @var QueryParserInterface $parser */
         $parser = app(QueryParserInterface::class);
-        Log::debug(sprintf('Using %s as implementation for QueryParserInterface', $parser::class));
+        // Log::debug(sprintf('Using %s as implementation for QueryParserInterface', $parser::class));
 
         try {
             $parsedQuery = $parser->parse($query);
@@ -187,7 +189,7 @@ class OperatorQuerySearch implements SearchInterface
             throw new FireflyException(sprintf('Invalid search value "%s". See the logs.', e($query)), 0, $e);
         }
 
-        Log::debug(sprintf('Found %d node(s) at top-level', count($parsedQuery->getNodes())));
+        // Log::debug(sprintf('Found %d node(s) at top-level', count($parsedQuery->getNodes())));
         $this->handleSearchNode($parsedQuery, $parsedQuery->isProhibited(false));
 
         // add missing information
@@ -205,9 +207,19 @@ class OperatorQuerySearch implements SearchInterface
     public function searchTransactions(): LengthAwarePaginator
     {
         $this->parseTagInstructions();
-        if (0 === count($this->getWords()) && 0 === count($this->getExcludedWords()) && 0 === count($this->getOperators())) {
+        if (
+            0 === count($this->excludeTags)
+            && 0 === count($this->includeAnyTags)
+            && 0 === count($this->includeAllTags)
+            && 0 === count($this->getWords())
+            && 0 === count($this->getExcludedWords())
+            && 0 === count($this->getOperators())
+        ) {
+            Log::warning('No need to search for anything');
+
             return new LengthAwarePaginator([], 0, 5, 1);
         }
+        Log::debug('Call getPaginatedGroups()');
 
         return $this->collector->getPaginatedGroups();
     }
@@ -240,7 +252,7 @@ class OperatorQuerySearch implements SearchInterface
         $this->collector->setUser($user);
         $this->collector->withAccountInformation()->withCategoryInformation()->withBudgetInformation();
 
-        $this->setLimit((int)Preferences::getForUser($user, 'listPageSize', 50)->data);
+        $this->setLimit((int) Preferences::getForUser($user, 'listPageSize', 50)->data);
     }
 
     private function findCurrency(string $value): ?TransactionCurrency
@@ -288,19 +300,12 @@ class OperatorQuerySearch implements SearchInterface
         // must be valid operator:
         $inArray    = in_array($operator, $this->validOperators, true);
         if ($inArray && $this->updateCollector($operator, $value, $prohibited)) {
-            $this->operators->push([
-                'type'       => self::getRootOperator($operator),
-                'value'      => $value,
-                'prohibited' => $prohibited,
-            ]);
+            $this->operators->push(['type' => self::getRootOperator($operator), 'value' => $value, 'prohibited' => $prohibited]);
             Log::debug(sprintf('Added operator type "%s"', $operator));
         }
         if (!$inArray) {
             Log::debug(sprintf('Added INVALID operator type "%s"', $operator));
-            $this->invalidOperators[] = [
-                'type'  => $operator,
-                'value' => $value,
-            ];
+            $this->invalidOperators[] = ['type' => $operator, 'value' => $value];
         }
     }
 
@@ -320,7 +325,7 @@ class OperatorQuerySearch implements SearchInterface
      */
     private function handleSearchNode(Node $node, bool $flipProhibitedFlag): void
     {
-        Log::debug(sprintf('Now in handleSearchNode(%s)', $node::class));
+        // Log::debug(sprintf('Now in handleSearchNode(%s)', $node::class));
 
         switch (true) {
             case $node instanceof StringNode:
@@ -372,17 +377,12 @@ class OperatorQuerySearch implements SearchInterface
             $parsedDate = $parser->parseDate($value);
         } catch (FireflyException) {
             Log::debug(sprintf('Could not parse date "%s", will return empty array.', $value));
-            $this->invalidOperators[] = [
-                'type'  => $type,
-                'value' => $value,
-            ];
+            $this->invalidOperators[] = ['type' => $type, 'value' => $value];
 
             return [];
         }
 
-        return [
-            'exact' => $parsedDate,
-        ];
+        return ['exact' => $parsedDate];
     }
 
     private function parseTagInstructions(): void
@@ -403,30 +403,57 @@ class OperatorQuerySearch implements SearchInterface
             $this->collector->setWithoutSpecificTags($collection);
         }
         // if include tags, include them:
-        if (count($this->includeTags) > 0) {
-            Log::debug(sprintf('%d include tag(s)', count($this->includeTags)));
-            $collection = new Collection();
-            foreach ($this->includeTags as $tagId) {
-                $tag = $this->tagRepository->find($tagId);
-                if (null !== $tag) {
-                    Log::debug(sprintf('Include tag "%s"', $tag->tag));
-                    $collection->push($tag);
+        //        if (count($this->includeTags) > 0) {
+        //            Log::debug(sprintf('%d include tag(s)', count($this->includeTags)));
+        //            $collection = new Collection();
+        //            foreach ($this->includeTags as $tagId) {
+        //                $tag = $this->tagRepository->find($tagId);
+        //                if (null !== $tag) {
+        //                    Log::debug(sprintf('Include tag "%s"', $tag->tag));
+        //                    $collection->push($tag);
+        //                }
+        //            }
+        //            $this->collector->setAllTags($collection);
+        //        }
+        // if include ALL tags, include them:
+        if (count($this->includeAllTags) > 0) {
+            Log::debug(sprintf('include ALL tag(s) in %d sets', count($this->includeAllTags)));
+
+            /** @var array|int|string $set */
+            foreach ($this->includeAllTags as $set) {
+                Log::debug('Loop set of includeAllTags');
+                if (!is_array($set)) {
+                    throw new FireflyException('[a] Item is expected to be an array.');
+                }
+                $collection = new Collection();
+                foreach ($set as $tagId) {
+                    $tag = $this->tagRepository->find($tagId);
+                    if (null !== $tag) {
+                        Log::debug(sprintf('Include tag (ALL) "%s"', $tag->tag));
+                        $collection->push($tag);
+                    }
+                    $this->collector->setAllTags($collection);
                 }
             }
-            $this->collector->setAllTags($collection);
         }
         // if include ANY tags, include them: (see #8632)
         if (count($this->includeAnyTags) > 0) {
-            Log::debug(sprintf('%d include ANY tag(s)', count($this->includeAnyTags)));
-            $collection = new Collection();
-            foreach ($this->includeAnyTags as $tagId) {
-                $tag = $this->tagRepository->find($tagId);
-                if (null !== $tag) {
-                    Log::debug(sprintf('Include ANY tag "%s"', $tag->tag));
-                    $collection->push($tag);
+            Log::debug(sprintf('include ANY tag(s) with %d sets', count($this->includeAnyTags)));
+            foreach ($this->includeAnyTags as $set) {
+                if (!is_array($set)) {
+                    throw new FireflyException('[b] Item is expected to be an array.');
                 }
+                Log::debug(sprintf('Set count is %d', count($set)));
+                $collection = new Collection();
+                foreach ($set as $tagId) {
+                    $tag = $this->tagRepository->find($tagId);
+                    if (null !== $tag) {
+                        Log::debug(sprintf('Include tag (ANY) "%s"', $tag->tag));
+                        $collection->push($tag);
+                    }
+                }
+                $this->collector->setTags($collection);
             }
-            $this->collector->setTags($collection);
         }
     }
 
@@ -442,7 +469,13 @@ class OperatorQuerySearch implements SearchInterface
         Log::debug(sprintf('searchAccount("%s", %s, %s)', $value, $stringPosition->name, $searchDirection->name));
 
         // search direction (default): for source accounts
-        $searchTypes     = [AccountTypeEnum::ASSET->value, AccountTypeEnum::MORTGAGE->value, AccountTypeEnum::LOAN->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::REVENUE->value];
+        $searchTypes     = [
+            AccountTypeEnum::ASSET->value,
+            AccountTypeEnum::MORTGAGE->value,
+            AccountTypeEnum::LOAN->value,
+            AccountTypeEnum::DEBT->value,
+            AccountTypeEnum::REVENUE->value,
+        ];
         $collectorMethod = 'setSourceAccounts';
         if ($prohibited) {
             $collectorMethod = 'excludeSourceAccounts';
@@ -450,8 +483,14 @@ class OperatorQuerySearch implements SearchInterface
 
         // search direction: for destination accounts
         if (SearchDirection::DESTINATION === $searchDirection) { // destination
-            // destination can be
-            $searchTypes     = [AccountTypeEnum::ASSET->value, AccountTypeEnum::MORTGAGE->value, AccountTypeEnum::LOAN->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::EXPENSE->value];
+            // the destination account can be
+            $searchTypes     = [
+                AccountTypeEnum::ASSET->value,
+                AccountTypeEnum::MORTGAGE->value,
+                AccountTypeEnum::LOAN->value,
+                AccountTypeEnum::DEBT->value,
+                AccountTypeEnum::EXPENSE->value,
+            ];
             $collectorMethod = 'setDestinationAccounts';
             if ($prohibited) {
                 $collectorMethod = 'excludeDestinationAccounts';
@@ -459,7 +498,14 @@ class OperatorQuerySearch implements SearchInterface
         }
         // either account could be:
         if (SearchDirection::BOTH === $searchDirection) {
-            $searchTypes     = [AccountTypeEnum::ASSET->value, AccountTypeEnum::MORTGAGE->value, AccountTypeEnum::LOAN->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::EXPENSE->value, AccountTypeEnum::REVENUE->value];
+            $searchTypes     = [
+                AccountTypeEnum::ASSET->value,
+                AccountTypeEnum::MORTGAGE->value,
+                AccountTypeEnum::LOAN->value,
+                AccountTypeEnum::DEBT->value,
+                AccountTypeEnum::EXPENSE->value,
+                AccountTypeEnum::REVENUE->value,
+            ];
             $collectorMethod = 'setAccounts';
             if ($prohibited) {
                 $collectorMethod = 'excludeAccounts';
@@ -476,11 +522,11 @@ class OperatorQuerySearch implements SearchInterface
             $stringMethod = 'str_contains';
         }
         if (StringPosition::IS === $stringPosition) {
-            $stringMethod = 'stringIsEqual';
+            $stringMethod = 'string_is_equal';
         }
 
         // get accounts:
-        $accounts        = $this->accountRepository->searchAccount($value, $searchTypes, 1337);
+        $accounts        = $this->accountRepository->searchAccountIncludingInactive($value, $searchTypes, 1337);
         if (0 === $accounts->count() && false === $prohibited) {
             Log::warning('Found zero accounts, search for non existing account, NO results will be returned.');
             $this->collector->findNothing();
@@ -493,9 +539,7 @@ class OperatorQuerySearch implements SearchInterface
             return;
         }
         Log::debug(sprintf('Found %d accounts, will filter.', $accounts->count()));
-        $filtered        = $accounts->filter(
-            static fn (Account $account): bool => $stringMethod(strtolower($account->name), strtolower($value))
-        );
+        $filtered        = $accounts->filter(static fn (Account $account): bool => $stringMethod(strtolower($account->name), strtolower($value)));
 
         if (0 === $filtered->count()) {
             Log::warning('Left with zero accounts, so cannot find anything, NO results will be returned.');
@@ -504,7 +548,7 @@ class OperatorQuerySearch implements SearchInterface
             return;
         }
         Log::debug(sprintf('Left with %d, set as %s().', $filtered->count(), $collectorMethod));
-        $this->collector->{$collectorMethod}($filtered); // @phpstan-ignore-line
+        $this->collector->{$collectorMethod}($filtered);
     }
 
     /**
@@ -520,7 +564,13 @@ class OperatorQuerySearch implements SearchInterface
         Log::debug(sprintf('searchAccountNr(%s, %d, %d)', $value, $searchDirection->name, $stringPosition->name));
 
         // search direction (default): for source accounts
-        $searchTypes     = [AccountTypeEnum::ASSET->value, AccountTypeEnum::MORTGAGE->value, AccountTypeEnum::LOAN->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::REVENUE->value];
+        $searchTypes     = [
+            AccountTypeEnum::ASSET->value,
+            AccountTypeEnum::MORTGAGE->value,
+            AccountTypeEnum::LOAN->value,
+            AccountTypeEnum::DEBT->value,
+            AccountTypeEnum::REVENUE->value,
+        ];
         $collectorMethod = 'setSourceAccounts';
         if ($prohibited) {
             $collectorMethod = 'excludeSourceAccounts';
@@ -529,7 +579,13 @@ class OperatorQuerySearch implements SearchInterface
         // search direction: for destination accounts
         if (SearchDirection::DESTINATION === $searchDirection) {
             // destination can be
-            $searchTypes     = [AccountTypeEnum::ASSET->value, AccountTypeEnum::MORTGAGE->value, AccountTypeEnum::LOAN->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::EXPENSE->value];
+            $searchTypes     = [
+                AccountTypeEnum::ASSET->value,
+                AccountTypeEnum::MORTGAGE->value,
+                AccountTypeEnum::LOAN->value,
+                AccountTypeEnum::DEBT->value,
+                AccountTypeEnum::EXPENSE->value,
+            ];
             $collectorMethod = 'setDestinationAccounts';
             if ($prohibited) {
                 $collectorMethod = 'excludeDestinationAccounts';
@@ -538,7 +594,14 @@ class OperatorQuerySearch implements SearchInterface
 
         // either account could be:
         if (SearchDirection::BOTH === $searchDirection) {
-            $searchTypes     = [AccountTypeEnum::ASSET->value, AccountTypeEnum::MORTGAGE->value, AccountTypeEnum::LOAN->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::EXPENSE->value, AccountTypeEnum::REVENUE->value];
+            $searchTypes     = [
+                AccountTypeEnum::ASSET->value,
+                AccountTypeEnum::MORTGAGE->value,
+                AccountTypeEnum::LOAN->value,
+                AccountTypeEnum::DEBT->value,
+                AccountTypeEnum::EXPENSE->value,
+                AccountTypeEnum::REVENUE->value,
+            ];
             $collectorMethod = 'setAccounts';
             if ($prohibited) {
                 $collectorMethod = 'excludeAccounts';
@@ -556,7 +619,7 @@ class OperatorQuerySearch implements SearchInterface
             $stringMethod = 'str_contains';
         }
         if (StringPosition::IS === $stringPosition) {
-            $stringMethod = 'stringIsEqual';
+            $stringMethod = 'string_is_equal';
         }
 
         // search for accounts:
@@ -571,22 +634,20 @@ class OperatorQuerySearch implements SearchInterface
 
         // if found, do filter
         Log::debug(sprintf('Found %d accounts, will filter.', $accounts->count()));
-        $filtered        = $accounts->filter(
-            static function (Account $account) use ($value, $stringMethod): bool {
-                // either IBAN or account number
-                $ibanMatch      = $stringMethod(strtolower((string)$account->iban), strtolower($value));
-                $accountNrMatch = false;
+        $filtered        = $accounts->filter(static function (Account $account) use ($value, $stringMethod): bool {
+            // either IBAN or account number
+            $ibanMatch      = $stringMethod(strtolower((string) $account->iban), strtolower($value));
+            $accountNrMatch = false;
 
-                /** @var AccountMeta $meta */
-                foreach ($account->accountMeta as $meta) {
-                    if ('account_number' === $meta->name && $stringMethod(strtolower((string)$meta->data), strtolower($value))) {
-                        $accountNrMatch = true;
-                    }
+            /** @var AccountMeta $meta */
+            foreach ($account->accountMeta as $meta) {
+                if ('account_number' === $meta->name && $stringMethod(strtolower((string) $meta->data), strtolower($value))) {
+                    $accountNrMatch = true;
                 }
-
-                return $ibanMatch || $accountNrMatch;
             }
-        );
+
+            return $ibanMatch || $accountNrMatch;
+        });
 
         if (0 === $filtered->count()) {
             Log::debug('Left with zero, search for invalid account');
@@ -596,7 +657,7 @@ class OperatorQuerySearch implements SearchInterface
             return;
         }
         Log::debug(sprintf('Left with %d, set as %s().', $filtered->count(), $collectorMethod));
-        $this->collector->{$collectorMethod}($filtered); // @phpstan-ignore-line
+        $this->collector->{$collectorMethod}($filtered);
     }
 
     /**
@@ -1245,7 +1306,6 @@ class OperatorQuerySearch implements SearchInterface
 
                 return false;
 
-
                 // all account related searches:
 
             case 'account_is':
@@ -1409,7 +1469,7 @@ class OperatorQuerySearch implements SearchInterface
                 break;
 
             case 'source_account_id':
-                $account                 = $this->accountRepository->find((int)$value);
+                $account                 = $this->accountRepository->find((int) $value);
                 if (null !== $account) {
                     $this->collector->setSourceAccounts(new Collection()->push($account));
                 }
@@ -1422,7 +1482,7 @@ class OperatorQuerySearch implements SearchInterface
                 break;
 
             case '-source_account_id':
-                $account                 = $this->accountRepository->find((int)$value);
+                $account                 = $this->accountRepository->find((int) $value);
                 if (null !== $account) {
                     $this->collector->excludeSourceAccounts(new Collection()->push($account));
                 }
@@ -1539,7 +1599,7 @@ class OperatorQuerySearch implements SearchInterface
                 break;
 
             case 'destination_account_id':
-                $account                 = $this->accountRepository->find((int)$value);
+                $account                 = $this->accountRepository->find((int) $value);
                 if (null !== $account) {
                     $this->collector->setDestinationAccounts(new Collection()->push($account));
                 }
@@ -1551,7 +1611,7 @@ class OperatorQuerySearch implements SearchInterface
                 break;
 
             case '-destination_account_id':
-                $account                 = $this->accountRepository->find((int)$value);
+                $account                 = $this->accountRepository->find((int) $value);
                 if (null !== $account) {
                     $this->collector->excludeDestinationAccounts(new Collection()->push($account));
                 }
@@ -1567,7 +1627,7 @@ class OperatorQuerySearch implements SearchInterface
                 $parts                   = explode(',', $value);
                 $collection              = new Collection();
                 foreach ($parts as $accountId) {
-                    $accountId = (int)$accountId;
+                    $accountId = (int) $accountId;
                     Log::debug(sprintf('Searching for account with ID #%d', $accountId));
                     $account   = $this->accountRepository->find($accountId);
                     if (null !== $account) {
@@ -1593,7 +1653,7 @@ class OperatorQuerySearch implements SearchInterface
                 $parts                   = explode(',', $value);
                 $collection              = new Collection();
                 foreach ($parts as $accountId) {
-                    $account = $this->accountRepository->find((int)$accountId);
+                    $account = $this->accountRepository->find((int) $accountId);
                     if (null !== $account) {
                         $collection->push($account);
                     }
@@ -1607,7 +1667,6 @@ class OperatorQuerySearch implements SearchInterface
                 }
 
                 break;
-
 
                 // cash account
 
@@ -1646,7 +1705,6 @@ class OperatorQuerySearch implements SearchInterface
                 $this->collector->excludeAccounts(new Collection()->push($account));
 
                 break;
-
 
                 // description
 
@@ -1689,7 +1747,6 @@ class OperatorQuerySearch implements SearchInterface
                 $this->collector->descriptionIsNot($value);
 
                 break;
-
 
                 // currency
 
@@ -1741,7 +1798,6 @@ class OperatorQuerySearch implements SearchInterface
 
                 break;
 
-
                 // attachments
 
             case 'has_attachments':
@@ -1757,7 +1813,6 @@ class OperatorQuerySearch implements SearchInterface
                 $this->collector->hasNoAttachments();
 
                 break;
-
 
                 // categories
             case '-has_any_category':
@@ -1865,7 +1920,6 @@ class OperatorQuerySearch implements SearchInterface
                 }
 
                 break;
-
 
                 // budgets
 
@@ -1977,7 +2031,6 @@ class OperatorQuerySearch implements SearchInterface
 
                 break;
 
-
                 // bill
 
             case '-has_any_bill':
@@ -2088,7 +2141,6 @@ class OperatorQuerySearch implements SearchInterface
 
                 break;
 
-
                 // tags
 
             case '-has_any_tag':
@@ -2107,8 +2159,9 @@ class OperatorQuerySearch implements SearchInterface
             case 'tag_is':
                 $result                  = $this->tagRepository->findByTag($value);
                 if (null !== $result) {
-                    $this->includeTags[] = $result->id;
-                    $this->includeTags   = array_unique($this->includeTags);
+                    $index                          = count($this->includeAllTags);
+                    $this->includeAllTags[$index][] = $result->id;
+                    $this->includeAllTags[$index]   = array_unique($this->includeAllTags[$index] ?? []);
                 }
                 // no tags found means search must result in nothing.
                 if (null === $result) {
@@ -2126,10 +2179,19 @@ class OperatorQuerySearch implements SearchInterface
                     Log::warning(sprintf('Call to findNothing() from %s.', $operator));
                     $this->collector->findNothing();
                 }
-                if ($tags->count() > 0) {
+                if (1 === $tags->count()) {
+                    // single tag found, must be this one.
+                    $ids                          = array_values($tags->pluck('id')->toArray());
+                    Log::debug('tag_contains: Add tags to includeAllTags', $ids);
+                    $index                        = count($this->includeAllTags);
+                    $this->includeAllTags[$index] = array_unique(array_merge($this->includeAllTags[$index] ?? [], $ids));
+                }
+                if ($tags->count() > 1) {
                     // changed from includeTags to includeAnyTags for #8632
-                    $ids                  = array_values($tags->pluck('id')->toArray());
-                    $this->includeAnyTags = array_unique(array_merge($this->includeAnyTags, $ids));
+                    $ids                          = array_values($tags->pluck('id')->toArray());
+                    Log::debug('tag_contains: Add tags to includeAnyTags', $ids);
+                    $index                        = count($this->includeAnyTags);
+                    $this->includeAnyTags[$index] = array_unique(array_merge($this->includeAnyTags[$index] ?? [], $ids));
                 }
 
                 break;
@@ -2141,10 +2203,17 @@ class OperatorQuerySearch implements SearchInterface
                     Log::warning(sprintf('Call to findNothing() from %s.', $operator));
                     $this->collector->findNothing();
                 }
-                if ($tags->count() > 0) {
+                if (1 === $tags->count()) {
+                    // single tag found, must be this one.
+                    $ids                          = array_values($tags->pluck('id')->toArray());
+                    $index                        = count($this->includeAllTags);
+                    $this->includeAllTags[$index] = array_unique(array_merge($this->includeAllTags[$index] ?? [], $ids));
+                }
+                if ($tags->count() > 1) {
                     // changed from includeTags to includeAnyTags for #8632
-                    $ids                  = array_values($tags->pluck('id')->toArray());
-                    $this->includeAnyTags = array_unique(array_merge($this->includeAnyTags, $ids));
+                    $ids                          = array_values($tags->pluck('id')->toArray());
+                    $index                        = count($this->includeAnyTags);
+                    $this->includeAnyTags[$index] = array_unique(array_merge($this->includeAnyTags[$index] ?? [], $ids));
                 }
 
                 break;
@@ -2158,7 +2227,7 @@ class OperatorQuerySearch implements SearchInterface
                 }
                 if ($tags->count() > 0) {
                     $ids               = array_values($tags->pluck('id')->toArray());
-                    $this->excludeTags = array_unique(array_merge($this->includeTags, $ids));
+                    $this->excludeTags = array_unique(array_merge($this->excludeTags, $ids));
                 }
 
                 break;
@@ -2170,9 +2239,16 @@ class OperatorQuerySearch implements SearchInterface
                     Log::warning(sprintf('Call to findNothing() from %s.', $operator));
                     $this->collector->findNothing();
                 }
+                if (1 === $tags->count()) {
+                    // single tag found, must be this one.
+                    $ids                          = array_values($tags->pluck('id')->toArray());
+                    $index                        = count($this->includeAllTags);
+                    $this->includeAllTags[$index] = array_unique(array_merge($this->includeAllTags[$index] ?? [], $ids));
+                }
                 if ($tags->count() > 0) {
-                    $ids               = array_values($tags->pluck('id')->toArray());
-                    $this->includeTags = array_unique(array_merge($this->includeTags, $ids));
+                    $ids                          = array_values($tags->pluck('id')->toArray());
+                    $index                        = count($this->includeAnyTags);
+                    $this->includeAnyTags[$index] = array_unique(array_merge($this->includeAnyTags[$index] ?? [], $ids));
                 }
 
                 break;
@@ -2186,7 +2262,7 @@ class OperatorQuerySearch implements SearchInterface
                 }
                 if ($tags->count() > 0) {
                     $ids               = array_values($tags->pluck('id')->toArray());
-                    $this->excludeTags = array_unique(array_merge($this->includeTags, $ids));
+                    $this->excludeTags = array_unique(array_merge($this->excludeTags, $ids));
                 }
 
                 break;
@@ -2215,7 +2291,6 @@ class OperatorQuerySearch implements SearchInterface
                 }
 
                 break;
-
 
                 // notes
 
@@ -2280,7 +2355,6 @@ class OperatorQuerySearch implements SearchInterface
                 $this->collector->isNotReconciled();
 
                 break;
-
 
                 // amount
 
@@ -2368,7 +2442,6 @@ class OperatorQuerySearch implements SearchInterface
 
                 break;
 
-
                 // transaction type
 
             case 'transaction_type':
@@ -2382,7 +2455,6 @@ class OperatorQuerySearch implements SearchInterface
                 Log::debug(sprintf('Set "%s" using collector with value "%s"', $operator, $value));
 
                 break;
-
 
                 // dates
 
@@ -2581,7 +2653,6 @@ class OperatorQuerySearch implements SearchInterface
 
                 return false;
 
-
                 // external URL
 
             case '-any_external_url':
@@ -2647,7 +2718,6 @@ class OperatorQuerySearch implements SearchInterface
                 $this->collector->externalUrlDoesNotEnd($value);
 
                 break;
-
 
                 // other fields
 

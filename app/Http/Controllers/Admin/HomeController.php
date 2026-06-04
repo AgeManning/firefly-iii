@@ -23,9 +23,9 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Admin;
 
-use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Middleware\IsDemoUser;
+use FireflyIII\Support\Facades\Preferences;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
@@ -35,7 +35,7 @@ use Psr\Container\NotFoundExceptionInterface;
 /**
  * Class HomeController.
  */
-class HomeController extends Controller
+final class HomeController extends Controller
 {
     /**
      * ConfigurationController constructor.

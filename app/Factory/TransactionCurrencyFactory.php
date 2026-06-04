@@ -43,27 +43,25 @@ class TransactionCurrencyFactory
         $data['code']           = e($data['code']);
         $data['symbol']         = e($data['symbol']);
         $data['name']           = e($data['name']);
-        $data['decimal_places'] = (int)$data['decimal_places'];
+        $data['decimal_places'] = (int) $data['decimal_places'];
         // if the code already exists (deleted)
         // force delete it and then create the transaction:
-        $count                  = TransactionCurrency::withTrashed()->whereCode($data['code'])->count();
+        $count                  = TransactionCurrency::query()->withTrashed()->whereCode($data['code'])->count();
         if (1 === $count) {
-            $old = TransactionCurrency::withTrashed()->whereCode($data['code'])->first();
+            $old = TransactionCurrency::query()->withTrashed()->whereCode($data['code'])->first();
             $old->forceDelete();
             Log::warning(sprintf('Force deleted old currency with ID #%d and code "%s".', $old->id, $data['code']));
         }
 
         try {
             /** @var TransactionCurrency $result */
-            $result = TransactionCurrency::create(
-                [
-                    'name'           => $data['name'],
-                    'code'           => $data['code'],
-                    'symbol'         => $data['symbol'],
-                    'decimal_places' => $data['decimal_places'],
-                    'enabled'        => false,
-                ]
-            );
+            $result = TransactionCurrency::create([
+                'name'           => $data['name'],
+                'code'           => $data['code'],
+                'symbol'         => $data['symbol'],
+                'decimal_places' => $data['decimal_places'],
+                'enabled'        => false,
+            ]);
         } catch (QueryException $e) {
             $result = null;
             Log::error(sprintf('Could not create new currency: %s', $e->getMessage()));
@@ -78,7 +76,7 @@ class TransactionCurrencyFactory
     public function find(?int $currencyId, ?string $currencyCode): ?TransactionCurrency
     {
         $currencyCode = e($currencyCode);
-        $currencyId   = (int)$currencyId;
+        $currencyId   = (int) $currencyId;
         $currency     = null;
 
         if ('' === $currencyCode && 0 === $currencyId) {

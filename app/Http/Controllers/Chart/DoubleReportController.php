@@ -24,13 +24,13 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Chart;
 
-use FireflyIII\Support\Facades\Navigation;
 use Carbon\Carbon;
 use FireflyIII\Generator\Chart\Basic\GeneratorInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\Account\OperationsRepositoryInterface;
+use FireflyIII\Support\Facades\Navigation;
 use FireflyIII\Support\Facades\Steam;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
@@ -38,7 +38,7 @@ use Illuminate\Support\Collection;
 /**
  * Class DoubleReportController
  */
-class DoubleReportController extends Controller
+final class DoubleReportController extends Controller
 {
     /** @var GeneratorInterface Chart generation methods. */
     private $generator;
@@ -55,15 +55,13 @@ class DoubleReportController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->generator     = app(GeneratorInterface::class);
-                $this->opsRepository = app(OperationsRepositoryInterface::class);
-                $this->repository    = app(AccountRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            $this->generator     = app(GeneratorInterface::class);
+            $this->opsRepository = app(OperationsRepositoryInterface::class);
+            $this->repository    = app(AccountRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     public function budgetExpense(Collection $accounts, Collection $others, Carbon $start, Carbon $end): JsonResponse
@@ -164,11 +162,7 @@ class DoubleReportController extends Controller
             $name     = $this->getCounterpartName($accounts, $account->id, $account->name, $account->iban);
 
             $chartData[$spentKey] ??= [
-                'label'           => sprintf(
-                    '%s (%s)',
-                    (string) trans('firefly.spent_in_specific_double', ['account' => $name]),
-                    $currency['currency_name']
-                ),
+                'label'           => sprintf('%s (%s)', (string) trans('firefly.spent_in_specific_double', ['account' => $name]), $currency['currency_name']),
                 'type'            => 'bar',
                 'currency_symbol' => $currency['currency_symbol'],
                 'currency_code'   => $currency['currency_code'],
@@ -190,11 +184,7 @@ class DoubleReportController extends Controller
             $name      = $this->getCounterpartName($accounts, $account->id, $account->name, $account->iban);
 
             $chartData[$earnedKey] ??= [
-                'label'           => sprintf(
-                    '%s (%s)',
-                    (string) trans('firefly.earned_in_specific_double', ['account' => $name]),
-                    $currency['currency_name']
-                ),
+                'label'           => sprintf('%s (%s)', (string) trans('firefly.earned_in_specific_double', ['account' => $name]), $currency['currency_name']),
                 'type'            => 'bar',
                 'currency_symbol' => $currency['currency_symbol'],
                 'currency_code'   => $currency['currency_code'],
@@ -213,44 +203,6 @@ class DoubleReportController extends Controller
         $data      = $this->generator->multiSet($chartData);
 
         return response()->json($data);
-    }
-
-    /**
-     * TODO duplicate function
-     */
-    private function getCounterpartName(Collection $accounts, int $id, string $name, ?string $iban): string
-    {
-        /** @var Account $account */
-        foreach ($accounts as $account) {
-            if ($account->name === $name && $account->id !== $id) {
-                return $account->name;
-            }
-            if (null !== $account->iban && $account->iban === $iban && $account->id !== $id) {
-                return $account->iban;
-            }
-        }
-
-        return $name;
-    }
-
-    /**
-     * TODO duplicate function
-     */
-    private function makeEntries(Carbon $start, Carbon $end): array
-    {
-        $return         = [];
-        $format         = Navigation::preferredCarbonLocalizedFormat($start, $end);
-        $preferredRange = Navigation::preferredRangeFormat($start, $end);
-        $currentStart   = clone $start;
-        while ($currentStart <= $end) {
-            $currentEnd   = Navigation::endOfPeriod($currentStart, $preferredRange);
-            $key          = $currentStart->isoFormat($format);
-            $return[$key] = '0';
-            $currentStart = clone $currentEnd;
-            $currentStart->addDay()->startOfDay();
-        }
-
-        return $return;
     }
 
     public function tagExpense(Collection $accounts, Collection $others, Carbon $start, Carbon $end): JsonResponse
@@ -357,5 +309,43 @@ class DoubleReportController extends Controller
         $data             = $this->generator->multiCurrencyPieChart($result);
 
         return response()->json($data);
+    }
+
+    /**
+     * TODO duplicate function
+     */
+    private function getCounterpartName(Collection $accounts, int $id, string $name, ?string $iban): string
+    {
+        /** @var Account $account */
+        foreach ($accounts as $account) {
+            if ($account->name === $name && $account->id !== $id) {
+                return $account->name;
+            }
+            if (null !== $account->iban && $account->iban === $iban && $account->id !== $id) {
+                return $account->iban;
+            }
+        }
+
+        return $name;
+    }
+
+    /**
+     * TODO duplicate function
+     */
+    private function makeEntries(Carbon $start, Carbon $end): array
+    {
+        $return         = [];
+        $format         = Navigation::preferredCarbonLocalizedFormat($start, $end);
+        $preferredRange = Navigation::preferredRangeFormat($start, $end);
+        $currentStart   = clone $start;
+        while ($currentStart <= $end) {
+            $currentEnd   = Navigation::endOfPeriod($currentStart, $preferredRange);
+            $key          = $currentStart->isoFormat($format);
+            $return[$key] = '0';
+            $currentStart = clone $currentEnd;
+            $currentStart->addDay()->startOfDay();
+        }
+
+        return $return;
     }
 }

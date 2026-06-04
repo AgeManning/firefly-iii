@@ -24,54 +24,49 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Controllers\Models\CurrencyExchangeRate;
 
-use Illuminate\Http\Request;
 use Carbon\Carbon;
 use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Models\CurrencyExchangeRate\DestroyRequest;
 use FireflyIII\Enums\UserRoleEnum;
+use FireflyIII\Events\Model\CurrencyExchangeRate\DestroyedCurrencyExchangeRate;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\CurrencyExchangeRate;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Repositories\ExchangeRate\ExchangeRateRepositoryInterface;
 use FireflyIII\Support\Http\Api\ValidatesUserGroupTrait;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
-class DestroyController extends Controller
+final class DestroyController extends Controller
 {
     use ValidatesUserGroupTrait;
 
     public const string RESOURCE_KEY = 'exchange-rates';
+
     protected array $acceptedRoles   = [UserRoleEnum::OWNER];
     private ExchangeRateRepositoryInterface $repository;
 
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function (Request $request, $next) {
-                $this->repository = app(ExchangeRateRepositoryInterface::class);
-                $this->repository->setUserGroup($this->validateUserGroup($request));
+        $this->middleware(function (Request $request, $next) {
+            $this->repository = app(ExchangeRateRepositoryInterface::class);
+            $this->repository->setUserGroup($this->validateUserGroup($request));
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     public function destroy(DestroyRequest $request, TransactionCurrency $from, TransactionCurrency $to): JsonResponse
     {
+        $first = Carbon::create(1970, 1, 1);
         $this->repository->deleteRates($from, $to);
+        event(new DestroyedCurrencyExchangeRate($from, $to, $this->validateUserGroup($request), $first));
 
         return response()->json([], 204);
     }
 
-    public function destroySingleById(CurrencyExchangeRate $exchangeRate): JsonResponse
-    {
-        $this->repository->deleteRate($exchangeRate);
-
-        return response()->json([], 204);
-    }
-
-    public function destroySingleByDate(TransactionCurrency $from, TransactionCurrency $to, Carbon $date): JsonResponse
+    public function destroySingleByDate(Request $request, TransactionCurrency $from, TransactionCurrency $to, Carbon $date): JsonResponse
     {
         $exchangeRate = $this->repository->getSpecificRateOnDate($from, $to, $date);
         if ($exchangeRate instanceof CurrencyExchangeRate) {
@@ -80,6 +75,18 @@ class DestroyController extends Controller
         if (!$exchangeRate instanceof CurrencyExchangeRate) {
             throw new FireflyException('Bla');
         }
+        event(new DestroyedCurrencyExchangeRate($from, $to, $this->validateUserGroup($request), $date));
+
+        return response()->json([], 204);
+    }
+
+    public function destroySingleById(Request $request, CurrencyExchangeRate $exchangeRate): JsonResponse
+    {
+        $from = $exchangeRate->fromCurrency;
+        $to   = $exchangeRate->toCurrency;
+        $this->repository->deleteRate($exchangeRate);
+
+        event(new DestroyedCurrencyExchangeRate($from, $to, $this->validateUserGroup($request), $exchangeRate->date));
 
         return response()->json([], 204);
     }

@@ -27,7 +27,7 @@ namespace FireflyIII\Models;
 use FireflyIII\Enums\WebhookDelivery as WebhookDeliveryEnum;
 use FireflyIII\Enums\WebhookResponse as WebhookResponseEnum;
 use FireflyIII\Enums\WebhookTrigger as WebhookTriggerEnum;
-use FireflyIII\Handlers\Observer\WebhookObserver;
+use FireflyIII\Handlers\Observer\DeletedWebhookObserver;
 use FireflyIII\Support\Models\ReturnsIntegerIdTrait;
 use FireflyIII\Support\Models\ReturnsIntegerUserIdTrait;
 use FireflyIII\User;
@@ -39,15 +39,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
-#[ObservedBy([WebhookObserver::class])]
+#[ObservedBy([DeletedWebhookObserver::class])]
 class Webhook extends Model
 {
     use ReturnsIntegerIdTrait;
     use ReturnsIntegerUserIdTrait;
     use SoftDeletes;
 
-    protected $casts
-                        = [
+    protected function casts(): array
+    {
+        return [
             'active'        => 'boolean',
             'trigger'       => 'integer',
             'response'      => 'integer',
@@ -55,6 +56,8 @@ class Webhook extends Model
             'user_id'       => 'integer',
             'user_group_id' => 'integer',
         ];
+    }
+
     protected $fillable = ['active', 'trigger', 'response', 'delivery', 'user_id', 'user_group_id', 'url', 'title', 'secret'];
 
     public static function getDeliveries(): array
@@ -131,10 +134,13 @@ class Webhook extends Model
      *
      * @throws NotFoundHttpException
      */
-    public static function routeBinder(string $value): self
+    public static function routeBinder(self|string $value): self
     {
         if (auth()->check()) {
-            $webhookId = (int)$value;
+            if ($value instanceof self) {
+                $value = (int) $value->id;
+            }
+            $webhookId = (int) $value;
 
             /** @var User $user */
             $user      = auth()->user();
@@ -172,14 +178,5 @@ class Webhook extends Model
     public function webhookTriggers(): BelongsToMany
     {
         return $this->belongsToMany(WebhookTrigger::class);
-    }
-
-    protected function casts(): array
-    {
-        return [
-            //            'delivery' => WebhookDelivery::class,
-            //            'response' => WebhookResponse::class,
-            //            'trigger'  => WebhookTrigger::class,
-        ];
     }
 }

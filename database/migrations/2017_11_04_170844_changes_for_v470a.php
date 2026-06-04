@@ -31,8 +31,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * @codeCoverageIgnore
  */
-class ChangesForV470a extends Migration
-{
+return new class extends Migration {
     /**
      * Reverse the migrations.
      */
@@ -40,12 +39,9 @@ class ChangesForV470a extends Migration
     {
         if (Schema::hasColumn('transactions', 'reconciled')) {
             try {
-                Schema::table(
-                    'transactions',
-                    static function (Blueprint $table): void {
-                        $table->dropColumn('reconciled');
-                    }
-                );
+                Schema::table('transactions', static function (Blueprint $table): void {
+                    $table->dropColumn('reconciled');
+                });
             } catch (QueryException $e) {
                 app('log')->error(sprintf('Could not execute query: %s', $e->getMessage()));
                 app('log')->error('If the column or index already exists (see error), this is not an problem. Otherwise, please open a GitHub discussion.');
@@ -62,16 +58,13 @@ class ChangesForV470a extends Migration
     {
         if (!Schema::hasColumn('transactions', 'reconciled')) {
             try {
-                Schema::table(
-                    'transactions',
-                    static function (Blueprint $table): void {
-                        $table->boolean('reconciled')->after('deleted_at')->default(0);
-                    }
-                );
+                Schema::table('transactions', static function (Blueprint $table): void {
+                    $table->boolean('reconciled')->after('deleted_at')->default(0);
+                });
             } catch (QueryException $e) {
                 app('log')->error(sprintf('Could not execute query: %s', $e->getMessage()));
                 app('log')->error('If the column or index already exists (see error), this is not an problem. Otherwise, please open a GitHub discussion.');
             }
         }
     }
-}
+};

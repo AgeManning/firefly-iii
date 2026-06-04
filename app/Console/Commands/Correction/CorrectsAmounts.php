@@ -38,6 +38,8 @@ use FireflyIII\Models\Transaction;
 use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Models\TransactionType;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
+use FireflyIII\Services\Internal\Destroy\GenericDestroyService;
+use FireflyIII\Services\Internal\Destroy\JournalDestroyService;
 use FireflyIII\Support\Facades\Amount;
 use FireflyIII\Support\Facades\Steam;
 use Illuminate\Console\Command;
@@ -51,9 +53,13 @@ class CorrectsAmounts extends Command
 
     protected $description = 'This command makes sure positive and negative amounts are recorded correctly.';
     protected $signature   = 'correction:amounts';
+    private JournalDestroyService $service;
+    private GenericDestroyService $genericService;
 
     public function handle(): int
     {
+        $this->service        = new JournalDestroyService();
+        $this->genericService = new GenericDestroyService();
         // transfers must not have foreign currency info if both accounts have the same currency.
         $this->correctTransfers();
         // auto budgets must be positive
@@ -73,7 +79,6 @@ class CorrectsAmounts extends Command
         // rule_triggers must be positive or zero (amount_less, amount_more, amount_is)
         $this->fixRuleTriggers();
 
-
         return 0;
     }
 
@@ -83,8 +88,13 @@ class CorrectsAmounts extends Command
 
         /** @var AccountRepositoryInterface $repository */
         $repository = app(AccountRepositoryInterface::class);
-        $type       = TransactionType::where('type', TransactionTypeEnum::TRANSFER->value)->first();
-        $journals   = TransactionJournal::leftJoin('transactions', 'transactions.transaction_journal_id', '=', 'transaction_journals.id')->whereNotNull('transactions.foreign_amount')->where('transaction_journals.transaction_type_id', $type->id)->distinct()->get(['transaction_journals.*']);
+        $type       = TransactionType::query()->where('type', TransactionTypeEnum::TRANSFER->value)->first();
+        $journals   = TransactionJournal::leftJoin('transactions', 'transactions.transaction_journal_id', '=', 'transaction_journals.id')
+            ->whereNotNull('transactions.foreign_amount')
+            ->where('transaction_journals.transaction_type_id', $type->id)
+            ->distinct()
+            ->get(['transaction_journals.*'])
+        ;
 
         /** @var TransactionJournal $journal */
         foreach ($journals as $journal) {
@@ -121,25 +131,49 @@ class CorrectsAmounts extends Command
 
             // validate source transaction
             if ($destCurrency->id !== $source->foreign_currency_id) {
-                Log::debug(sprintf('[a] Journal #%d: transaction #%d refers to foreign currency "%s" but should refer to "%s".', $journal->id, $source->id, $source->foreignCurrency->code, $destCurrency->code));
+                Log::debug(sprintf(
+                    '[a] Journal #%d: transaction #%d refers to foreign currency "%s" but should refer to "%s".',
+                    $journal->id,
+                    $source->id,
+                    $source->foreignCurrency->code,
+                    $destCurrency->code
+                ));
                 $source->foreign_currency_id = $destCurrency->id;
                 $source->save();
             }
             if ($sourceCurrency->id !== $source->transaction_currency_id) {
-                Log::debug(sprintf('[b] Journal #%d: transaction #%d refers to currency "%s" but should refer to "%s".', $journal->id, $source->id, $source->transactionCurrency->code, $sourceCurrency->code));
+                Log::debug(sprintf(
+                    '[b] Journal #%d: transaction #%d refers to currency "%s" but should refer to "%s".',
+                    $journal->id,
+                    $source->id,
+                    $source->transactionCurrency->code,
+                    $sourceCurrency->code
+                ));
                 $source->transaction_currency_id = $sourceCurrency->id;
                 $source->save();
             }
 
             // validate destination:
             if ($sourceCurrency->id !== $destination->foreign_currency_id) {
-                Log::debug(sprintf('[c] Journal #%d: transaction #%d refers to foreign currency "%s" but should refer to "%s".', $journal->id, $destination->id, $destination->foreignCurrency->code, $sourceCurrency->code));
+                Log::debug(sprintf(
+                    '[c] Journal #%d: transaction #%d refers to foreign currency "%s" but should refer to "%s".',
+                    $journal->id,
+                    $destination->id,
+                    $destination->foreignCurrency->code,
+                    $sourceCurrency->code
+                ));
                 $destination->foreign_currency_id = $sourceCurrency->id;
                 $destination->save();
             }
 
             if ($destCurrency->id !== $destination->transaction_currency_id) {
-                Log::debug(sprintf('[d] Journal #%d: transaction #%d refers to currency "%s" but should refer to "%s".', $journal->id, $destination->id, $destination->transactionCurrency->code, $destCurrency->code));
+                Log::debug(sprintf(
+                    '[d] Journal #%d: transaction #%d refers to currency "%s" but should refer to "%s".',
+                    $journal->id,
+                    $destination->id,
+                    $destination->transactionCurrency->code,
+                    $destCurrency->code
+                ));
                 $destination->transaction_currency_id = $destCurrency->id;
                 $destination->save();
             }
@@ -149,15 +183,16 @@ class CorrectsAmounts extends Command
 
     private function deleteJournal(TransactionJournal $journal): void
     {
-        $journal->transactionGroup?->delete();
-        $journal->delete();
+        $this->service->destroy($journal);
     }
 
     private function fixAutoBudgets(): void
     {
-        $count = AutoBudget::where('amount', '<', 0)->update(['amount' => DB::raw('amount * -1')]);
+        $count = AutoBudget::query()
+            ->where('amount', '<', 0)
+            ->update(['amount' => DB::raw('amount * -1')])
+        ;
         if (0 === $count) {
-
             return;
         }
         $this->friendlyInfo(sprintf('Corrected %d auto budget amount(s).', $count));
@@ -165,9 +200,11 @@ class CorrectsAmounts extends Command
 
     private function fixAvailableBudgets(): void
     {
-        $count = AvailableBudget::where('amount', '<', 0)->update(['amount' => DB::raw('amount * -1')]);
+        $count = AvailableBudget::query()
+            ->where('amount', '<', 0)
+            ->update(['amount' => DB::raw('amount * -1')])
+        ;
         if (0 === $count) {
-
             return;
         }
         $this->friendlyInfo(sprintf('Corrected %d available budget amount(s).', $count));
@@ -176,10 +213,15 @@ class CorrectsAmounts extends Command
     private function fixBills(): void
     {
         $count = 0;
-        $count += Bill::where('amount_max', '<', 0)->update(['amount_max' => DB::raw('amount_max * -1')]);
-        $count += Bill::where('amount_min', '<', 0)->update(['amount_min' => DB::raw('amount_min * -1')]);
+        $count += Bill::query()
+            ->where('amount_max', '<', 0)
+            ->update(['amount_max' => DB::raw('amount_max * -1')])
+        ;
+        $count += Bill::query()
+            ->where('amount_min', '<', 0)
+            ->update(['amount_min' => DB::raw('amount_min * -1')])
+        ;
         if (0 === $count) {
-
             return;
         }
         $this->friendlyInfo(sprintf('Corrected %d bill amount(s).', $count));
@@ -187,9 +229,11 @@ class CorrectsAmounts extends Command
 
     private function fixBudgetLimits(): void
     {
-        $count = BudgetLimit::where('amount', '<', 0)->update(['amount' => DB::raw('amount * -1')]);
+        $count = BudgetLimit::query()
+            ->where('amount', '<', 0)
+            ->update(['amount' => DB::raw('amount * -1')])
+        ;
         if (0 === $count) {
-
             return;
         }
         $this->friendlyInfo(sprintf('Corrected %d budget limit amount(s).', $count));
@@ -197,9 +241,11 @@ class CorrectsAmounts extends Command
 
     private function fixExchangeRates(): void
     {
-        $count = CurrencyExchangeRate::where('rate', '<', 0)->update(['rate' => DB::raw('rate * -1')]);
+        $count = CurrencyExchangeRate::query()
+            ->where('rate', '<', 0)
+            ->update(['rate' => DB::raw('rate * -1')])
+        ;
         if (0 === $count) {
-
             return;
         }
         $this->friendlyInfo(sprintf('Corrected %d currency exchange rate(s).', $count));
@@ -207,9 +253,11 @@ class CorrectsAmounts extends Command
 
     private function fixPiggyBanks(): void
     {
-        $count = PiggyBank::where('target_amount', '<', 0)->update(['target_amount' => DB::raw('target_amount * -1')]);
+        $count = PiggyBank::query()
+            ->where('target_amount', '<', 0)
+            ->update(['target_amount' => DB::raw('target_amount * -1')])
+        ;
         if (0 === $count) {
-
             return;
         }
         $this->friendlyInfo(sprintf('Corrected %d piggy bank amount(s).', $count));
@@ -218,46 +266,34 @@ class CorrectsAmounts extends Command
     private function fixRecurrences(): void
     {
         $count = 0;
-        $count += RecurrenceTransaction::where('amount', '<', 0)->update(['amount' => DB::raw('amount * -1')]);
-        $count += RecurrenceTransaction::where('foreign_amount', '<', 0)->update(['foreign_amount' => DB::raw('foreign_amount * -1')]);
+        $count += RecurrenceTransaction::query()
+            ->where('amount', '<', 0)
+            ->update(['amount' => DB::raw('amount * -1')])
+        ;
+        $count += RecurrenceTransaction::query()
+            ->where('foreign_amount', '<', 0)
+            ->update(['foreign_amount' => DB::raw('foreign_amount * -1')])
+        ;
         if (0 === $count) {
-
             return;
         }
         $this->friendlyInfo(sprintf('Corrected %d recurring transaction amount(s).', $count));
     }
 
-    /**
-     * Foreach loop is unavoidable here.
-     */
-    private function fixRuleTriggers(): void
-    {
-        $set   = RuleTrigger::whereIn('trigger_type', ['amount_less', 'amount_more', 'amount_is'])->get();
-        $fixed = 0;
-
-        /** @var RuleTrigger $item */
-        foreach ($set as $item) {
-            $result = $this->fixRuleTrigger($item);
-            if ($result) {
-                ++$fixed;
-            }
-        }
-        if (0 === $fixed) {
-
-            return;
-        }
-        $this->friendlyInfo(sprintf('Corrected %d rule trigger amount(s).', $fixed));
-    }
-
     private function fixRuleTrigger(RuleTrigger $item): bool
     {
         try {
-            $check = bccomp((string)$item->trigger_value, '0');
+            $check = bccomp((string) $item->trigger_value, '0');
         } catch (ValueError) {
-            $this->friendlyError(sprintf('Rule #%d contained invalid %s-trigger "%s". The trigger has been removed, and the rule is disabled.', $item->rule_id, $item->trigger_type, $item->trigger_value));
+            $this->friendlyError(sprintf(
+                'Rule #%d contained invalid %s-trigger "%s". The trigger has been removed, and the rule is disabled.',
+                $item->rule_id,
+                $item->trigger_type,
+                $item->trigger_value
+            ));
             $item->rule->active = false;
             $item->rule->save();
-            $item->forceDelete();
+            $this->genericService->deleteRuleTrigger($item);
 
             return false;
         }
@@ -269,6 +305,27 @@ class CorrectsAmounts extends Command
         }
 
         return false;
+    }
+
+    /**
+     * Foreach loop is unavoidable here.
+     */
+    private function fixRuleTriggers(): void
+    {
+        $set   = RuleTrigger::query()->whereIn('trigger_type', ['amount_less', 'amount_more', 'amount_is'])->get();
+        $fixed = 0;
+
+        /** @var RuleTrigger $item */
+        foreach ($set as $item) {
+            $result = $this->fixRuleTrigger($item);
+            if ($result) {
+                ++$fixed;
+            }
+        }
+        if (0 === $fixed) {
+            return;
+        }
+        $this->friendlyInfo(sprintf('Corrected %d rule trigger amount(s).', $fixed));
     }
 
     private function validateJournal(TransactionJournal $journal): bool

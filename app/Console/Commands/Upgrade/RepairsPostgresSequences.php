@@ -26,7 +26,9 @@ namespace FireflyIII\Console\Commands\Upgrade;
 
 use FireflyIII\Console\Commands\ShowsFriendlyMessages;
 use Illuminate\Console\Command;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class RepairsPostgresSequences extends Command
 {
@@ -45,24 +47,96 @@ class RepairsPostgresSequences extends Command
             return 0;
         }
         $this->friendlyLine('Going to verify PostgreSQL table sequences.');
-        $tablesToCheck = ['2fa_tokens', 'account_meta', 'account_types', 'accounts', 'attachments', 'auto_budgets', 'available_budgets', 'bills', 'budget_limits', 'budget_transaction', 'budget_transaction_journal', 'budgets', 'categories', 'category_transaction', 'category_transaction_journal', 'configuration', 'currency_exchange_rates', 'failed_jobs', 'group_journals', 'jobs', 'journal_links', 'journal_meta', 'link_types', 'locations', 'migrations', 'notes', 'oauth_clients', 'oauth_personal_access_clients', 'object_groups', 'permissions', 'piggy_bank_events', 'piggy_bank_repetitions', 'piggy_banks', 'preferences', 'recurrences', 'recurrences_meta', 'recurrences_repetitions', 'recurrences_transactions', 'roles', 'rt_meta', 'rule_actions', 'rule_groups', 'rule_triggers', 'rules', 'tag_transaction_journal', 'tags', 'transaction_currencies', 'transaction_groups', 'transaction_journals', 'transaction_types', 'transactions', 'users', 'webhook_attempts', 'webhook_messages', 'webhooks'];
+        $tablesToCheck = [
+            '2fa_tokens',
+            'account_meta',
+            'account_types',
+            'accounts',
+            'attachments',
+            'auto_budgets',
+            'available_budgets',
+            'bills',
+            'budget_limits',
+            'budget_transaction',
+            'budget_transaction_journal',
+            'budgets',
+            'categories',
+            'category_transaction',
+            'category_transaction_journal',
+            'configuration',
+            'currency_exchange_rates',
+            'failed_jobs',
+            'group_journals',
+            'jobs',
+            'journal_links',
+            'journal_meta',
+            'link_types',
+            'locations',
+            'migrations',
+            'notes',
+            'object_groups',
+            'permissions',
+            'piggy_bank_events',
+            'piggy_bank_repetitions',
+            'piggy_banks',
+            'preferences',
+            'recurrences',
+            'recurrences_meta',
+            'recurrences_repetitions',
+            'recurrences_transactions',
+            'roles',
+            'rt_meta',
+            'rule_actions',
+            'rule_groups',
+            'rule_triggers',
+            'rules',
+            'tag_transaction_journal',
+            'tags',
+            'transaction_currencies',
+            'transaction_groups',
+            'transaction_journals',
+            'transaction_types',
+            'transactions',
+            'users',
+            'webhook_attempts',
+            'webhook_messages',
+            'webhooks',
+        ];
 
         foreach ($tablesToCheck as $tableToCheck) {
             $this->friendlyLine(sprintf('Checking the next id sequence for table "%s".', $tableToCheck));
 
-            $highestId = DB::table($tableToCheck)->select(DB::raw('MAX(id)'))->first();
-            $nextId    = DB::table($tableToCheck)->select(DB::raw(sprintf('nextval(\'%s_id_seq\')', $tableToCheck)))->first();
+            try {
+                $highestId = DB::table($tableToCheck)->select(DB::raw('MAX(id)'))->first();
+            } catch (QueryException $e) {
+                Log::warning(sprintf('Could not select max, but will ignore this: %s', $e->getMessage()));
+
+                continue;
+            }
+
+            try {
+                $nextId = DB::table($tableToCheck)
+                    ->select(DB::raw(sprintf('nextval(\'%s_id_seq\')', $tableToCheck)))
+                    ->first()
+                ;
+            } catch (QueryException $e) {
+                Log::warning(sprintf('Could not get nextval, but will ignore this: %s', $e->getMessage()));
+                $nextId = null;
+            }
             if (null === $nextId) {
                 $this->friendlyInfo(sprintf('nextval is NULL for table "%s", go to next table.', $tableToCheck));
 
                 continue;
             }
 
-            if ($nextId->nextval < $highestId->max) { // @phpstan-ignore-line
+            if ($nextId->nextval < $highestId->max) {
                 DB::select(sprintf('SELECT setval(\'%s_id_seq\', %d)', $tableToCheck, $highestId->max));
                 $highestId = DB::table($tableToCheck)->select(DB::raw('MAX(id)'))->first();
-                $nextId    = DB::table($tableToCheck)->select(DB::raw(sprintf('nextval(\'%s_id_seq\')', $tableToCheck)))->first();
-                if ($nextId->nextval > $highestId->max) { // @phpstan-ignore-line
+                $nextId    = DB::table($tableToCheck)
+                    ->select(DB::raw(sprintf('nextval(\'%s_id_seq\')', $tableToCheck)))
+                    ->first()
+                ;
+                if ($nextId->nextval > $highestId->max) {
                     $this->friendlyInfo(sprintf('Table "%s" autoincrement corrected.', $tableToCheck));
                 }
                 if ($nextId->nextval <= $highestId->max) {

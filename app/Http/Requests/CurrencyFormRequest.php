@@ -23,10 +23,10 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Requests;
 
-use Illuminate\Contracts\Validation\Validator;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
 
@@ -37,6 +37,8 @@ class CurrencyFormRequest extends FormRequest
 {
     use ChecksLogin;
     use ConvertsDataTypes;
+
+    protected array $acceptedRoles = [];
 
     /**
      * Returns the data required by the controller.
@@ -59,10 +61,10 @@ class CurrencyFormRequest extends FormRequest
     {
         // fixed
         $rules    = [
-            'name'           => 'required|max:48|min:1|uniqueCurrencyName',
-            'code'           => 'required|min:3|max:51|uniqueCurrencyCode',
-            'symbol'         => 'required|min:1|max:51|uniqueCurrencySymbol',
-            'decimal_places' => 'required|min:0|max:12|numeric',
+            'name'           => ['required', 'max:48', 'min:1', 'uniqueCurrencyName'],
+            'code'           => ['required', 'min:3', 'max:51', 'uniqueCurrencyCode'],
+            'symbol'         => ['required', 'min:1', 'max:51', 'uniqueCurrencySymbol'],
+            'decimal_places' => ['required', 'min:0', 'max:12', 'numeric'],
             'enabled'        => 'in:0,1',
         ];
 
@@ -71,10 +73,10 @@ class CurrencyFormRequest extends FormRequest
 
         if (null !== $currency) {
             return [
-                'name'           => 'required|max:48|min:1',
-                'code'           => 'required|min:3|max:51',
-                'symbol'         => 'required|min:1|max:51',
-                'decimal_places' => 'required|min:0|max:12|numeric',
+                'name'           => ['required', 'max:48', 'min:1'],
+                'code'           => ['required', 'min:3', 'max:51'],
+                'symbol'         => ['required', 'min:1', 'max:51'],
+                'decimal_places' => ['required', 'min:0', 'max:12', 'numeric'],
                 'enabled'        => 'in:0,1',
             ];
         }

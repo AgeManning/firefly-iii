@@ -23,17 +23,17 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers;
 
-use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use Carbon\Exceptions\InvalidFormatException;
 use Exception;
 use FireflyIII\Enums\AccountTypeEnum;
-use FireflyIII\Events\RequestedVersionCheckStatus;
+use FireflyIII\Events\Security\System\SystemRequestedVersionCheck;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Http\Middleware\Installer;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\Bill\BillRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -43,7 +43,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * Class HomeController.
  */
-class HomeController extends Controller
+final class HomeController extends Controller
 {
     /**
      * HomeController constructor.
@@ -106,7 +106,7 @@ class HomeController extends Controller
         }
 
         $request->session()->put('is_custom_range', $isCustomRange);
-        Log::debug(sprintf('Set is_custom_range to %s', var_export($isCustomRange, true)));
+        Log::debug(sprintf('Set is_custom_range to %s', var_export($isCustomRange, return: true)));
         $request->session()->put('start', $start);
         Log::debug(sprintf('Set start to %s', $start->format('Y-m-d H:i:s')));
         $request->session()->put('end', $end);
@@ -178,9 +178,18 @@ class HomeController extends Controller
 
         /** @var User $user */
         $user           = auth()->user();
-        event(new RequestedVersionCheckStatus($user));
+        event(new SystemRequestedVersionCheck($user));
 
-        return view('index', ['count' => $count, 'subTitle' => $subTitle, 'transactions' => $transactions, 'billCount' => $billCount, 'start' => $start, 'end' => $end, 'today' => $today, 'pageTitle' => $pageTitle]);
+        return view('index', [
+            'count'        => $count,
+            'subTitle'     => $subTitle,
+            'transactions' => $transactions,
+            'billCount'    => $billCount,
+            'start'        => $start,
+            'end'          => $end,
+            'today'        => $today,
+            'pageTitle'    => $pageTitle,
+        ]);
     }
 
     private function indexV2(): mixed
@@ -193,7 +202,7 @@ class HomeController extends Controller
 
         /** @var User $user */
         $user      = auth()->user();
-        event(new RequestedVersionCheckStatus($user));
+        event(new SystemRequestedVersionCheck($user));
 
         return view('index', ['subTitle' => $subTitle, 'start' => $start, 'end' => $end, 'pageTitle' => $pageTitle]);
     }

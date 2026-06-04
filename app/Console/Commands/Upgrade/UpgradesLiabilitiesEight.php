@@ -33,16 +33,17 @@ use FireflyIII\Models\TransactionType;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Services\Internal\Destroy\TransactionGroupDestroyService;
 use FireflyIII\Services\Internal\Support\CreditRecalculateService;
+use FireflyIII\Support\Facades\FireflyConfig;
 use FireflyIII\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use FireflyIII\Support\Facades\FireflyConfig;
 
 class UpgradesLiabilitiesEight extends Command
 {
     use ShowsFriendlyMessages;
 
     public const string CONFIG_NAME = '600_upgrade_liabilities';
+
     protected $description          = 'Upgrade liabilities to new 6.0.0 structure.';
     protected $signature            = 'upgrade:600-liabilities {--F|force : Force the execution of this command.}';
 
@@ -62,85 +63,6 @@ class UpgradesLiabilitiesEight extends Command
         return 0;
     }
 
-    private function isExecuted(): bool
-    {
-        $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
-
-        return (bool)$configVar?->data;
-
-    }
-
-    private function upgradeLiabilities(): void
-    {
-        $users = User::get();
-
-        /** @var User $user */
-        foreach ($users as $user) {
-            $this->upgradeForUser($user);
-        }
-    }
-
-    private function upgradeForUser(User $user): void
-    {
-        $accounts = $user->accounts()
-            ->leftJoin('account_types', 'account_types.id', '=', 'accounts.account_type_id')
-            ->whereIn('account_types.type', config('firefly.valid_liabilities'))
-            ->get(['accounts.*'])
-        ;
-
-        /** @var Account $account */
-        foreach ($accounts as $account) {
-            $this->upgradeLiability($account);
-            $service = app(CreditRecalculateService::class);
-            $service->setAccount($account);
-            $service->recalculate();
-        }
-    }
-
-    private function upgradeLiability(Account $account): void
-    {
-        /** @var AccountRepositoryInterface $repository */
-        $repository = app(AccountRepositoryInterface::class);
-        $repository->setUser($account->user);
-
-        $direction  = $repository->getMetaValue($account, 'liability_direction');
-        if ('credit' === $direction && $this->hasBadOpening($account)) {
-            $this->deleteCreditTransaction($account);
-            $this->reverseOpeningBalance($account);
-            $this->friendlyInfo(sprintf('Corrected opening balance for liability #%d ("%s")', $account->id, $account->name));
-        }
-        if ('credit' === $direction) {
-            $count = $this->deleteTransactions($account);
-            if ($count > 0) {
-                $this->friendlyInfo(sprintf('Removed %d old format transaction(s) for liability #%d ("%s")', $count, $account->id, $account->name));
-            }
-        }
-    }
-
-    private function hasBadOpening(Account $account): bool
-    {
-        $openingBalanceType = TransactionType::whereType(TransactionTypeEnum::OPENING_BALANCE->value)->first();
-        $liabilityType      = TransactionType::whereType(TransactionTypeEnum::LIABILITY_CREDIT->value)->first();
-        $openingJournal     = TransactionJournal::leftJoin('transactions', 'transactions.transaction_journal_id', '=', 'transaction_journals.id')
-            ->where('transactions.account_id', $account->id)
-            ->where('transaction_journals.transaction_type_id', $openingBalanceType->id)
-            ->first(['transaction_journals.*'])
-        ;
-        if (null === $openingJournal) {
-            return false;
-        }
-        $liabilityJournal   = TransactionJournal::leftJoin('transactions', 'transactions.transaction_journal_id', '=', 'transaction_journals.id')
-            ->where('transactions.account_id', $account->id)
-            ->where('transaction_journals.transaction_type_id', $liabilityType->id)
-            ->first(['transaction_journals.*'])
-        ;
-        if (null === $liabilityJournal) {
-            return false;
-        }
-
-        return (bool)$openingJournal->date->isSameDay($liabilityJournal->date);
-    }
-
     private function deleteCreditTransaction(Account $account): void
     {
         $liabilityType    = TransactionType::whereType(TransactionTypeEnum::LIABILITY_CREDIT->value)->first();
@@ -153,8 +75,71 @@ class UpgradesLiabilitiesEight extends Command
             $group   = $liabilityJournal->transactionGroup;
             $service = new TransactionGroupDestroyService();
             $service->destroy($group);
-
         }
+    }
+
+    private function deleteTransactions(Account $account): int
+    {
+        $count    = 0;
+        $journals = TransactionJournal::leftJoin('transactions', 'transaction_journals.id', '=', 'transactions.transaction_journal_id')->where(
+            'transactions.account_id',
+            $account->id
+        )->get(['transaction_journals.*']);
+
+        $service  = app(TransactionGroupDestroyService::class);
+
+        /** @var TransactionJournal $journal */
+        foreach ($journals as $journal) {
+            if (null !== $journal->transactionGroup) {
+                $service->destroy($journal->transactionGroup);
+                ++$count;
+            }
+        }
+
+        return $count;
+    }
+
+    private function hasBadOpening(Account $account): bool
+    {
+        /** @var TransactionType $openingBalanceType */
+        $openingBalanceType = TransactionType::whereType(TransactionTypeEnum::OPENING_BALANCE->value)->first();
+
+        /** @var TransactionType $liabilityType */
+        $liabilityType      = TransactionType::whereType(TransactionTypeEnum::LIABILITY_CREDIT->value)->first();
+
+        /** @var null|TransactionJournal $openingJournal */
+        $openingJournal     = TransactionJournal::leftJoin('transactions', 'transactions.transaction_journal_id', '=', 'transaction_journals.id')
+            ->where('transactions.account_id', $account->id)
+            ->where('transaction_journals.transaction_type_id', $openingBalanceType->id)
+            ->first(['transaction_journals.*'])
+        ;
+        if (null === $openingJournal) {
+            return false;
+        }
+
+        /** @var null|TransactionJournal $liabilityJournal */
+        $liabilityJournal   = TransactionJournal::leftJoin('transactions', 'transactions.transaction_journal_id', '=', 'transaction_journals.id')
+            ->where('transactions.account_id', $account->id)
+            ->where('transaction_journals.transaction_type_id', $liabilityType->id)
+            ->first(['transaction_journals.*'])
+        ;
+        if (null === $liabilityJournal) {
+            return false;
+        }
+
+        return $openingJournal->date->isSameDay($liabilityJournal->date);
+    }
+
+    private function isExecuted(): bool
+    {
+        $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
+
+        return (bool) $configVar?->data;
+    }
+
+    private function markAsExecuted(): void
+    {
+        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 
     private function reverseOpeningBalance(Account $account): void
@@ -186,28 +171,51 @@ class UpgradesLiabilitiesEight extends Command
         Log::warning('Did not find opening balance.');
     }
 
-    private function deleteTransactions(Account $account): int
+    private function upgradeForUser(User $user): void
     {
-        $count    = 0;
-        $journals = TransactionJournal::leftJoin('transactions', 'transaction_journals.id', '=', 'transactions.transaction_journal_id')
-            ->where('transactions.account_id', $account->id)->get(['transaction_journals.*'])
+        $accounts = $user
+            ->accounts()
+            ->leftJoin('account_types', 'account_types.id', '=', 'accounts.account_type_id')
+            ->whereIn('account_types.type', config('firefly.valid_liabilities'))
+            ->get(['accounts.*'])
         ;
 
-        $service  = app(TransactionGroupDestroyService::class);
-
-        /** @var TransactionJournal $journal */
-        foreach ($journals as $journal) {
-            if (null !== $journal->transactionGroup) {
-                $service->destroy($journal->transactionGroup);
-                ++$count;
-            }
+        /** @var Account $account */
+        foreach ($accounts as $account) {
+            $this->upgradeLiability($account);
+            $service = app(CreditRecalculateService::class);
+            $service->setAccount($account);
+            $service->recalculate();
         }
-
-        return $count;
     }
 
-    private function markAsExecuted(): void
+    private function upgradeLiabilities(): void
     {
-        FireflyConfig::set(self::CONFIG_NAME, true);
+        $users = User::get();
+
+        /** @var User $user */
+        foreach ($users as $user) {
+            $this->upgradeForUser($user);
+        }
+    }
+
+    private function upgradeLiability(Account $account): void
+    {
+        /** @var AccountRepositoryInterface $repository */
+        $repository = app(AccountRepositoryInterface::class);
+        $repository->setUser($account->user);
+
+        $direction  = $repository->getMetaValue($account, 'liability_direction');
+        if ('credit' === $direction && $this->hasBadOpening($account)) {
+            $this->deleteCreditTransaction($account);
+            $this->reverseOpeningBalance($account);
+            $this->friendlyInfo(sprintf('Corrected opening balance for liability #%d ("%s")', $account->id, $account->name));
+        }
+        if ('credit' === $direction) {
+            $count = $this->deleteTransactions($account);
+            if ($count > 0) {
+                $this->friendlyInfo(sprintf('Removed %d old format transaction(s) for liability #%d ("%s")', $count, $account->id, $account->name));
+            }
+        }
     }
 }

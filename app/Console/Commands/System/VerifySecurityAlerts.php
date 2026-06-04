@@ -25,13 +25,13 @@ declare(strict_types=1);
 namespace FireflyIII\Console\Commands\System;
 
 use FireflyIII\Console\Commands\ShowsFriendlyMessages;
+use FireflyIII\Support\Facades\FireflyConfig;
 use Illuminate\Console\Command;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\FilesystemException;
 use Safe\Exceptions\JsonException;
-use FireflyIII\Support\Facades\FireflyConfig;
 
 use function Safe\json_decode;
 
@@ -57,7 +57,7 @@ class VerifySecurityAlerts extends Command
         $version = config('firefly.version');
         $disk    = Storage::disk('resources');
         // Next line is ignored because it's a Laravel Facade.
-        if (!$disk->has('alerts.json')) { // @phpstan-ignore-line
+        if (!$disk->has('alerts.json')) {
             Log::debug('No alerts.json file present.');
 
             return 0;

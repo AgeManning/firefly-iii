@@ -30,8 +30,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Class ExtendCurrencyInfo
  */
-class ExtendCurrencyInfo extends Migration
-{
+return new class extends Migration {
     /**
      * Reverse the migrations.
      */
@@ -45,16 +44,13 @@ class ExtendCurrencyInfo extends Migration
     public function up(): void
     {
         try {
-            Schema::table(
-                'transaction_currencies',
-                static function (Blueprint $table): void {
-                    $table->string('code', 51)->change();
-                    $table->string('symbol', 51)->change();
-                }
-            );
+            Schema::table('transaction_currencies', static function (Blueprint $table): void {
+                $table->string('code', 51)->change();
+                $table->string('symbol', 51)->change();
+            });
         } catch (QueryException $e) {
             app('log')->error(sprintf('Could not execute query: %s', $e->getMessage()));
             app('log')->error('If the column or index already exists (see error), this is not an problem. Otherwise, please open a GitHub discussion.');
         }
     }
-}
+};

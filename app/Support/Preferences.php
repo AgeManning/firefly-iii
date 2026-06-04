@@ -47,7 +47,8 @@ class Preferences
             return new Collection();
         }
 
-        return Preference::where('user_id', $user->id)
+        return Preference::query()
+            ->where('user_id', $user->id)
             ->where('name', '!=', 'currencyPreference')
             ->where(static function (Builder $q) use ($user): void {
                 $q->whereNull('user_group_id');
@@ -61,7 +62,7 @@ class Preferences
     {
         $value = sprintf('%s%%', $search);
 
-        return Preference::where('user_id', $user->id)->whereLike('name', $value)->get();
+        return Preference::query()->where('user_id', $user->id)->whereLike('name', $value)->get();
     }
 
     public function delete(string $name): bool
@@ -70,7 +71,18 @@ class Preferences
         if (Cache::has($fullName)) {
             Cache::forget($fullName);
         }
-        Preference::where('user_id', auth()->user()->id)->where('name', $name)->delete();
+        Preference::query()->where('user_id', auth()->user()->id)->where('name', $name)->delete();
+
+        return true;
+    }
+
+    public function deleteForUser(User $user, string $name): bool
+    {
+        $fullName = sprintf('preference%s%s', auth()->user()->id, $name);
+        if (Cache::has($fullName)) {
+            Cache::forget($fullName);
+        }
+        Preference::query()->where('user_id', $user->id)->where('name', $name)->delete();
 
         return true;
     }
@@ -80,7 +92,7 @@ class Preferences
      */
     public function findByName(string $name): Collection
     {
-        return Preference::where('name', $name)->get();
+        return Preference::query()->where('name', $name)->get();
     }
 
     public function forget(User $user, string $name): void
@@ -107,7 +119,8 @@ class Preferences
     public function getArrayForUser(User $user, array $list): array
     {
         $result      = [];
-        $preferences = Preference::where('user_id', $user->id)
+        $preferences = Preference::query()
+            ->where('user_id', $user->id)
             ->where(static function (Builder $q) use ($user): void {
                 $q->whereNull('user_group_id');
                 $q->orWhere('user_group_id', $user->user_group_id);
@@ -177,7 +190,6 @@ class Preferences
             return $result;
         }
 
-
         return $result;
     }
 
@@ -186,7 +198,7 @@ class Preferences
         // Log::debug(sprintf('getForUser(#%d, "%s")', $user->id, $name));
         // don't care about user group ID, except for some specific preferences.
         $userGroupId = $this->getUserGroupId($user, $name);
-        $query       = Preference::where('user_id', $user->id)->where('name', $name);
+        $query       = Preference::query()->where('user_id', $user->id)->where('name', $name);
         if (null !== $userGroupId) {
             Log::debug('Include user group ID in query');
             $query->where('user_group_id', $userGroupId);
@@ -247,7 +259,7 @@ class Preferences
         if (is_array($lastActivity)) {
             $lastActivity = implode(',', $lastActivity);
         }
-        $setting      = hash('sha256', (string)$lastActivity);
+        $setting      = hash('sha256', (string) $lastActivity);
         $instance->setPreference('last_activity', $setting);
 
         return $setting;
@@ -294,11 +306,11 @@ class Preferences
     {
         $fullName         = sprintf('preference%s%s', $user->id, $name);
         $userGroupId      = $this->getUserGroupId($user, $name);
-        $userGroupId      = 0 === (int)$userGroupId ? null : (int)$userGroupId;
+        $userGroupId      = 0 === (int) $userGroupId ? null : (int) $userGroupId;
 
         Cache::forget($fullName);
 
-        $query            = Preference::where('user_id', $user->id)->where('name', $name);
+        $query            = Preference::query()->where('user_id', $user->id)->where('name', $name);
         if (null !== $userGroupId) {
             Log::debug('Include user group ID in query');
             $query->where('user_group_id', $userGroupId);
@@ -316,10 +328,9 @@ class Preferences
         }
         if (null === $preference) {
             $preference                = new Preference();
-            $preference->user_id       = (int)$user->id;
+            $preference->user_id       = (int) $user->id;
             $preference->user_group_id = $userGroupId;
             $preference->name          = $name;
-
         }
         $preference->data = $value;
         $preference->save();
@@ -333,7 +344,7 @@ class Preferences
         $groupId = null;
         $items   = config('firefly.admin_specific_prefs') ?? [];
         if (in_array($preferenceName, $items, true)) {
-            return (int)$user->user_group_id;
+            return (int) $user->user_group_id;
         }
 
         return $groupId;

@@ -34,7 +34,7 @@ use Illuminate\Http\JsonResponse;
 /**
  * Class DestroyController
  */
-class DestroyController extends Controller
+final class DestroyController extends Controller
 {
     private TagRepositoryInterface $repository;
 
@@ -44,17 +44,15 @@ class DestroyController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                /** @var User $user */
-                $user             = auth()->user();
+        $this->middleware(function ($request, $next) {
+            /** @var User $user */
+            $user             = auth()->user();
 
-                $this->repository = app(TagRepositoryInterface::class);
-                $this->repository->setUser($user);
+            $this->repository = app(TagRepositoryInterface::class);
+            $this->repository->setUser($user);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**

@@ -36,21 +36,19 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 /**
  * Class SubmitController
  */
-class SubmitController extends Controller
+final class SubmitController extends Controller
 {
     private WebhookRepositoryInterface $repository;
 
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->repository = app(WebhookRepositoryInterface::class);
-                $this->repository->setUser(auth()->user());
+        $this->middleware(function ($request, $next) {
+            $this->repository = app(WebhookRepositoryInterface::class);
+            $this->repository->setUser(auth()->user());
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**

@@ -41,7 +41,7 @@ use Illuminate\Support\Collection;
  *
  * Class BudgetReportController
  */
-class BudgetReportController extends Controller
+final class BudgetReportController extends Controller
 {
     use AugumentData;
     use TransactionCalculation;
@@ -58,14 +58,12 @@ class BudgetReportController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->generator     = app(GeneratorInterface::class);
-                $this->opsRepository = app(OperationsRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            $this->generator     = app(GeneratorInterface::class);
+            $this->opsRepository = app(OperationsRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -198,23 +196,6 @@ class BudgetReportController extends Controller
         return response()->json($data);
     }
 
-    private function makeEntries(Carbon $start, Carbon $end): array
-    {
-        $return         = [];
-        $format         = Navigation::preferredCarbonLocalizedFormat($start, $end);
-        $preferredRange = Navigation::preferredRangeFormat($start, $end);
-        $currentStart   = clone $start;
-        while ($currentStart <= $end) {
-            $currentEnd   = Navigation::endOfPeriod($currentStart, $preferredRange);
-            $key          = $currentStart->isoFormat($format);
-            $return[$key] = '0';
-            $currentStart = clone $currentEnd;
-            $currentStart->addDay()->startOfDay();
-        }
-
-        return $return;
-    }
-
     /**
      * Chart that groups expenses by the account.
      */
@@ -243,5 +224,22 @@ class BudgetReportController extends Controller
         $data   = $this->generator->multiCurrencyPieChart($result);
 
         return response()->json($data);
+    }
+
+    private function makeEntries(Carbon $start, Carbon $end): array
+    {
+        $return         = [];
+        $format         = Navigation::preferredCarbonLocalizedFormat($start, $end);
+        $preferredRange = Navigation::preferredRangeFormat($start, $end);
+        $currentStart   = clone $start;
+        while ($currentStart <= $end) {
+            $currentEnd   = Navigation::endOfPeriod($currentStart, $preferredRange);
+            $key          = $currentStart->isoFormat($format);
+            $return[$key] = '0';
+            $currentStart = clone $currentEnd;
+            $currentStart->addDay()->startOfDay();
+        }
+
+        return $return;
     }
 }

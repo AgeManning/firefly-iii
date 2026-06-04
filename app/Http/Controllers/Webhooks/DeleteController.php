@@ -26,17 +26,16 @@ namespace FireflyIII\Http\Controllers\Webhooks;
 
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Webhook;
-use Illuminate\Contracts\Foundation\Application;
+use FireflyIII\Support\Facades\FireflyConfig;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use FireflyIII\Support\Facades\FireflyConfig;
 
 /**
  * Class DeleteController
  */
-class DeleteController extends Controller
+final class DeleteController extends Controller
 {
     /**
      * DeleteController constructor.
@@ -46,23 +45,16 @@ class DeleteController extends Controller
         parent::__construct();
 
         // translations:
-        $this->middleware(
-            static function ($request, $next) {
-                app('view')->share('mainTitleIcon', 'fa-bolt');
-                app('view')->share('subTitleIcon', 'fa-trash');
-                app('view')->share('title', (string) trans('firefly.webhooks'));
-                app('view')->share('subTitle', (string) trans('firefly.delete_webhook'));
+        $this->middleware(static function ($request, $next) {
+            app('view')->share('mainTitleIcon', 'fa-bolt');
+            app('view')->share('subTitleIcon', 'fa-trash');
+            app('view')->share('title', (string) trans('firefly.webhooks'));
+            app('view')->share('subTitle', (string) trans('firefly.delete_webhook'));
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
-    /**
-     * Delete account screen.
-     *
-     * @return Application|Factory|View
-     */
     public function index(Webhook $webhook): Factory|View
     {
         if (false === FireflyConfig::get('allow_webhooks', config('firefly.allow_webhooks'))->data) {

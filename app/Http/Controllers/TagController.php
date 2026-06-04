@@ -23,7 +23,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers;
 
-use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
@@ -32,6 +31,7 @@ use FireflyIII\Http\Requests\TagFormRequest;
 use FireflyIII\Models\Location;
 use FireflyIII\Models\Tag;
 use FireflyIII\Repositories\Tag\TagRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Http\Controllers\PeriodOverview;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
@@ -44,11 +44,11 @@ use Psr\Container\NotFoundExceptionInterface;
 /**
  * Class TagController.
  */
-class TagController extends Controller
+final class TagController extends Controller
 {
     use PeriodOverview;
 
-    protected TagRepositoryInterface  $repository;
+    protected TagRepositoryInterface $repository;
     private AttachmentHelperInterface $attachmentsHelper;
 
     /**
@@ -59,17 +59,15 @@ class TagController extends Controller
         parent::__construct();
         $this->redirectUrl = route('tags.index');
 
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('title', (string) trans('firefly.tags'));
-                app('view')->share('mainTitleIcon', 'fa-tag');
+        $this->middleware(function ($request, $next) {
+            app('view')->share('title', (string) trans('firefly.tags'));
+            app('view')->share('mainTitleIcon', 'fa-tag');
 
-                $this->attachmentsHelper = app(AttachmentHelperInterface::class);
-                $this->repository        = app(TagRepositoryInterface::class);
+            $this->attachmentsHelper = app(AttachmentHelperInterface::class);
+            $this->repository        = app(TagRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -115,6 +113,20 @@ class TagController extends Controller
         $this->rememberPreviousUrl('tags.delete.url');
 
         return view('tags.delete', ['tag' => $tag, 'subTitle' => $subTitle]);
+    }
+
+    /**
+     * Destroy a tag.
+     */
+    public function destroy(Tag $tag): RedirectResponse
+    {
+        $tagName = $tag->tag;
+        $this->repository->destroy($tag);
+
+        session()->flash('success', (string) trans('firefly.deleted_tag', ['tag' => $tagName]));
+        Preferences::mark();
+
+        return redirect($this->getPreviousUrl('tags.delete.url'));
     }
 
     /**
@@ -205,20 +217,6 @@ class TagController extends Controller
     }
 
     /**
-     * Destroy a tag.
-     */
-    public function destroy(Tag $tag): RedirectResponse
-    {
-        $tagName = $tag->tag;
-        $this->repository->destroy($tag);
-
-        session()->flash('success', (string) trans('firefly.deleted_tag', ['tag' => $tagName]));
-        Preferences::mark();
-
-        return redirect($this->getPreviousUrl('tags.delete.url'));
-    }
-
-    /**
      * Show a single tag.
      *
      * @return Factory|View
@@ -231,20 +229,17 @@ class TagController extends Controller
     {
         // default values:
         $subTitleIcon = 'fa-tag';
-        $page         = (int) $request->get('page');
+        $page         = (int) $request->input('page');
         $pageSize     = (int) Preferences::get('listPageSize', 50)->data;
         $start       ??= session('start');
         $end         ??= session('end');
         $location     = $this->repository->getLocation($tag);
         $attachments  = $this->repository->getAttachments($tag);
-        $subTitle     = trans(
-            'firefly.journals_in_period_for_tag',
-            [
-                'tag'   => $tag->tag,
-                'start' => $start->isoFormat($this->monthAndDayFormat),
-                'end'   => $end->isoFormat($this->monthAndDayFormat),
-            ]
-        );
+        $subTitle     = trans('firefly.journals_in_period_for_tag', [
+            'tag'   => $tag->tag,
+            'start' => $start->isoFormat($this->monthAndDayFormat),
+            'end'   => $end->isoFormat($this->monthAndDayFormat),
+        ]);
 
         $startPeriod  = $this->repository->firstUseDate($tag);
         $startPeriod ??= today(config('app.timezone'));
@@ -255,12 +250,39 @@ class TagController extends Controller
         /** @var GroupCollectorInterface $collector */
         $collector    = app(GroupCollectorInterface::class);
 
-        $collector->setRange($start, $end)->setLimit($pageSize)->setPage($page)->withAccountInformation()->setTag($tag)->withBudgetInformation()->withCategoryInformation()->withAttachmentInformation();
+        // collect transaction journal IDs in repository,
+        // this makes the collector faster and more accurate.
+        $journalIds   = $this->repository->getJournalIds($tag);
+        if (0 === count($journalIds)) {
+            $collector->findNothing();
+        }
+        $collector
+            ->setRange($start, $end)
+            ->setLimit($pageSize)
+            ->setPage($page)
+            ->setJournalIds($journalIds)
+            ->withAccountInformation()
+            ->withBudgetInformation()
+            ->withCategoryInformation()
+            ->withAttachmentInformation()
+        ;
+
         $groups       = $collector->getPaginatedGroups();
         $groups->setPath($path);
         $sums         = $this->repository->sumsOfTag($tag, $start, $end);
 
-        return view('tags.show', ['tag' => $tag, 'attachments' => $attachments, 'sums' => $sums, 'periods' => $periods, 'subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'groups' => $groups, 'start' => $start, 'end' => $end, 'location' => $location]);
+        return view('tags.show', [
+            'tag'          => $tag,
+            'attachments'  => $attachments,
+            'sums'         => $sums,
+            'periods'      => $periods,
+            'subTitle'     => $subTitle,
+            'subTitleIcon' => $subTitleIcon,
+            'groups'       => $groups,
+            'start'        => $start,
+            'end'          => $end,
+            'location'     => $location,
+        ]);
     }
 
     /**
@@ -285,17 +307,41 @@ class TagController extends Controller
         $path         = route('tags.show', [$tag->id, 'all']);
         $location     = $this->repository->getLocation($tag);
 
+        // collect transaction journal IDs in repository,
+        // this makes the collector faster and more accurate.
         /** @var GroupCollectorInterface $collector */
         $collector    = app(GroupCollectorInterface::class);
-        $collector->setRange($start, $end)->setLimit($pageSize)->setPage($page)->withAccountInformation()
-            ->setTag($tag)->withBudgetInformation()->withCategoryInformation()
+        $journalIds   = $this->repository->getJournalIds($tag);
+        if (0 === count($journalIds)) {
+            $collector->findNothing();
+        }
+
+        $collector
+            ->setRange($start, $end)
+            ->setLimit($pageSize)
+            ->setPage($page)
+            ->withAccountInformation()
+            ->setJournalIds($journalIds)
+            ->withBudgetInformation()
+            ->withCategoryInformation()
             ->withAttachmentInformation()
         ;
         $groups       = $collector->getPaginatedGroups();
         $groups->setPath($path);
         $sums         = $this->repository->sumsOfTag($tag, $start, $end);
 
-        return view('tags.show', ['tag' => $tag, 'attachments' => $attachments, 'sums' => $sums, 'periods' => $periods, 'subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'groups' => $groups, 'start' => $start, 'end' => $end, 'location' => $location]);
+        return view('tags.show', [
+            'tag'          => $tag,
+            'attachments'  => $attachments,
+            'sums'         => $sums,
+            'periods'      => $periods,
+            'subTitle'     => $subTitle,
+            'subTitleIcon' => $subTitleIcon,
+            'groups'       => $groups,
+            'start'        => $start,
+            'end'          => $end,
+            'location'     => $location,
+        ]);
     }
 
     /**

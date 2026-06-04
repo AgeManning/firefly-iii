@@ -23,7 +23,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Report;
 
-use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
@@ -36,13 +35,14 @@ use FireflyIII\Support\Http\Controllers\BasicDataSupport;
 use FireflyIII\Support\Report\Budget\BudgetReportGenerator;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Throwable;
 
 /**
  * Class BudgetController.
  */
-class BudgetController extends Controller
+final class BudgetController extends Controller
 {
     use BasicDataSupport;
 
@@ -54,13 +54,11 @@ class BudgetController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->opsRepository = app(OperationsRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            $this->opsRepository = app(OperationsRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -99,12 +97,7 @@ class BudgetController extends Controller
         /** @var Account $account */
         foreach ($accounts as $account) {
             $accountId = $account->id;
-            $report[$accountId] ??= [
-                'name'       => $account->name,
-                'id'         => $account->id,
-                'iban'       => $account->iban,
-                'currencies' => [],
-            ];
+            $report[$accountId] ??= ['name' => $account->name, 'id' => $account->id, 'iban' => $account->iban, 'currencies' => []];
         }
 
         // loop expenses.
@@ -202,11 +195,7 @@ class BudgetController extends Controller
         /** @var Budget $budget */
         foreach ($budgets as $budget) {
             $budgetId = $budget->id;
-            $report[$budgetId] ??= [
-                'name'       => $budget->name,
-                'id'         => $budget->id,
-                'currencies' => [],
-            ];
+            $report[$budgetId] ??= ['name' => $budget->name, 'id' => $budget->id, 'currencies' => []];
         }
         foreach ($spent as $currency) {
             $currencyId = $currency['currency_id'];
@@ -232,7 +221,10 @@ class BudgetController extends Controller
                         'currency_name'           => $currency['currency_name'],
                         'currency_decimal_places' => $currency['currency_decimal_places'],
                     ];
-                    $report[$budgetId]['currencies'][$currencyId]['sum'] = bcadd($report[$budgetId]['currencies'][$currencyId]['sum'], (string) $journal['amount']);
+                    $report[$budgetId]['currencies'][$currencyId]['sum'] = bcadd(
+                        $report[$budgetId]['currencies'][$currencyId]['sum'],
+                        (string) $journal['amount']
+                    );
                     $sums[$currencyId]['sum']                            = bcadd($sums[$currencyId]['sum'], (string) $journal['amount']);
                 }
             }
@@ -292,7 +284,7 @@ class BudgetController extends Controller
         $cache->addProperty('budget-period-report');
         $cache->addProperty($accounts->pluck('id')->toArray());
         if ($cache->has()) {
-            return $cache->get();
+            // return $cache->get();
         }
 
         $periods   = Navigation::listOfPeriods($start, $end);
@@ -300,7 +292,6 @@ class BudgetController extends Controller
 
         // list expenses for budgets in account(s)
         $expenses  = $this->opsRepository->listExpenses($start, $end, $accounts);
-
         $report    = [];
         foreach ($expenses as $currency) {
             foreach ($currency['budgets'] as $budget) {
@@ -308,14 +299,15 @@ class BudgetController extends Controller
                 foreach ($budget['transaction_journals'] as $journal) {
                     // #10678
                     // skip transactions between two asset / liability accounts.
+                    // #12223
+                    // must also be of the same type to be skipped
                     if (
                         in_array($journal['source_account_type'], config('firefly.valid_currency_account_types'), true)
                         && in_array($journal['destination_account_type'], config('firefly.valid_currency_account_types'), true)
+                        && $journal['source_account_type'] === $journal['destination_account_type']
                     ) {
                         continue;
                     }
-
-
 
                     ++$count;
                     $key                               = sprintf('%d-%d', $budget['id'], $currency['currency_id']);

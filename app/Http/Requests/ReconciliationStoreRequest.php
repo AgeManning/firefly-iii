@@ -24,11 +24,11 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Requests;
 
-use Illuminate\Contracts\Validation\Validator;
 use FireflyIII\Rules\IsValidAmount;
 use FireflyIII\Rules\ValidJournals;
 use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
 
@@ -39,6 +39,8 @@ class ReconciliationStoreRequest extends FormRequest
 {
     use ChecksLogin;
     use ConvertsDataTypes;
+
+    protected array $acceptedRoles = [];
 
     /**
      * Returns the data required by the controller.
@@ -69,13 +71,13 @@ class ReconciliationStoreRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'start'        => 'required|date',
-            'end'          => 'required|date',
+            'start'        => ['required', 'date'],
+            'end'          => ['required', 'date'],
             'startBalance' => ['nullable', new IsValidAmount()],
             'endBalance'   => ['nullable', new IsValidAmount()],
             'difference'   => ['required', new IsValidAmount()],
             'journals'     => [new ValidJournals()],
-            'reconcile'    => 'required|in:create,nothing',
+            'reconcile'    => ['required', 'in:create,nothing'],
         ];
     }
 

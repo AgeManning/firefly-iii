@@ -23,7 +23,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Models;
 
-use Deprecated;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Support\Models\ReturnsIntegerIdTrait;
 use Illuminate\Database\Eloquent\Model;
@@ -36,53 +35,27 @@ class TransactionType extends Model
     use ReturnsIntegerIdTrait;
     use SoftDeletes;
 
-    #[Deprecated]
-    /** @deprecated */
-    public const string DEPOSIT          = 'Deposit';
+    protected function casts(): array
+    {
+        return ['created_at' => 'datetime', 'updated_at' => 'datetime', 'deleted_at' => 'datetime'];
+    }
 
-    #[Deprecated]
-    /** @deprecated */
-    public const string INVALID          = 'Invalid';
-
-    #[Deprecated]
-    /** @deprecated */
-    public const string LIABILITY_CREDIT = 'Liability credit';
-
-    #[Deprecated]
-    /** @deprecated */
-    public const string OPENING_BALANCE  = 'Opening balance';
-
-    #[Deprecated]
-    /** @deprecated */
-    public const string RECONCILIATION   = 'Reconciliation';
-
-    #[Deprecated]
-    /** @deprecated */
-    public const string TRANSFER         = 'Transfer';
-
-    #[Deprecated]
-    /** @deprecated */
-    public const string WITHDRAWAL       = 'Withdrawal';
-
-    protected $casts
-                                         = [
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-            'deleted_at' => 'datetime',
-        ];
-    protected $fillable                  = ['type'];
+    protected $fillable = ['type'];
 
     /**
      * Route binder. Converts the key in the URL to the specified object (or throw 404).
      *
      * @throws NotFoundHttpException
      */
-    public static function routeBinder(string $type): self
+    public static function routeBinder(self|string $value): self
     {
         if (!auth()->check()) {
             throw new NotFoundHttpException();
         }
-        $transactionType = self::where('type', ucfirst($type))->first();
+        if ($value instanceof self) {
+            $value = (string) $value->type;
+        }
+        $transactionType = self::where('type', ucfirst($value))->first();
         if (null !== $transactionType) {
             return $transactionType;
         }
@@ -113,12 +86,5 @@ class TransactionType extends Model
     public function transactionJournals(): HasMany
     {
         return $this->hasMany(TransactionJournal::class);
-    }
-
-    protected function casts(): array
-    {
-        return [
-            // 'type' => TransactionTypeEnum::class,
-        ];
     }
 }

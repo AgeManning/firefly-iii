@@ -47,52 +47,11 @@ final class PiggyBankControllerTest extends TestCase
      */
     use RefreshDatabase;
 
-    private function createTestPiggyBanks(int $count, User $user): void
-    {
-        $type     = AccountType::whereType(AccountTypeEnum::DEFAULT->value)->first();
-        if (null === $type) {
-            $type = AccountType::create(['type' => AccountTypeEnum::DEFAULT->value]);
-        }
-        $currency = TransactionCurrency::whereCode('EUR')->first();
-        if (null === $currency) {
-            $currency = TransactionCurrency::create(
-                [
-                    'code'   => 'EUR',
-                    'name'   => 'Euro',
-                    'symbol' => '€',
-                ]
-            );
-        }
-        for ($i = 1; $i <= $count; ++$i) {
-            $piggyBank = PiggyBank::create(
-                [
-                    'user_id'                 => $user->id,
-                    'name'                    => 'Piggy bank '.$i,
-                    'target_amount'           => 1000,
-                    'transaction_currency_id' => $currency->id,
-                    'target_date'             => now()->addDays(30),
-                    'user_group_id'           => $user->user_group_id,
-                    'active'                  => 1,
-                ]
-            );
-            $account   = Account::create(
-                [
-                    'user_id'         => $user->id,
-                    'name'            => 'Account '.$i,
-                    'user_group_id'   => $user->user_group_id,
-                    'account_type_id' => $type->id,
-                    'active'          => 1,
-                ]
-            );
-            $piggyBank->accounts()->save($account);
-        }
-    }
-
     public function testGivenAnUnauthenticatedRequestWhenCallingTheBudgetsEndpointThenReturns401HttpCode(): void
     {
         // test API
         $response = $this->get(route('api.v1.autocomplete.piggy-banks'), ['Accept' => 'application/json']);
-        $response->assertStatus(401);
+        $response->assertUnauthorized();
         $response->assertHeader('Content-Type', 'application/json');
         $response->assertContent('{"message":"Unauthenticated.","exception":"AuthenticationException"}');
     }
@@ -104,9 +63,8 @@ final class PiggyBankControllerTest extends TestCase
         $this->actingAs($user);
 
         $response = $this->get(route('api.v1.autocomplete.piggy-banks'), ['Accept' => 'application/json']);
-        $response->assertStatus(200);
+        $response->assertOk();
         $response->assertHeader('Content-Type', 'application/json');
-
     }
 
     public function testGivenAuthenticatedRequestWhenCallingTheBudgetsEndpointThenReturnsBudgets(): void
@@ -116,32 +74,11 @@ final class PiggyBankControllerTest extends TestCase
 
         $this->createTestPiggyBanks(5, $user);
         $response = $this->get(route('api.v1.autocomplete.piggy-banks'), ['Accept' => 'application/json']);
-        $response->assertStatus(200);
+        $response->assertOk();
         $response->assertHeader('Content-Type', 'application/json');
         $response->assertJsonCount(5);
         $response->assertJsonFragment(['name' => 'Piggy bank 1']);
-        $response->assertJsonStructure([
-            '*' => [
-                'id',
-                'name',
-            ],
-        ]);
-    }
-
-    public function testGivenAuthenticatedRequestWhenCallingTheBudgetsEndpointWithQueryThenReturnsBudgetsWithLimit(): void
-    {
-        $user     = $this->createAuthenticatedUser();
-        $this->actingAs($user);
-
-        $this->createTestPiggyBanks(5, $user);
-        $response = $this->get(route('api.v1.autocomplete.piggy-banks', [
-            'query' => 'Piggy',
-            'limit' => 3,
-        ]), ['Accept' => 'application/json']);
-
-        $response->assertStatus(200);
-        $response->assertHeader('Content-Type', 'application/json');
-        $response->assertJsonCount(3);
+        $response->assertJsonStructure(['*' => ['id', 'name']]);
     }
 
     public function testGivenAuthenticatedRequestWhenCallingTheBudgetsEndpointWithQueryThenReturnsBudgetsThatMatchQuery(): void
@@ -150,15 +87,56 @@ final class PiggyBankControllerTest extends TestCase
         $this->actingAs($user);
 
         $this->createTestPiggyBanks(20, $user);
-        $response = $this->get(route('api.v1.autocomplete.piggy-banks', [
-            'query' => 'Piggy bank 1',
-            'limit' => 20,
-        ]), ['Accept' => 'application/json']);
+        $response = $this->get(route('api.v1.autocomplete.piggy-banks', ['query' => 'Piggy bank 1', 'limit' => 20]), ['Accept' => 'application/json']);
 
-        $response->assertStatus(200);
+        $response->assertOk();
         $response->assertHeader('Content-Type', 'application/json');
         // Budget 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 (11)
         $response->assertJsonCount(11);
         $response->assertJsonMissing(['name' => 'Piggy bank 2']);
+    }
+
+    public function testGivenAuthenticatedRequestWhenCallingTheBudgetsEndpointWithQueryThenReturnsBudgetsWithLimit(): void
+    {
+        $user     = $this->createAuthenticatedUser();
+        $this->actingAs($user);
+
+        $this->createTestPiggyBanks(5, $user);
+        $response = $this->get(route('api.v1.autocomplete.piggy-banks', ['query' => 'Piggy', 'limit' => 3]), ['Accept' => 'application/json']);
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'application/json');
+        $response->assertJsonCount(3);
+    }
+
+    private function createTestPiggyBanks(int $count, User $user): void
+    {
+        $type     = AccountType::whereType(AccountTypeEnum::DEFAULT->value)->first();
+        if (null === $type) {
+            $type = AccountType::create(['type' => AccountTypeEnum::DEFAULT->value]);
+        }
+        $currency = TransactionCurrency::whereCode('EUR')->first();
+        if (null === $currency) {
+            $currency = TransactionCurrency::create(['code' => 'EUR', 'name' => 'Euro', 'symbol' => '€']);
+        }
+        for ($i = 1; $i <= $count; ++$i) {
+            $piggyBank = PiggyBank::create([
+                'user_id'                 => $user->id,
+                'name'                    => 'Piggy bank '.$i,
+                'target_amount'           => 1000,
+                'transaction_currency_id' => $currency->id,
+                'target_date'             => now()->addDays(30),
+                'user_group_id'           => $user->user_group_id,
+                'active'                  => 1,
+            ]);
+            $account   = Account::create([
+                'user_id'         => $user->id,
+                'name'            => 'Account '.$i,
+                'user_group_id'   => $user->user_group_id,
+                'account_type_id' => $type->id,
+                'active'          => 1,
+            ]);
+            $piggyBank->accounts()->save($account);
+        }
     }
 }

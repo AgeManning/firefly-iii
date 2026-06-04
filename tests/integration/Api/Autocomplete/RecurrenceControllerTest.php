@@ -43,6 +43,70 @@ final class RecurrenceControllerTest extends TestCase
      */
     use RefreshDatabase;
 
+    public function testAuthenticatedCall(): void
+    {
+        // act as a user
+        $user     = $this->createAuthenticatedUser();
+        $this->actingAs($user);
+
+        $response = $this->get(route('api.v1.autocomplete.recurring'), ['Accept' => 'application/json']);
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'application/json');
+    }
+
+    public function testGivenAuthenticatedRequestWithItems(): void
+    {
+        $user     = $this->createAuthenticatedUser();
+        $this->actingAs($user);
+
+        $this->createTestRecurrences(5, $user);
+        $response = $this->get(route('api.v1.autocomplete.recurring'), ['Accept' => 'application/json']);
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'application/json');
+        $response->assertJsonCount(5);
+        $response->assertJsonFragment(['name' => 'Recurrence 1']);
+        $response->assertJsonStructure(['*' => ['id', 'name', 'active']]);
+    }
+
+    public function testGivenAuthenticatedRequestWithItemsLimited(): void
+    {
+        $user     = $this->createAuthenticatedUser();
+        $this->actingAs($user);
+
+        $this->createTestRecurrences(5, $user);
+        $response = $this->get(route('api.v1.autocomplete.recurring', ['query' => 'Recurrence', 'limit' => 3]), ['Accept' => 'application/json']);
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'application/json');
+        $response->assertJsonCount(3);
+        $response->assertJsonFragment(['name' => 'Recurrence 1']);
+        $response->assertJsonStructure(['*' => ['id', 'name', 'active']]);
+    }
+
+    public function testGivenAuthenticatedRequestWithItemsLots(): void
+    {
+        $user     = $this->createAuthenticatedUser();
+        $this->actingAs($user);
+
+        $this->createTestRecurrences(20, $user);
+        $response = $this->get(route('api.v1.autocomplete.recurring', ['query' => 'Recurrence 1', 'limit' => 20]), ['Accept' => 'application/json']);
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'application/json');
+        // Bill 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 (11)
+        $response->assertJsonCount(11);
+        $response->assertJsonMissing(['name' => 'Recurrence 2']);
+    }
+
+    public function testUnAuthenticatedCall(): void
+    {
+        // test API
+        $response = $this->get(route('api.v1.autocomplete.recurring'), ['Accept' => 'application/json']);
+        $response->assertUnauthorized();
+        $response->assertHeader('Content-Type', 'application/json');
+        $response->assertContent('{"message":"Unauthenticated.","exception":"AuthenticationException"}');
+    }
+
     private function createTestRecurrences(int $count, User $user): void
     {
         for ($i = 1; $i <= $count; ++$i) {
@@ -56,92 +120,7 @@ final class RecurrenceControllerTest extends TestCase
                 'apply_rules'         => 1,
                 'active'              => 1,
                 'repetitions'         => 5,
-
             ]);
         }
-    }
-
-    public function testUnAuthenticatedCall(): void
-    {
-        // test API
-        $response = $this->get(route('api.v1.autocomplete.recurring'), ['Accept' => 'application/json']);
-        $response->assertStatus(401);
-        $response->assertHeader('Content-Type', 'application/json');
-        $response->assertContent('{"message":"Unauthenticated.","exception":"AuthenticationException"}');
-    }
-
-    public function testAuthenticatedCall(): void
-    {
-        // act as a user
-        $user     = $this->createAuthenticatedUser();
-        $this->actingAs($user);
-
-        $response = $this->get(route('api.v1.autocomplete.recurring'), ['Accept' => 'application/json']);
-        $response->assertStatus(200);
-        $response->assertHeader('Content-Type', 'application/json');
-    }
-
-    public function testGivenAuthenticatedRequestWithItems(): void
-    {
-        $user     = $this->createAuthenticatedUser();
-        $this->actingAs($user);
-
-        $this->createTestRecurrences(5, $user);
-        $response = $this->get(route('api.v1.autocomplete.recurring'), ['Accept' => 'application/json']);
-        $response->assertStatus(200);
-        $response->assertHeader('Content-Type', 'application/json');
-        $response->assertJsonCount(5);
-        $response->assertJsonFragment(['name' => 'Recurrence 1']);
-        $response->assertJsonStructure([
-            '*' => [
-                'id',
-                'name',
-                'active',
-            ],
-        ]);
-
-    }
-
-    public function testGivenAuthenticatedRequestWithItemsLimited(): void
-    {
-        $user     = $this->createAuthenticatedUser();
-        $this->actingAs($user);
-
-        $this->createTestRecurrences(5, $user);
-        $response = $this->get(route('api.v1.autocomplete.recurring', [
-            'query' => 'Recurrence',
-            'limit' => 3,
-        ]), ['Accept' => 'application/json']);
-
-        $response->assertStatus(200);
-        $response->assertHeader('Content-Type', 'application/json');
-        $response->assertJsonCount(3);
-        $response->assertJsonFragment(['name' => 'Recurrence 1']);
-        $response->assertJsonStructure([
-            '*' => [
-                'id',
-                'name',
-                'active',
-            ],
-        ]);
-
-    }
-
-    public function testGivenAuthenticatedRequestWithItemsLots(): void
-    {
-        $user     = $this->createAuthenticatedUser();
-        $this->actingAs($user);
-
-        $this->createTestRecurrences(20, $user);
-        $response = $this->get(route('api.v1.autocomplete.recurring', [
-            'query' => 'Recurrence 1',
-            'limit' => 20,
-        ]), ['Accept' => 'application/json']);
-
-        $response->assertStatus(200);
-        $response->assertHeader('Content-Type', 'application/json');
-        // Bill 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 (11)
-        $response->assertJsonCount(11);
-        $response->assertJsonMissing(['name' => 'Recurrence 2']);
     }
 }

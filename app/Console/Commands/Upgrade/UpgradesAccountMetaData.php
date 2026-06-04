@@ -27,8 +27,8 @@ namespace FireflyIII\Console\Commands\Upgrade;
 use FireflyIII\Console\Commands\ShowsFriendlyMessages;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\AccountMeta;
-use Illuminate\Console\Command;
 use FireflyIII\Support\Facades\FireflyConfig;
+use Illuminate\Console\Command;
 
 class UpgradesAccountMetaData extends Command
 {
@@ -66,10 +66,10 @@ class UpgradesAccountMetaData extends Command
          * @var string $new
          */
         foreach ($array as $old => $new) {
-            $count += AccountMeta::where('name', $old)->update(['name' => $new]);
+            $count += AccountMeta::query()->where('name', $old)->update(['name' => $new]);
 
             // delete empty entries while we're at it.
-            AccountMeta::where('name', $new)->where('data', '""')->delete();
+            AccountMeta::query()->where('name', $new)->where('data', '""')->delete();
         }
 
         $this->markAsExecuted();
@@ -85,8 +85,7 @@ class UpgradesAccountMetaData extends Command
     {
         $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
 
-        return (bool)$configVar?->data;
-
+        return (bool) $configVar?->data;
     }
 
     private function markAsExecuted(): void

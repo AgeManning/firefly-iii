@@ -37,7 +37,7 @@ use League\Fractal\Resource\Item;
 /**
  * Class UpdateController
  */
-class UpdateController extends Controller
+final class UpdateController extends Controller
 {
     private RecurringRepositoryInterface $repository;
 
@@ -47,14 +47,12 @@ class UpdateController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->repository = app(RecurringRepositoryInterface::class);
-                $this->repository->setUser(auth()->user());
+        $this->middleware(function ($request, $next) {
+            $this->repository = app(RecurringRepositoryInterface::class);
+            $this->repository->setUser(auth()->user());
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**

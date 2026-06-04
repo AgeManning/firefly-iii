@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Models;
 
+use Carbon\Carbon;
 use FireflyIII\Casts\SeparateTimezoneCaster;
 use FireflyIII\Support\Models\ReturnsIntegerIdTrait;
 use FireflyIII\Support\Models\ReturnsIntegerUserIdTrait;
@@ -32,6 +33,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
+/**
+ * @property Carbon $expires
+ */
 class InvitedUser extends Model
 {
     use ReturnsIntegerIdTrait;
@@ -42,10 +46,13 @@ class InvitedUser extends Model
     /**
      * Route binder. Converts the key in the URL to the specified object (or throw 404).
      */
-    public static function routeBinder(string $value): self
+    public static function routeBinder(self|string $value): self
     {
+        if ($value instanceof self) {
+            $value = (int) $value->id;
+        }
         if (auth()->check()) {
-            $attemptId = (int)$value;
+            $attemptId = (int) $value;
 
             /** @var null|InvitedUser $attempt */
             $attempt   = self::find($attemptId);
@@ -64,11 +71,6 @@ class InvitedUser extends Model
 
     protected function casts(): array
     {
-        return [
-            'expires'       => SeparateTimezoneCaster::class,
-            'redeemed'      => 'boolean',
-            'user_id'       => 'integer',
-            'user_group_id' => 'integer',
-        ];
+        return ['expires' => SeparateTimezoneCaster::class, 'redeemed' => 'boolean', 'user_id' => 'integer', 'user_group_id' => 'integer'];
     }
 }

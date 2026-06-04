@@ -38,7 +38,7 @@ use League\Fractal\Resource\Item;
 /**
  * Class ShowController
  */
-class ShowController extends Controller
+final class ShowController extends Controller
 {
     private RuleRepositoryInterface $ruleRepository;
 
@@ -48,17 +48,15 @@ class ShowController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                /** @var User $user */
-                $user                 = auth()->user();
+        $this->middleware(function ($request, $next) {
+            /** @var User $user */
+            $user                 = auth()->user();
 
-                $this->ruleRepository = app(RuleRepositoryInterface::class);
-                $this->ruleRepository->setUser($user);
+            $this->ruleRepository = app(RuleRepositoryInterface::class);
+            $this->ruleRepository->setUser($user);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**

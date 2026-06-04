@@ -39,12 +39,13 @@ class UserFailedLoginAttempt extends Notification
 {
     use Queueable;
 
-    public function __construct(private User $user) {}
+    public function __construct(
+        private User $user
+    ) {}
 
     public function toArray(User $notifiable): array
     {
-        return [
-        ];
+        return [];
     }
 
     /**
@@ -57,8 +58,19 @@ class UserFailedLoginAttempt extends Notification
         $host      = Steam::getHostName($ip);
         $userAgent = Request::userAgent();
         $time      = now(config('app.timezone'))->isoFormat((string) trans('config.date_time_js'));
+        $link      = route('index');
 
-        return new MailMessage()->markdown('emails.security.failed-login', ['user' => $this->user, 'ip' => $ip, 'host' => $host, 'userAgent' => $userAgent, 'time' => $time])->subject($subject);
+        return new MailMessage()
+            ->markdown('emails.security.failed-login', [
+                'user'      => $this->user,
+                'ip'        => $ip,
+                'host'      => $host,
+                'userAgent' => $userAgent,
+                'time'      => $time,
+                'link'      => $link,
+            ])
+            ->subject($subject)
+        ;
     }
 
     //    public function toNtfy(User $notifiable): Message
@@ -80,9 +92,9 @@ class UserFailedLoginAttempt extends Notification
     {
         $ip = Request::ip();
 
-        return PushoverMessage::create((string) trans('email.failed_login_message', ['ip' => $ip, 'email' => $this->user->email]))
-            ->title((string) trans('email.failed_login_subject'))
-        ;
+        return PushoverMessage::create((string) trans('email.failed_login_message', ['ip' => $ip, 'email' => $this->user->email]))->title((string) trans(
+            'email.failed_login_subject'
+        ));
     }
 
     /**

@@ -24,11 +24,11 @@ declare(strict_types=1);
 
 namespace FireflyIII\Notifications\Notifiables;
 
+use FireflyIII\Support\Facades\FireflyConfig;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use NotificationChannels\Pushover\PushoverReceiver;
-use FireflyIII\Support\Facades\FireflyConfig;
 
 class OwnerNotifiable
 {
@@ -46,13 +46,13 @@ class OwnerNotifiable
         if (method_exists($this, $method)) {
             Log::debug(sprintf('Redirect for settings to "%s".', $method));
 
-            return $this->{$method}($notification); // @phpstan-ignore-line
+            return $this->{$method}($notification);
         }
         Log::debug(sprintf('No method "%s" found, return generic settings.', $method));
 
         return match ($driver) {
             'mail'  => (string) config('firefly.site_owner'),
-            default => null,
+            default => null
         };
     }
 
@@ -62,9 +62,7 @@ class OwnerNotifiable
         $pushoverAppToken  = (string) FireflyConfig::getEncrypted('pushover_app_token', '')->data;
         $pushoverUserToken = (string) FireflyConfig::getEncrypted('pushover_user_token', '')->data;
 
-        return PushoverReceiver::withUserKey($pushoverUserToken)
-            ->withApplicationToken($pushoverAppToken)
-        ;
+        return PushoverReceiver::withUserKey($pushoverUserToken)->withApplicationToken($pushoverAppToken);
     }
 
     public function routeNotificationForSlack(): string

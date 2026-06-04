@@ -24,7 +24,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Recurring;
 
-use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Enums\RecurrenceRepetitionWeekend;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
@@ -35,21 +34,21 @@ use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Repositories\Bill\BillRepositoryInterface;
 use FireflyIII\Repositories\Budget\BudgetRepositoryInterface;
 use FireflyIII\Repositories\Recurring\RecurringRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 /**
  * Class CreateController
  */
-class CreateController extends Controller
+final class CreateController extends Controller
 {
-    private AttachmentHelperInterface    $attachments;
-    private BillRepositoryInterface      $billRepository;
-    private BudgetRepositoryInterface    $budgetRepos;
+    private AttachmentHelperInterface $attachments;
+    private BillRepositoryInterface $billRepository;
+    private BudgetRepositoryInterface $budgetRepos;
     private RecurringRepositoryInterface $repository;
 
     /**
@@ -60,20 +59,18 @@ class CreateController extends Controller
         parent::__construct();
 
         // translations:
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('mainTitleIcon', 'fa-paint-brush');
-                app('view')->share('title', (string) trans('firefly.recurrences'));
-                app('view')->share('subTitle', (string) trans('firefly.create_new_recurrence'));
+        $this->middleware(function ($request, $next) {
+            app('view')->share('mainTitleIcon', 'fa-paint-brush');
+            app('view')->share('title', (string) trans('firefly.recurrences'));
+            app('view')->share('subTitle', (string) trans('firefly.create_new_recurrence'));
 
-                $this->repository     = app(RecurringRepositoryInterface::class);
-                $this->budgetRepos    = app(BudgetRepositoryInterface::class);
-                $this->attachments    = app(AttachmentHelperInterface::class);
-                $this->billRepository = app(BillRepositoryInterface::class);
+            $this->repository     = app(RecurringRepositoryInterface::class);
+            $this->budgetRepos    = app(BudgetRepositoryInterface::class);
+            $this->attachments    = app(AttachmentHelperInterface::class);
+            $this->billRepository = app(BillRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -114,10 +111,15 @@ class CreateController extends Controller
         ];
         $request->session()->flash('preFilled', $preFilled);
 
-        return view(
-            'recurring.create',
-            ['tomorrow' => $tomorrow, 'oldRepetitionType' => $oldRepetitionType, 'bills' => $bills, 'weekendResponses' => $weekendResponses, 'preFilled' => $preFilled, 'repetitionEnds' => $repetitionEnds, 'budgets' => $budgets]
-        );
+        return view('recurring.create', [
+            'tomorrow'          => $tomorrow,
+            'oldRepetitionType' => $oldRepetitionType,
+            'bills'             => $bills,
+            'weekendResponses'  => $weekendResponses,
+            'preFilled'         => $preFilled,
+            'repetitionEnds'    => $repetitionEnds,
+            'budgets'           => $budgets,
+        ]);
     }
 
     /**
@@ -205,13 +207,21 @@ class CreateController extends Controller
         }
         $request->session()->flash('preFilled', $preFilled);
 
-        return view('recurring.create', ['tomorrow' => $tomorrow, 'oldRepetitionType' => $oldRepetitionType, 'bills' => $bills, 'weekendResponses' => $weekendResponses, 'preFilled' => $preFilled, 'repetitionEnds' => $repetitionEnds, 'budgets' => $budgets]);
+        return view('recurring.create', [
+            'tomorrow'          => $tomorrow,
+            'oldRepetitionType' => $oldRepetitionType,
+            'bills'             => $bills,
+            'weekendResponses'  => $weekendResponses,
+            'preFilled'         => $preFilled,
+            'repetitionEnds'    => $repetitionEnds,
+            'budgets'           => $budgets,
+        ]);
     }
 
     /**
      * Store a recurring transaction.
      *
-     * @return Redirector|RedirectResponse
+     * @return RedirectResponse
      *
      * @throws FireflyException
      */

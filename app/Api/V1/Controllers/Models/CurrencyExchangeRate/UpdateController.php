@@ -24,52 +24,38 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Controllers\Models\CurrencyExchangeRate;
 
-use Illuminate\Http\Request;
 use Carbon\Carbon;
 use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Models\CurrencyExchangeRate\UpdateRequest;
 use FireflyIII\Enums\UserRoleEnum;
+use FireflyIII\Events\Model\CurrencyExchangeRate\UpdatedCurrencyExchangeRate;
 use FireflyIII\Models\CurrencyExchangeRate;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Repositories\ExchangeRate\ExchangeRateRepositoryInterface;
 use FireflyIII\Support\Http\Api\ValidatesUserGroupTrait;
 use FireflyIII\Transformers\ExchangeRateTransformer;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
-class UpdateController extends Controller
+final class UpdateController extends Controller
 {
     use ValidatesUserGroupTrait;
 
-    public const string RESOURCE_KEY                       = 'exchange-rates';
-    protected array                         $acceptedRoles = [UserRoleEnum::OWNER];
+    public const string RESOURCE_KEY = 'exchange-rates';
+
+    protected array $acceptedRoles   = [UserRoleEnum::OWNER];
     private ExchangeRateRepositoryInterface $repository;
 
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function (Request $request, $next) {
-                $this->repository = app(ExchangeRateRepositoryInterface::class);
-                $this->repository->setUserGroup($this->validateUserGroup($request));
+        $this->middleware(function (Request $request, $next) {
+            $this->repository = app(ExchangeRateRepositoryInterface::class);
+            $this->repository->setUserGroup($this->validateUserGroup($request));
 
-                return $next($request);
-            }
-        );
-    }
-
-    public function updateById(UpdateRequest $request, CurrencyExchangeRate $exchangeRate): JsonResponse
-    {
-        $date         = $request->getDate();
-        $rate         = $request->getRate();
-        $exchangeRate = $this->repository->updateExchangeRate($exchangeRate, $rate, $date);
-        $transformer  = new ExchangeRateTransformer();
-        $transformer->setParameters($this->parameters);
-
-        return response()
-            ->api($this->jsonApiObject(self::RESOURCE_KEY, $exchangeRate, $transformer))
-            ->header('Content-Type', self::CONTENT_TYPE)
-        ;
+            return $next($request);
+        });
     }
 
     public function updateByDate(UpdateRequest $request, TransactionCurrency $from, TransactionCurrency $to, Carbon $date): JsonResponse
@@ -81,12 +67,21 @@ class UpdateController extends Controller
         $date         = $request->getDate();
         $rate         = $request->getRate();
         $exchangeRate = $this->repository->updateExchangeRate($exchangeRate, $rate, $date);
-
+        event(new UpdatedCurrencyExchangeRate($exchangeRate));
         $transformer  = new ExchangeRateTransformer();
 
-        return response()
-            ->api($this->jsonApiObject(self::RESOURCE_KEY, $exchangeRate, $transformer))
-            ->header('Content-Type', self::CONTENT_TYPE)
-        ;
+        return response()->api($this->jsonApiObject(self::RESOURCE_KEY, $exchangeRate, $transformer))->header('Content-Type', self::CONTENT_TYPE);
+    }
+
+    public function updateById(UpdateRequest $request, CurrencyExchangeRate $exchangeRate): JsonResponse
+    {
+        $date         = $request->getDate();
+        $rate         = $request->getRate();
+        $exchangeRate = $this->repository->updateExchangeRate($exchangeRate, $rate, $date);
+        event(new UpdatedCurrencyExchangeRate($exchangeRate));
+        $transformer  = new ExchangeRateTransformer();
+        $transformer->setParameters($this->parameters);
+
+        return response()->api($this->jsonApiObject(self::RESOURCE_KEY, $exchangeRate, $transformer))->header('Content-Type', self::CONTENT_TYPE);
     }
 }

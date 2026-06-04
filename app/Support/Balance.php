@@ -50,7 +50,8 @@ class Balance
             return $cache->get();
         }
 
-        $query      = Transaction::whereIn('transactions.account_id', $accounts->pluck('id')->toArray())
+        $query      = Transaction::query()
+            ->whereIn('transactions.account_id', $accounts->pluck('id')->toArray())
             ->leftJoin('transaction_journals', 'transactions.transaction_journal_id', '=', 'transaction_journals.id')
             ->orderBy('transaction_journals.date', 'desc')
             ->orderBy('transaction_journals.order', 'asc')
@@ -61,8 +62,8 @@ class Balance
 
         $result     = $query->get(['transactions.account_id', 'transactions.transaction_currency_id', 'transactions.balance_after']);
         foreach ($result as $entry) {
-            $accountId                       = (int)$entry->account_id;
-            $currencyId                      = (int)$entry->transaction_currency_id;
+            $accountId                       = (int) $entry->account_id;
+            $currencyId                      = (int) $entry->transaction_currency_id;
             $currencies[$currencyId] ??= Amount::getTransactionCurrencyById($currencyId);
             $return[$accountId]      ??= [];
             if (array_key_exists($currencyId, $return[$accountId])) {

@@ -43,7 +43,7 @@ use League\Fractal\Resource\Collection as FractalCollection;
 /**
  * Class TriggerController
  */
-class TriggerController extends Controller
+final class TriggerController extends Controller
 {
     private RuleGroupRepositoryInterface $ruleGroupRepository;
 
@@ -53,17 +53,15 @@ class TriggerController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                /** @var User $user */
-                $user                      = auth()->user();
+        $this->middleware(function ($request, $next) {
+            /** @var User $user */
+            $user                      = auth()->user();
 
-                $this->ruleGroupRepository = app(RuleGroupRepositoryInterface::class);
-                $this->ruleGroupRepository->setUser($user);
+            $this->ruleGroupRepository = app(RuleGroupRepositoryInterface::class);
+            $this->ruleGroupRepository->setUser($user);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -107,7 +105,7 @@ class TriggerController extends Controller
         $enrichment->setUser($group->user);
         $transactions = $enrichment->enrich($transactions);
 
-        $paginator    = new LengthAwarePaginator($transactions, $count, 31337, $this->parameters->get('page'));
+        $paginator    = new LengthAwarePaginator($transactions, $count, 31_337, $this->parameters->get('page'));
         $paginator->setPath(route('api.v1.rule-groups.test', [$group->id]).$this->buildParams());
 
         // resulting list is presented as JSON thing.

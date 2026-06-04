@@ -44,12 +44,12 @@ use League\Fractal\Pagination\IlluminatePaginatorAdapter;
 use League\Fractal\Resource\Collection as FractalCollection;
 
 // Class ListController
-class ListController extends Controller
+final class ListController extends Controller
 {
     use TransactionFilter;
 
     private BudgetLimitRepositoryInterface $blRepository;
-    private BudgetRepositoryInterface      $repository;
+    private BudgetRepositoryInterface $repository;
 
     /**
      * ListController constructor.
@@ -57,16 +57,14 @@ class ListController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->repository   = app(BudgetRepositoryInterface::class);
-                $this->blRepository = app(BudgetLimitRepositoryInterface::class);
-                $this->repository->setUser(auth()->user());
-                $this->blRepository->setUser(auth()->user());
+        $this->middleware(function ($request, $next) {
+            $this->repository   = app(BudgetRepositoryInterface::class);
+            $this->blRepository = app(BudgetLimitRepositoryInterface::class);
+            $this->repository->setUser(auth()->user());
+            $this->blRepository->setUser(auth()->user());
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -119,7 +117,6 @@ class ListController extends Controller
         $enrichment   = new BudgetLimitEnrichment();
         $enrichment->setUser($admin);
         $budgetLimits = $enrichment->enrich($budgetLimits);
-
 
         /** @var BudgetLimitTransformer $transformer */
         $transformer  = app(BudgetLimitTransformer::class);

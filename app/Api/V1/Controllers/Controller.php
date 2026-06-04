@@ -63,6 +63,8 @@ abstract class Controller extends BaseController
     use ValidatesRequests;
     use ValidatesUserGroupTrait;
 
+    protected array $acceptedRoles           = [];
+
     protected const string CONTENT_TYPE      = 'application/vnd.api+json';
     protected const string JSON_CONTENT_TYPE = 'application/json';
 
@@ -96,79 +98,6 @@ abstract class Controller extends BaseController
 
             return $next($request);
         });
-    }
-
-    #[Deprecated(message: <<<'TXT'
-        use Request classes
-         Method to grab all parameters from the URL
-        TXT)]
-    private function getParameters(): ParameterBag
-    {
-        $bag      = new ParameterBag();
-        $page     = (int) request()->get('page');
-        $page     = min(max(1, $page), 2 ** 16);
-        $bag->set('page', $page);
-
-        // some date fields:
-        $dates    = ['start', 'end', 'date'];
-        foreach ($dates as $field) {
-            $date = null;
-
-            try {
-                $date = request()->query->get($field);
-            } catch (BadRequestException $e) {
-                Log::error(sprintf('Request field "%s" contains a non-scalar value. Value set to NULL.', $field));
-                Log::error($e->getMessage());
-                Log::error($e->getTraceAsString());
-            }
-            $obj  = null;
-            if (null !== $date) {
-                try {
-                    $obj = Carbon::parse((string) $date, config('app.timezone'));
-                } catch (InvalidFormatException $e) {
-                    // don't care
-                    Log::warning(sprintf('Ignored invalid date "%s" in API controller parameter check: %s', substr((string) $date, 0, 20), $e->getMessage()));
-                }
-            }
-            if ($obj instanceof Carbon) {
-                $bag->set($field, $obj);
-            }
-        }
-
-        // integer fields:
-        $integers = ['limit'];
-        foreach ($integers as $integer) {
-            try {
-                $value = request()->query->get($integer);
-            } catch (BadRequestException $e) {
-                Log::error(sprintf('Request field "%s" contains a non-scalar value. Value set to NULL.', $integer));
-                Log::error($e->getMessage());
-                Log::error($e->getTraceAsString());
-                $value = null;
-            }
-            if (null !== $value) {
-                $value = (int) $value;
-                $value = min(max(1, $value), 2 ** 16);
-                $bag->set($integer, $value);
-            }
-            if (
-                null === $value
-                && 'limit' === $integer // @phpstan-ignore-line
-                && auth()->check()
-            ) {
-                // set default for user:
-                /** @var User $user */
-                $user     = auth()->user();
-
-                $pageSize = (int) Preferences::getForUser($user, 'listPageSize', 50)->data;
-                $bag->set($integer, $pageSize);
-            }
-        }
-
-        // sort fields:
-        return $bag;
-
-        // return $this->getSortParameters($bag);
     }
 
     /**
@@ -240,5 +169,78 @@ abstract class Controller extends BaseController
         $resource = new Item($object, $transformer, $key);
 
         return $manager->createData($resource)->toArray();
+    }
+
+    /**
+     * @deprecated
+     */
+    #[Deprecated(message: <<<'TXT'
+        use Request classes
+         Method to grab all parameters from the URL
+        TXT)]
+    private function getParameters(): ParameterBag
+    {
+        $bag      = new ParameterBag();
+        $page     = (int) request()->get('page');
+        $page     = min(max(1, $page), 2 ** 16);
+        $bag->set('page', $page);
+
+        // some date fields:
+        $dates    = ['start', 'end', 'date'];
+        foreach ($dates as $field) {
+            $date = null;
+
+            try {
+                $date = request()->query->get($field);
+            } catch (BadRequestException $e) {
+                Log::error(sprintf('Request field "%s" contains a non-scalar value. Value set to NULL.', $field));
+                Log::error($e->getMessage());
+                Log::error($e->getTraceAsString());
+            }
+            $obj  = null;
+            if (null !== $date) {
+                try {
+                    $obj = Carbon::parse((string) $date, config('app.timezone'));
+                } catch (InvalidFormatException $e) {
+                    // don't care
+                    Log::warning(sprintf('Ignored invalid date "%s" in API controller parameter check: %s', substr((string) $date, 0, 20), $e->getMessage()));
+                }
+            }
+            if ($obj instanceof Carbon) {
+                $bag->set($field, $obj);
+            }
+        }
+
+        // integer fields:
+        $integers = ['limit'];
+        foreach ($integers as $integer) {
+            try {
+                $value = request()->query->get($integer);
+            } catch (BadRequestException $e) {
+                Log::error(sprintf('Request field "%s" contains a non-scalar value. Value set to NULL.', $integer));
+                Log::error($e->getMessage());
+                Log::error($e->getTraceAsString());
+                $value = null;
+            }
+            if (null !== $value) {
+                $value = (int) $value;
+                $value = min(max(1, $value), 2 ** 16);
+                $bag->set($integer, $value);
+            }
+            // && 'limit' === $integer
+            if (null === $value && auth()->check()) {
+                // set default for user:
+                /** @var User $user */
+                $user     = auth()->user();
+
+                $pageSize = (int) Preferences::getForUser($user, 'listPageSize', 50)->data;
+                $bag->set($integer, $pageSize);
+            }
+        }
+
+        // sort fields:
+        return $bag;
+
+        // return $this->getSortParameters($bag);
     }
 }

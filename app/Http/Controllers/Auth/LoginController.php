@@ -24,16 +24,15 @@ declare(strict_types=1);
 namespace FireflyIII\Http\Controllers\Auth;
 
 use Carbon\Carbon;
-use FireflyIII\Events\ActuallyLoggedIn;
-use FireflyIII\Events\Security\UnknownUserAttemptedLogin;
-use FireflyIII\Events\Security\UserAttemptedLogin;
-use FireflyIII\Exceptions\FireflyException;
+use FireflyIII\Events\Security\System\UnknownUserTriedLogin;
+use FireflyIII\Events\Security\User\UserFailedLoginAttempt;
+use FireflyIII\Events\Security\User\UserSuccessfullyLoggedIn;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Providers\RouteServiceProvider;
 use FireflyIII\Repositories\User\UserRepositoryInterface;
+use FireflyIII\Support\Facades\FireflyConfig;
 use FireflyIII\Support\Facades\Steam;
 use FireflyIII\User;
-use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\AuthenticatesUsers;
@@ -47,10 +46,7 @@ use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
-use Psr\Container\ContainerExceptionInterface;
-use Psr\Container\NotFoundExceptionInterface;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
-use FireflyIII\Support\Facades\FireflyConfig;
 
 /**
  * Class LoginController
@@ -59,7 +55,7 @@ use FireflyIII\Support\Facades\FireflyConfig;
  * redirecting them to your home screen. The controller uses a trait
  * to conveniently provide its functionality to your applications.
  */
-class LoginController extends Controller
+final class LoginController extends Controller
 {
     use AuthenticatesUsers;
     use ThrottlesLogins;
@@ -67,10 +63,10 @@ class LoginController extends Controller
     /**
      * Where to redirect users after login.
      */
-    protected string                $redirectTo = RouteServiceProvider::HOME;
+    protected string $redirectTo = RouteServiceProvider::HOME;
     private UserRepositoryInterface $repository;
 
-    private string $username                    = 'email';
+    private string $username     = 'email';
 
     /**
      * Create a new controller instance.
@@ -99,14 +95,7 @@ class LoginController extends Controller
             // basic validation exception.
             // report the failed login to the user if the count is 2 or 5.
             // TODO here be warning.
-            return redirect(route('login'))
-                ->withErrors(
-                    [
-                        $this->username => trans('auth.failed'),
-                    ]
-                )
-                ->onlyInput($this->username)
-            ;
+            return redirect(route('login'))->withErrors([$this->username => trans('auth.failed')])->onlyInput($this->username);
         }
         Log::debug('Login data is present.');
 
@@ -129,19 +118,19 @@ class LoginController extends Controller
 
             // send a custom login event because laravel will also fire a login event if a "remember me"-cookie
             // restores the event.
-            event(new ActuallyLoggedIn($this->guard()->user()));
+            event(new UserSuccessfullyLoggedIn($this->guard()->user()));
 
             return $this->sendLoginResponse($request);
         }
         Log::warning('Login attempt failed.');
-        $username = (string)$request->get($this->username());
+        $username = (string) $request->get($this->username());
         $user     = $this->repository->findByEmail($username);
         if (!$user instanceof User) {
             // send event to owner.
-            event(new UnknownUserAttemptedLogin($username));
+            event(new UnknownUserTriedLogin($username));
         }
         if ($user instanceof User) {
-            event(new UserAttemptedLogin($user));
+            event(new UserFailedLoginAttempt($user));
         }
 
         // Copied directly from AuthenticatesUsers, but with logging added:
@@ -158,36 +147,9 @@ class LoginController extends Controller
     }
 
     /**
-     * Get the login username to be used by the controller.
-     */
-    public function username(): string
-    {
-        return $this->username;
-    }
-
-    /**
-     * Get the failed login response instance.
-     *
-     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
-     *
-     * @throws ValidationException
-     */
-    protected function sendFailedLoginResponse(Request $request): void
-    {
-        $exception             = ValidationException::withMessages(
-            [
-                $this->username() => [trans('auth.failed')],
-            ]
-        );
-        $exception->redirectTo = route('login');
-
-        throw $exception;
-    }
-
-    /**
      * Log the user out of the application.
      */
-    public function logout(Request $request): Redirector|RedirectResponse|Response
+    public function logout(Request $request): RedirectResponse|Response
     {
         $authGuard  = config('firefly.authentication_guard');
         $logoutUrl  = config('firefly.custom_logout_url');
@@ -199,7 +161,7 @@ class LoginController extends Controller
         }
 
         // also logout current 2FA tokens.
-        $cookieName = config('google2fa.cookie_name', 'google2fa_token');
+        $cookieName = config('google2fa.cookie_name', 'firefly_iii_mfa_token');
         Cookie::forget($cookieName);
 
         $this->guard()->logout();
@@ -210,27 +172,27 @@ class LoginController extends Controller
 
         $this->loggedOut($request);
 
-        return $request->wantsJson()
-            ? new Response('', ResponseAlias::HTTP_NO_CONTENT)
-            : redirect('/');
+        return $request->wantsJson() ? new Response('', ResponseAlias::HTTP_NO_CONTENT) : redirect('/');
     }
 
     /**
      * Show the application's login form.
-     *
-     * @return Application|Factory|Redirector|RedirectResponse|View
-     *
-     * @throws FireflyException
-     * @throws ContainerExceptionInterface
-     * @throws NotFoundExceptionInterface
      */
     public function showLoginForm(Request $request): Factory|Redirector|RedirectResponse|View
     {
+        if ('remote_user_guard' === config('auth.defaults.guard')) {
+            $message = sprintf(
+                'Firefly III is configured to use the "remote user guard", but was unable to link you to a user. Are you sure the "%s" header is in place?',
+                config('auth.guard_header')
+            );
+
+            return view('errors.error', ['message' => $message]);
+        }
         Log::channel('audit')->info('Show login form (1.1).');
 
         $count             = DB::table('users')->count();
         $guard             = config('auth.defaults.guard');
-        $title             = (string)trans('firefly.login_page_title');
+        $title             = (string) trans('firefly.login_page_title');
 
         if (0 === $count && 'web' === $guard) {
             return redirect(route('register'));
@@ -255,12 +217,42 @@ class LoginController extends Controller
 
         $storeInCookie     = config('google2fa.store_in_cookie', false);
         if (false !== $storeInCookie) {
-            $cookieName = config('google2fa.cookie_name', 'google2fa_token');
+            $cookieName = config('google2fa.cookie_name', 'firefly_iii_mfa_token');
             Cookie::queue(Cookie::make($cookieName, 'invalid-'.Carbon::now()->getTimestamp()));
         }
         $usernameField     = $this->username();
 
-        return view('auth.login', ['allowRegistration' => $allowRegistration, 'email' => $email, 'remember' => $remember, 'allowReset' => $allowReset, 'title' => $title, 'usernameField' => $usernameField]);
+        return view('auth.login', [
+            'allowRegistration' => $allowRegistration,
+            'email'             => $email,
+            'remember'          => $remember,
+            'allowReset'        => $allowReset,
+            'title'             => $title,
+            'usernameField'     => $usernameField,
+        ]);
+    }
+
+    /**
+     * Get the login username to be used by the controller.
+     */
+    public function username(): string
+    {
+        return $this->username;
+    }
+
+    /**
+     * Get the failed login response instance.
+     *
+     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
+     *
+     * @throws ValidationException
+     */
+    protected function sendFailedLoginResponse(Request $request): void
+    {
+        $exception             = ValidationException::withMessages([$this->username() => [trans('auth.failed')]]);
+        $exception->redirectTo = route('login');
+
+        throw $exception;
     }
 
     /**
@@ -272,11 +264,11 @@ class LoginController extends Controller
     {
         $request->session()->regenerate();
         $this->clearLoginAttempts($request);
-
-        if ($response = $this->authenticated($request, $this->guard()->user())) {
+        $response = $this->authenticated($request, $this->guard()->user());
+        if (null !== $response) {
             return $response;
         }
-        $path = Steam::getSafeUrl(session()->pull('url.intended', route('index')), route('index'));
+        $path     = Steam::getSafeUrl(session()->pull('url.intended', route('index')), route('index'));
         Log::debug(sprintf('SafeURL is %s', $path));
 
         return $request->wantsJson() ? new JsonResponse([], 204) : redirect()->to($path);

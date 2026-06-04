@@ -24,19 +24,18 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\RuleGroup;
 
-use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\RuleGroupFormRequest;
 use FireflyIII\Repositories\RuleGroup\RuleGroupRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Routing\Redirector;
 use Illuminate\View\View;
 
 /**
  * Class CreateController
  */
-class CreateController extends Controller
+final class CreateController extends Controller
 {
     /** @var RuleGroupRepositoryInterface */
     private $repository;
@@ -48,16 +47,14 @@ class CreateController extends Controller
     {
         parent::__construct();
 
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('title', (string) trans('firefly.rules'));
-                app('view')->share('mainTitleIcon', 'fa-random');
+        $this->middleware(function ($request, $next) {
+            app('view')->share('title', (string) trans('firefly.rules'));
+            app('view')->share('mainTitleIcon', 'fa-random');
 
-                $this->repository = app(RuleGroupRepositoryInterface::class);
+            $this->repository = app(RuleGroupRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -82,7 +79,7 @@ class CreateController extends Controller
     /**
      * Store the rule group.
      *
-     * @return Redirector|RedirectResponse
+     * @return RedirectResponse
      */
     public function store(RuleGroupFormRequest $request)
     {

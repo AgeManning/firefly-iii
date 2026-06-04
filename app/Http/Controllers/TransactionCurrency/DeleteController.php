@@ -40,10 +40,10 @@ use Illuminate\View\View;
 /**
  * Class DeleteController
  */
-class DeleteController extends Controller
+final class DeleteController extends Controller
 {
     protected CurrencyRepositoryInterface $repository;
-    protected UserRepositoryInterface     $userRepository;
+    protected UserRepositoryInterface $userRepository;
 
     /**
      * CurrencyController constructor.
@@ -52,22 +52,20 @@ class DeleteController extends Controller
     {
         parent::__construct();
 
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('title', (string) trans('firefly.currencies'));
-                app('view')->share('mainTitleIcon', 'fa-usd');
-                $this->repository     = app(CurrencyRepositoryInterface::class);
-                $this->userRepository = app(UserRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            app('view')->share('title', (string) trans('firefly.currencies'));
+            app('view')->share('mainTitleIcon', 'fa-usd');
+            $this->repository     = app(CurrencyRepositoryInterface::class);
+            $this->userRepository = app(UserRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
      * Deletes a currency.
      *
-     * @return Factory|Redirector|RedirectResponse|View
+     * @return Factory|RedirectResponse|View
      *
      * @throws FireflyException
      */
@@ -104,7 +102,7 @@ class DeleteController extends Controller
      *
      * @throws FireflyException
      */
-    public function destroy(Request $request, TransactionCurrency $currency): Redirector|RedirectResponse
+    public function destroy(Request $request, TransactionCurrency $currency): RedirectResponse
     {
         /** @var User $user */
         $user = auth()->user();

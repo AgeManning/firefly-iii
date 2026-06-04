@@ -39,7 +39,7 @@ use League\Fractal\Resource\Item;
 /**
  * Class ShowController
  */
-class ShowController extends Controller
+final class ShowController extends Controller
 {
     private PiggyBankRepositoryInterface $repository;
 
@@ -49,14 +49,12 @@ class ShowController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->repository = app(PiggyBankRepositoryInterface::class);
-                $this->repository->setUser(auth()->user());
+        $this->middleware(function ($request, $next) {
+            $this->repository = app(PiggyBankRepositoryInterface::class);
+            $this->repository->setUser(auth()->user());
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -113,7 +111,6 @@ class ShowController extends Controller
         $enrichment  = new PiggyBankEnrichment();
         $enrichment->setUser($admin);
         $piggyBank   = $enrichment->enrichSingle($piggyBank);
-
 
         /** @var PiggyBankTransformer $transformer */
         $transformer = app(PiggyBankTransformer::class);

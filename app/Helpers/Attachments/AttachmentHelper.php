@@ -55,8 +55,8 @@ class AttachmentHelper implements AttachmentHelperInterface
     public Collection $attachments;
     public MessageBag $errors;
     public MessageBag $messages;
-    protected array   $allowedMimes  = [];
-    protected int     $maxUploadSize = 0;
+    protected array $allowedMimes  = [];
+    protected int   $maxUploadSize = 0;
 
     protected Filesystem $uploadDisk;
 
@@ -220,6 +220,42 @@ class AttachmentHelper implements AttachmentHelperInterface
     }
 
     /**
+     * Check if a model already has this file attached.
+     */
+    protected function hasFile(UploadedFile $file, Model $model): bool
+    {
+        $md5    = md5_file($file->getRealPath());
+        $name   = $file->getClientOriginalName();
+        $class  = $model::class;
+        $count  = 0;
+        // ignore lines about polymorphic calls.
+        if ($model instanceof PiggyBank) {
+            $count = $model
+                ->accounts()
+                ->first()
+                ->user
+                ->attachments()
+                ->where('md5', $md5)
+                ->where('attachable_id', $model->id)
+                ->where('attachable_type', $class)
+                ->count()
+            ;
+        }
+        if (!$model instanceof PiggyBank) {
+            $count = $model->user->attachments()->where('md5', $md5)->where('attachable_id', $model->id)->where('attachable_type', $class)->count();
+        }
+        $result = false;
+        if ($count > 0) {
+            $msg    = (string) trans('validation.file_already_attached', ['name' => $name]);
+            $this->errors->add('attachments', $msg);
+            Log::error($msg);
+            $result = true;
+        }
+
+        return $result;
+    }
+
+    /**
      * Process the upload of a file.
      *
      * @throws StringsException
@@ -233,7 +269,7 @@ class AttachmentHelper implements AttachmentHelperInterface
             $user                 = $model->user;
             // ignore lines about polymorphic calls.
             if ($model instanceof PiggyBank) {
-                $user = $model->account->user;
+                $user = $model->accounts()->first()->user;
             }
 
             $attachment           = new Attachment(); // create Attachment object.
@@ -337,33 +373,6 @@ class AttachmentHelper implements AttachmentHelperInterface
             Log::error($msg);
 
             $result = false;
-        }
-
-        return $result;
-    }
-
-    /**
-     * Check if a model already has this file attached.
-     */
-    protected function hasFile(UploadedFile $file, Model $model): bool
-    {
-        $md5    = md5_file($file->getRealPath());
-        $name   = $file->getClientOriginalName();
-        $class  = $model::class;
-        $count  = 0;
-        // ignore lines about polymorphic calls.
-        if ($model instanceof PiggyBank) {
-            $count = $model->account->user->attachments()->where('md5', $md5)->where('attachable_id', $model->id)->where('attachable_type', $class)->count();
-        }
-        if (!$model instanceof PiggyBank) {
-            $count = $model->user->attachments()->where('md5', $md5)->where('attachable_id', $model->id)->where('attachable_type', $class)->count();
-        }
-        $result = false;
-        if ($count > 0) {
-            $msg    = (string) trans('validation.file_already_attached', ['name' => $name]);
-            $this->errors->add('attachments', $msg);
-            Log::error($msg);
-            $result = true;
         }
 
         return $result;

@@ -24,21 +24,19 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\ObjectGroup;
 
-use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\ObjectGroupFormRequest;
 use FireflyIII\Models\ObjectGroup;
 use FireflyIII\Repositories\ObjectGroup\ObjectGroupRepositoryInterface;
-use Illuminate\Contracts\Foundation\Application;
+use FireflyIII\Support\Facades\Preferences;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Routing\Redirector;
 
 /**
  * Class EditController
  */
-class EditController extends Controller
+final class EditController extends Controller
 {
     private ObjectGroupRepositoryInterface $repository;
 
@@ -49,16 +47,14 @@ class EditController extends Controller
     {
         parent::__construct();
 
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('mainTitleIcon', 'fa-envelope-o');
-                app('view')->share('title', (string) trans('firefly.object_groups_page_title'));
+        $this->middleware(function ($request, $next) {
+            app('view')->share('mainTitleIcon', 'fa-envelope-o');
+            app('view')->share('title', (string) trans('firefly.object_groups_page_title'));
 
-                $this->repository = app(ObjectGroupRepositoryInterface::class);
+            $this->repository = app(ObjectGroupRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -79,10 +75,8 @@ class EditController extends Controller
 
     /**
      * Update a piggy bank.
-     *
-     * @return Application|Redirector|RedirectResponse
      */
-    public function update(ObjectGroupFormRequest $request, ObjectGroup $objectGroup): Redirector|RedirectResponse
+    public function update(ObjectGroupFormRequest $request, ObjectGroup $objectGroup): RedirectResponse
     {
         $data      = $request->getObjectGroupData();
         $piggyBank = $this->repository->update($objectGroup, $data);

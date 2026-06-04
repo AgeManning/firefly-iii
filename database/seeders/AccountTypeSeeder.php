@@ -26,6 +26,7 @@ namespace Database\Seeders;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Models\AccountType;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Log;
 use PDOException;
 
 /**
@@ -35,12 +36,12 @@ class AccountTypeSeeder extends Seeder
 {
     public function run(): void
     {
-        foreach(AccountTypeEnum::cases() as $type) {
-            if (null === AccountType::where('type', $type->value)->first()) {
+        foreach (AccountTypeEnum::cases() as $type) {
+            if (null === AccountType::query()->where('type', $type->value)->first()) {
                 try {
                     AccountType::create(['type' => $type->value]);
-                } catch (PDOException $e) {
-                    // @ignoreException
+                } catch (PDOException) {
+                    Log::debug(sprintf('Account type with value "%s" already exists and that is OK.', $type->value));
                 }
             }
         }

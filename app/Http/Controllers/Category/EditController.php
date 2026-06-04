@@ -24,25 +24,24 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Category;
 
-use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\CategoryFormRequest;
 use FireflyIII\Models\Category;
 use FireflyIII\Repositories\Category\CategoryRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 /**
  * Class EditController
  */
-class EditController extends Controller
+final class EditController extends Controller
 {
-    private AttachmentHelperInterface   $attachments;
+    private AttachmentHelperInterface $attachments;
     private CategoryRepositoryInterface $repository;
 
     /**
@@ -52,16 +51,14 @@ class EditController extends Controller
     {
         parent::__construct();
 
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('title', (string) trans('firefly.categories'));
-                app('view')->share('mainTitleIcon', 'fa-bookmark');
-                $this->repository  = app(CategoryRepositoryInterface::class);
-                $this->attachments = app(AttachmentHelperInterface::class);
+        $this->middleware(function ($request, $next) {
+            app('view')->share('title', (string) trans('firefly.categories'));
+            app('view')->share('mainTitleIcon', 'fa-bookmark');
+            $this->repository  = app(CategoryRepositoryInterface::class);
+            $this->attachments = app(AttachmentHelperInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -79,9 +76,7 @@ class EditController extends Controller
         }
         $request->session()->forget('categories.edit.fromUpdate');
 
-        $preFilled = [
-            'notes' => $request->old('notes') ?? $this->repository->getNoteText($category),
-        ];
+        $preFilled = ['notes' => $request->old('notes') ?? $this->repository->getNoteText($category)];
 
         return view('categories.edit', ['category' => $category, 'subTitle' => $subTitle, 'preFilled' => $preFilled]);
     }
@@ -89,7 +84,7 @@ class EditController extends Controller
     /**
      * Update category.
      */
-    public function update(CategoryFormRequest $request, Category $category): Redirector|RedirectResponse
+    public function update(CategoryFormRequest $request, Category $category): RedirectResponse
     {
         $data     = $request->getCategoryData();
         $this->repository->update($category, $data);

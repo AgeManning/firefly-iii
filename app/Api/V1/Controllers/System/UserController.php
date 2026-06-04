@@ -41,7 +41,7 @@ use League\Fractal\Resource\Item;
 /**
  * Class UserController.
  */
-class UserController extends Controller
+final class UserController extends Controller
 {
     private UserRepositoryInterface $repository;
 
@@ -51,13 +51,11 @@ class UserController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->repository = app(UserRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            $this->repository = app(UserRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -76,13 +74,9 @@ class UserController extends Controller
             return response()->json([], 500);
         }
 
-        if ($this->repository->hasRole($admin, 'owner')) {
-            $this->repository->destroy($user);
+        $this->repository->destroy($user);
 
-            return response()->json([], 204);
-        }
-
-        throw new FireflyException('200025: No access to function.');
+        return response()->json([], 204);
     }
 
     /**

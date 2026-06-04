@@ -32,6 +32,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use function Safe\json_decode;
 use function Safe\json_encode;
 
+/**
+ * @property TransactionJournal $transactionJournal
+ */
 class TransactionJournalMeta extends Model
 {
     use ReturnsIntegerIdTrait;
@@ -48,16 +51,12 @@ class TransactionJournalMeta extends Model
 
     protected function casts(): array
     {
-        return [
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-            'deleted_at' => 'datetime',
-        ];
+        return ['created_at' => 'datetime', 'updated_at' => 'datetime', 'deleted_at' => 'datetime'];
     }
 
     protected function data(): Attribute
     {
-        return Attribute::make(get: static fn ($value): mixed => json_decode((string)$value, false), set: static function ($value): array {
+        return Attribute::make(get: static fn ($value): mixed => json_decode((string) $value, false), set: static function ($value): array {
             $data = json_encode($value);
 
             return ['data' => $data, 'hash' => hash('sha256', $data)];
@@ -66,8 +65,6 @@ class TransactionJournalMeta extends Model
 
     protected function transactionJournalId(): Attribute
     {
-        return Attribute::make(
-            get: static fn ($value): int => (int)$value,
-        );
+        return Attribute::make(get: static fn ($value): int => (int) $value);
     }
 }

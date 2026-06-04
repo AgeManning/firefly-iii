@@ -29,15 +29,16 @@ use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\AccountType;
+use FireflyIII\Support\Facades\FireflyConfig;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
-use FireflyIII\Support\Facades\FireflyConfig;
 
 class UpgradesCreditCardLiabilities extends Command
 {
     use ShowsFriendlyMessages;
 
     public const string CONFIG_NAME = '480_cc_liabilities';
+
     protected $description          = 'Convert old credit card liabilities.';
     protected $signature            = 'upgrade:480-cc-liabilities {--F|force : Force the execution of this command.}';
 
@@ -54,8 +55,8 @@ class UpgradesCreditCardLiabilities extends Command
             return 0;
         }
 
-        $ccType   = AccountType::where('type', AccountTypeEnum::CREDITCARD->value)->first();
-        $debtType = AccountType::where('type', AccountTypeEnum::DEBT->value)->first();
+        $ccType   = AccountType::query()->where('type', AccountTypeEnum::CREDITCARD->value)->first();
+        $debtType = AccountType::query()->where('type', AccountTypeEnum::DEBT->value)->first();
         if (null === $ccType || null === $debtType) {
             $this->markAsExecuted();
 
@@ -63,7 +64,7 @@ class UpgradesCreditCardLiabilities extends Command
         }
 
         /** @var Collection $accounts */
-        $accounts = Account::where('account_type_id', $ccType->id)->get();
+        $accounts = Account::query()->where('account_type_id', $ccType->id)->get();
         foreach ($accounts as $account) {
             $account->account_type_id = $debtType->id;
             $account->save();

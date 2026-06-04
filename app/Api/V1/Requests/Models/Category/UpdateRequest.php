@@ -37,15 +37,14 @@ class UpdateRequest extends FormRequest
     use ChecksLogin;
     use ConvertsDataTypes;
 
+    protected array $acceptedRoles = [];
+
     /**
      * Get all data from the request.
      */
     public function getAll(): array
     {
-        $fields = [
-            'name'  => ['name', 'convertString'],
-            'notes' => ['notes', 'stringWithNewlines'],
-        ];
+        $fields = ['name' => ['name', 'convertString'], 'notes' => ['notes', 'stringWithNewlines']];
 
         return $this->getAllData($fields);
     }
@@ -58,8 +57,6 @@ class UpdateRequest extends FormRequest
         /** @var Category $category */
         $category = $this->route()->parameter('category');
 
-        return [
-            'name' => sprintf('min:1|max:100|uniqueObjectForUser:categories,name,%d', $category->id),
-        ];
+        return ['name' => sprintf('min:1|max:100|uniqueObjectForUser:categories,name,%d', $category->id)];
     }
 }

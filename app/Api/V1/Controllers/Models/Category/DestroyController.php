@@ -33,7 +33,7 @@ use Illuminate\Http\JsonResponse;
 /**
  * Class DestroyController
  */
-class DestroyController extends Controller
+final class DestroyController extends Controller
 {
     private CategoryRepositoryInterface $repository;
 
@@ -43,14 +43,12 @@ class DestroyController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->repository = app(CategoryRepositoryInterface::class);
-                $this->repository->setUser(auth()->user());
+        $this->middleware(function ($request, $next) {
+            $this->repository = app(CategoryRepositoryInterface::class);
+            $this->repository->setUser(auth()->user());
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**

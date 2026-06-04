@@ -24,13 +24,13 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\TransactionCurrency;
 
-use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\CurrencyFormRequest;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Repositories\Currency\CurrencyRepositoryInterface;
 use FireflyIII\Repositories\User\UserRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\User;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
@@ -39,10 +39,10 @@ use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
-class EditController extends Controller
+final class EditController extends Controller
 {
     protected CurrencyRepositoryInterface $repository;
-    protected UserRepositoryInterface     $userRepository;
+    protected UserRepositoryInterface $userRepository;
 
     /**
      * CurrencyController constructor.
@@ -51,22 +51,20 @@ class EditController extends Controller
     {
         parent::__construct();
 
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('title', (string) trans('firefly.currencies'));
-                app('view')->share('mainTitleIcon', 'fa-usd');
-                $this->repository     = app(CurrencyRepositoryInterface::class);
-                $this->userRepository = app(UserRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            app('view')->share('title', (string) trans('firefly.currencies'));
+            app('view')->share('mainTitleIcon', 'fa-usd');
+            $this->repository     = app(CurrencyRepositoryInterface::class);
+            $this->userRepository = app(UserRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
      * Edit a currency.
      *
-     * @return Factory|Redirector|RedirectResponse|View
+     * @return Factory|RedirectResponse|View
      */
     public function edit(Request $request, TransactionCurrency $currency): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
@@ -89,9 +87,7 @@ class EditController extends Controller
 
         // code to handle active-checkboxes
         $hasOldInput      = null !== $request->old('_token');
-        $preFilled        = [
-            'enabled' => $hasOldInput ? (bool) $request->old('enabled') : $enabled,
-        ];
+        $preFilled        = ['enabled' => $hasOldInput ? (bool) $request->old('enabled') : $enabled];
 
         $request->session()->flash('preFilled', $preFilled);
         Log::channel('audit')->info('Edit currency.', $currency->toArray());
@@ -110,7 +106,7 @@ class EditController extends Controller
      *
      * @throws FireflyException
      */
-    public function update(CurrencyFormRequest $request, TransactionCurrency $currency): Redirector|RedirectResponse
+    public function update(CurrencyFormRequest $request, TransactionCurrency $currency): RedirectResponse
     {
         /** @var User $user */
         $user     = auth()->user();

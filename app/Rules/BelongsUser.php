@@ -24,7 +24,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Rules;
 
-use Illuminate\Support\Facades\Log;
 use Closure;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Account;
@@ -34,6 +33,8 @@ use FireflyIII\Models\Category;
 use FireflyIII\Models\PiggyBank;
 use FireflyIII\Models\TransactionJournal;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Class BelongsUser
@@ -60,11 +61,39 @@ class BelongsUser implements ValidationRule
             'category_id'                 => $this->validateCategoryId((int) $value),
             'budget_name'                 => $this->validateBudgetName($value),
             'source_id', 'destination_id' => $this->validateAccountId((int) $value),
-            default                       => throw new FireflyException(sprintf('Rule BelongsUser cannot handle "%s"', $attribute)),
+            default                       => throw new FireflyException(sprintf('Rule BelongsUser cannot handle "%s"', $attribute))
         };
         if (false === $result) {
             $fail('validation.belongs_user')->translate();
         }
+    }
+
+    protected function countField(string $class, string $field, string $value): int
+    {
+        $value   = trim($value);
+        $objects = [];
+        // get all objects belonging to user:
+        if (PiggyBank::class === $class) {
+            $objects = PiggyBank::leftJoin('accounts', 'accounts.id', '=', 'piggy_banks.account_id')->where('accounts.user_id', '=', auth()->user()->id)->get([
+                'piggy_banks.*',
+            ]);
+        }
+        if (PiggyBank::class !== $class) {
+            $objects = $class::where('user_id', '=', auth()->user()->id)->get();
+        }
+        $count   = 0;
+
+        /** @var Model $object */
+        foreach ($objects as $object) {
+            $objectValue = trim((string) $object->{$field});
+            Log::debug(sprintf('Comparing object "%s" with value "%s"', $objectValue, $value));
+            if ($objectValue === $value) {
+                ++$count;
+                Log::debug(sprintf('Hit! Count is now %d', $count));
+            }
+        }
+
+        return $count;
     }
 
     private function parseAttribute(string $attribute): string
@@ -80,28 +109,15 @@ class BelongsUser implements ValidationRule
         return $attribute;
     }
 
-    private function validatePiggyBankId(int $value): bool
+    private function validateAccountId(int $value): bool
     {
+        if (0 === $value) {
+            // its ok to submit 0. other checks will fail.
+            return true;
+        }
+        $count = Account::query()->where('id', '=', $value)->where('user_id', '=', auth()->user()->id)->count();
 
-
-        $count = PiggyBank::leftJoin('account_piggy_bank', 'account_piggy_bank.piggy_bank_id', '=', 'piggy_banks.id')
-            ->leftJoin('accounts', 'accounts.id', '=', 'account_piggy_bank.account_id')
-            ->where('piggy_banks.id', '=', $value)
-            ->where('accounts.user_id', '=', auth()->user()->id)->count()
-        ;
-
-        return $count > 0;
-    }
-
-    private function validatePiggyBankName(string $value): bool
-    {
-        $count = PiggyBank::leftJoin('account_piggy_bank', 'account_piggy_bank.piggy_bank_id', '=', 'piggy_banks.id')
-            ->leftJoin('accounts', 'accounts.id', '=', 'account_piggy_bank.account_id')
-            ->where('piggy_banks.name', '=', $value)
-            ->where('accounts.user_id', '=', auth()->user()->id)->count()
-        ;
-
-        return $count > 0;
+        return 1 === $count;
     }
 
     private function validateBillId(int $value): bool
@@ -109,17 +125,7 @@ class BelongsUser implements ValidationRule
         if (0 === $value) {
             return true;
         }
-        $count = Bill::where('id', '=', $value)->where('user_id', '=', auth()->user()->id)->count();
-
-        return 1 === $count;
-    }
-
-    private function validateJournalId(int $value): bool
-    {
-        if (0 === $value) {
-            return true;
-        }
-        $count = TransactionJournal::where('id', '=', $value)->where('user_id', '=', auth()->user()->id)->count();
+        $count = Bill::query()->where('id', '=', $value)->where('user_id', '=', auth()->user()->id)->count();
 
         return 1 === $count;
     }
@@ -132,45 +138,12 @@ class BelongsUser implements ValidationRule
         return 1 === $count;
     }
 
-    protected function countField(string $class, string $field, string $value): int
-    {
-        $value   = trim($value);
-        $objects = [];
-        // get all objects belonging to user:
-        if (PiggyBank::class === $class) {
-            $objects = PiggyBank::leftJoin('accounts', 'accounts.id', '=', 'piggy_banks.account_id')
-                ->where('accounts.user_id', '=', auth()->user()->id)->get(['piggy_banks.*'])
-            ;
-        }
-        if (PiggyBank::class !== $class) {
-            $objects = $class::where('user_id', '=', auth()->user()->id)->get();
-        }
-        $count   = 0;
-        foreach ($objects as $object) {
-            $objectValue = trim((string) $object->{$field}); // @phpstan-ignore-line
-            Log::debug(sprintf('Comparing object "%s" with value "%s"', $objectValue, $value));
-            if ($objectValue === $value) {
-                ++$count;
-                Log::debug(sprintf('Hit! Count is now %d', $count));
-            }
-        }
-
-        return $count;
-    }
-
     private function validateBudgetId(int $value): bool
     {
         if (0 === $value) {
             return true;
         }
-        $count = Budget::where('id', '=', $value)->where('user_id', '=', auth()->user()->id)->count();
-
-        return 1 === $count;
-    }
-
-    private function validateCategoryId(int $value): bool
-    {
-        $count = Category::where('id', '=', $value)->where('user_id', '=', auth()->user()->id)->count();
+        $count = Budget::query()->where('id', '=', $value)->where('user_id', '=', auth()->user()->id)->count();
 
         return 1 === $count;
     }
@@ -182,14 +155,44 @@ class BelongsUser implements ValidationRule
         return 1 === $count;
     }
 
-    private function validateAccountId(int $value): bool
+    private function validateCategoryId(int $value): bool
     {
-        if (0 === $value) {
-            // its ok to submit 0. other checks will fail.
-            return true;
-        }
-        $count = Account::where('id', '=', $value)->where('user_id', '=', auth()->user()->id)->count();
+        $count = Category::query()->where('id', '=', $value)->where('user_id', '=', auth()->user()->id)->count();
 
         return 1 === $count;
+    }
+
+    private function validateJournalId(int $value): bool
+    {
+        if (0 === $value) {
+            return true;
+        }
+        $count = TransactionJournal::query()->where('id', '=', $value)->where('user_id', '=', auth()->user()->id)->count();
+
+        return 1 === $count;
+    }
+
+    private function validatePiggyBankId(int $value): bool
+    {
+        $count = PiggyBank::leftJoin('account_piggy_bank', 'account_piggy_bank.piggy_bank_id', '=', 'piggy_banks.id')
+            ->leftJoin('accounts', 'accounts.id', '=', 'account_piggy_bank.account_id')
+            ->where('piggy_banks.id', '=', $value)
+            ->where('accounts.user_id', '=', auth()->user()->id)
+            ->count()
+        ;
+
+        return $count > 0;
+    }
+
+    private function validatePiggyBankName(string $value): bool
+    {
+        $count = PiggyBank::leftJoin('account_piggy_bank', 'account_piggy_bank.piggy_bank_id', '=', 'piggy_banks.id')
+            ->leftJoin('accounts', 'accounts.id', '=', 'account_piggy_bank.account_id')
+            ->where('piggy_banks.name', '=', $value)
+            ->where('accounts.user_id', '=', auth()->user()->id)
+            ->count()
+        ;
+
+        return $count > 0;
     }
 }

@@ -31,8 +31,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * @codeCoverageIgnore
  */
-class ChangesForV420 extends Migration
-{
+return new class extends Migration {
     /**
      * Reverse the migrations.
      */
@@ -40,12 +39,9 @@ class ChangesForV420 extends Migration
     {
         if (Schema::hasColumn('journal_meta', 'deleted_at')) {
             try {
-                Schema::table(
-                    'journal_meta',
-                    static function (Blueprint $table): void {
-                        $table->dropSoftDeletes();
-                    }
-                );
+                Schema::table('journal_meta', static function (Blueprint $table): void {
+                    $table->dropSoftDeletes();
+                });
             } catch (QueryException $e) {
                 app('log')->error(sprintf('Could not execute query: %s', $e->getMessage()));
                 app('log')->error('If the column or index already exists (see error), this is not an problem. Otherwise, please open a GitHub discussion.');
@@ -62,16 +58,13 @@ class ChangesForV420 extends Migration
     {
         if (!Schema::hasColumn('journal_meta', 'deleted_at')) {
             try {
-                Schema::table(
-                    'journal_meta',
-                    static function (Blueprint $table): void {
-                        $table->softDeletes();
-                    }
-                );
+                Schema::table('journal_meta', static function (Blueprint $table): void {
+                    $table->softDeletes();
+                });
             } catch (QueryException $e) {
                 app('log')->error(sprintf('Could not execute query: %s', $e->getMessage()));
                 app('log')->error('If the column or index already exists (see error), this is not an problem. Otherwise, please open a GitHub discussion.');
             }
         }
     }
-}
+};

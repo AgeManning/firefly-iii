@@ -23,9 +23,9 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Requests;
 
-use Illuminate\Contracts\Validation\Validator;
 use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
 
@@ -37,16 +37,15 @@ class BulkEditJournalRequest extends FormRequest
     use ChecksLogin;
     use ConvertsDataTypes;
 
+    protected array $acceptedRoles = [];
+
     /**
      * Rules for this request.
      */
     public function rules(): array
     {
         // fixed
-        return [
-            'journals.*'  => 'required|belongsToUser:transaction_journals,id',
-            'tags_action' => 'in:no_nothing,do_replace,do_append',
-        ];
+        return ['journals.*' => ['required', 'belongsToUser:transaction_journals,id'], 'tags_action' => 'in:no_nothing,do_replace,do_append'];
     }
 
     public function withValidator(Validator $validator): void

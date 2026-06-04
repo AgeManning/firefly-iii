@@ -23,11 +23,11 @@ declare(strict_types=1);
 
 namespace FireflyIII\TransactionRules\Factory;
 
-use Illuminate\Support\Facades\Log;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\RuleAction;
 use FireflyIII\Support\Domain;
 use FireflyIII\TransactionRules\Actions\ActionInterface;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Class ActionFactory can create actions.
@@ -50,7 +50,7 @@ class ActionFactory
         $class = self::getActionClass($action->action_type);
         Log::debug(sprintf('self::getActionClass("%s") = "%s"', $action->action_type, $class));
 
-        return new $class($action); // @phpstan-ignore-line
+        return new $class($action);
     }
 
     /**

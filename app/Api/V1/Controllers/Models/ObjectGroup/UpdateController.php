@@ -36,7 +36,7 @@ use League\Fractal\Resource\Item;
 /**
  * Class UpdateController
  */
-class UpdateController extends Controller
+final class UpdateController extends Controller
 {
     private ObjectGroupRepositoryInterface $repository;
 
@@ -46,16 +46,14 @@ class UpdateController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                /** @var User $user */
-                $user             = auth()->user();
-                $this->repository = app(ObjectGroupRepositoryInterface::class);
-                $this->repository->setUser($user);
+        $this->middleware(function ($request, $next) {
+            /** @var User $user */
+            $user             = auth()->user();
+            $this->repository = app(ObjectGroupRepositoryInterface::class);
+            $this->repository->setUser($user);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**

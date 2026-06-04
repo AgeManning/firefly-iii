@@ -30,10 +30,10 @@ use FireflyIII\Models\Preference;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Models\UserGroup;
 use FireflyIII\Support\Facades\Amount;
+use FireflyIII\Support\Facades\FireflyConfig;
 use FireflyIII\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
-use FireflyIII\Support\Facades\FireflyConfig;
 
 class UpgradesCurrencyPreferences extends Command
 {
@@ -64,12 +64,35 @@ class UpgradesCurrencyPreferences extends Command
         return 0;
     }
 
+    private function getPreference(User $user): string
+    {
+        $preference = Preference::query()
+            ->where('user_id', $user->id)
+            ->where('name', 'currencyPreference')
+            ->first(['id', 'user_id', 'name', 'data', 'updated_at', 'created_at'])
+        ;
+
+        if (null === $preference) {
+            return 'EUR';
+        }
+
+        if (null !== $preference->data && !is_array($preference->data)) {
+            return (string) $preference->data;
+        }
+
+        return 'EUR';
+    }
+
     private function isExecuted(): bool
     {
         $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
 
-        return (bool)$configVar?->data;
+        return (bool) $configVar?->data;
+    }
 
+    private function markAsExecuted(): void
+    {
+        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 
     private function runUpgrade(): void
@@ -122,29 +145,9 @@ class UpgradesCurrencyPreferences extends Command
         try {
             $primaryCurrency = Amount::getTransactionCurrencyByCode($preference);
         } catch (FireflyException) {
-            $primaryCurrency = TransactionCurrency::where('code', 'EUR')->first();
+            $primaryCurrency = TransactionCurrency::query()->where('code', 'EUR')->first();
         }
         $user->currencies()->updateExistingPivot($primaryCurrency->id, ['user_default' => true]);
         $user->userGroup->currencies()->updateExistingPivot($primaryCurrency->id, ['group_default' => true]);
-    }
-
-    private function getPreference(User $user): string
-    {
-        $preference = Preference::where('user_id', $user->id)->where('name', 'currencyPreference')->first(['id', 'user_id', 'name', 'data', 'updated_at', 'created_at']);
-
-        if (null === $preference) {
-            return 'EUR';
-        }
-
-        if (null !== $preference->data && !is_array($preference->data)) {
-            return (string)$preference->data;
-        }
-
-        return 'EUR';
-    }
-
-    private function markAsExecuted(): void
-    {
-        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 }

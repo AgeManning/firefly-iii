@@ -25,7 +25,7 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Models\BudgetLimit;
 
 use FireflyIII\Api\V1\Controllers\Controller;
-use FireflyIII\Api\V1\Requests\Data\SameDateRequest;
+use FireflyIII\Api\V1\Requests\DateRangeRequest;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Budget;
 use FireflyIII\Models\BudgetLimit;
@@ -44,10 +44,10 @@ use League\Fractal\Resource\Item;
 /**
  * Class ShowController
  */
-class ShowController extends Controller
+final class ShowController extends Controller
 {
     private BudgetLimitRepositoryInterface $blRepository;
-    private BudgetRepositoryInterface      $repository;
+    private BudgetRepositoryInterface $repository;
 
     /**
      * BudgetLimitController constructor.
@@ -55,18 +55,16 @@ class ShowController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                /** @var User $user */
-                $user               = auth()->user();
-                $this->repository   = app(BudgetRepositoryInterface::class);
-                $this->blRepository = app(BudgetLimitRepositoryInterface::class);
-                $this->repository->setUser($user);
-                $this->blRepository->setUser($user);
+        $this->middleware(function ($request, $next) {
+            /** @var User $user */
+            $user               = auth()->user();
+            $this->repository   = app(BudgetRepositoryInterface::class);
+            $this->blRepository = app(BudgetLimitRepositoryInterface::class);
+            $this->repository->setUser($user);
+            $this->blRepository->setUser($user);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -87,7 +85,6 @@ class ShowController extends Controller
 
         /** @var Budget $budget */
         $budget       = $enrichment->enrichSingle($budget);
-
 
         $manager      = $this->getManager();
         $manager->parseIncludes('budget');
@@ -121,12 +118,12 @@ class ShowController extends Controller
      *
      * @SuppressWarnings("PHPMD.UnusedFormalParameter")
      */
-    public function indexAll(SameDateRequest $request): JsonResponse
+    public function indexAll(DateRangeRequest $request): JsonResponse
     {
         $manager      = $this->getManager();
         $manager->parseIncludes('budget');
         $pageSize     = $this->parameters->get('limit');
-        $collection   = $this->blRepository->getAllBudgetLimits($this->parameters->get('start'), $this->parameters->get('end'));
+        $collection   = $this->blRepository->getAllBudgetLimits($request->attributes->get('start'), $request->attributes->get('end'));
         $count        = $collection->count();
         $budgetLimits = $collection->slice(($this->parameters->get('page') - 1) * $pageSize, $pageSize);
         $paginator    = new LengthAwarePaginator($budgetLimits, $count, $pageSize, $this->parameters->get('page'));

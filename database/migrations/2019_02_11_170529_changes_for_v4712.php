@@ -32,8 +32,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * @codeCoverageIgnore
  */
-class ChangesForV4712 extends Migration
-{
+return new class extends Migration {
     /**
      * Reverse the migrations.
      */
@@ -55,15 +54,12 @@ class ChangesForV4712 extends Migration
          * nice.
          */
         try {
-            Schema::table(
-                'transaction_journals',
-                static function (Blueprint $table): void {
-                    $table->dateTime('date')->change();
-                }
-            );
+            Schema::table('transaction_journals', static function (Blueprint $table): void {
+                $table->dateTime('date')->change();
+            });
         } catch (QueryException $e) {
             app('log')->error(sprintf('Could not execute query: %s', $e->getMessage()));
             app('log')->error('If the column or index already exists (see error), this is not an problem. Otherwise, please open a GitHub discussion.');
         }
     }
-}
+};

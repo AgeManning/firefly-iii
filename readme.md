@@ -36,6 +36,14 @@ accounts/transactions)
     <a href="https://github.com/firefly-iii/firefly-iii/discussions">Ask questions</a>
   </p>
 
+---
+
+<p>
+<img align="left" src=".github/assets/img/europe.png" alt="Flag of Europe" height="50"> Billionaires and fascists are breaking democracies and international alliances. Their profits are costing us our safety. (Digital) sovereignty is more important than ever. <strong>Firefly III</strong> is free open source software and originates from, and lives in the European Union (🇳🇱).
+</p>
+
+---
+
 <!-- MarkdownTOC autolink="true" -->
 
 - [About Firefly III](#about-firefly-iii)
@@ -158,13 +166,13 @@ OK, that was a joke. But for real, when you feel Firefly III made your life bett
 
 ### Sponsorships
 
-Firefly III is sponsored by LamdaTest. Their support allows me to test Firefly III more easily and introduce even fewer bugs with every release.
+Firefly III is sponsored by TestMu AI. Their support allows me to test Firefly III more easily and introduce even fewer bugs with every release.
 
-<p style="font-size:21px; color:black;">Browser testing via
-<a href="https://www.lambdatest.com/?utm_source=fireflyiii&utm_medium=sponsor" target="_blank">
-<img src="https://www.lambdatest.com/blue-logo.png" style="vertical-align: middle;" width="250" height="45" />
+Browser testing via:
+
+<a href="https://www.testmuai.com/?utm_source=fireflyiii&utm_medium=sponsor" target="_blank">
+<img src=".github/assets/img/testmu.png" alt="Testmu" style="vertical-align: middle;" width="250" />
 </a>
-</p>
 
 <!-- END OF SPONSOR TEXT -->
 

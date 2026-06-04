@@ -24,11 +24,11 @@ declare(strict_types=1);
 
 namespace FireflyIII\Support\Cronjobs;
 
-use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Jobs\CreateAutoBudgetLimits;
 use FireflyIII\Models\Configuration;
 use FireflyIII\Support\Facades\FireflyConfig;
+use FireflyIII\Support\Facades\Preferences;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -40,14 +40,14 @@ class AutoBudgetCronjob extends AbstractCronjob
     {
         /** @var Configuration $config */
         $config        = FireflyConfig::get('last_ab_job', 0);
-        $lastTime      = (int)$config->data;
+        $lastTime      = (int) $config->data;
         $diff          = now(config('app.timezone'))->getTimestamp() - $lastTime;
         $diffForHumans = now(config('app.timezone'))->diffForHumans(Carbon::createFromTimestamp($lastTime), null, true);
         if (0 === $lastTime) {
             Log::info('Auto budget cron-job has never fired before.');
         }
         // less than half a day ago:
-        if ($lastTime > 0 && $diff <= 43200) {
+        if ($lastTime > 0 && $diff <= 43_200) {
             Log::info(sprintf('It has been %s since the auto budget cron-job has fired.', $diffForHumans));
             if (false === $this->force) {
                 Log::info('The auto budget cron-job will not fire now.');
@@ -58,7 +58,7 @@ class AutoBudgetCronjob extends AbstractCronjob
             Log::info('Execution of the auto budget cron-job has been FORCED.');
         }
 
-        if ($lastTime > 0 && $diff > 43200) {
+        if ($lastTime > 0 && $diff > 43_200) {
             Log::info(sprintf('It has been %s since the auto budget cron-job has fired. It will fire now!', $diffForHumans));
         }
 
@@ -81,7 +81,7 @@ class AutoBudgetCronjob extends AbstractCronjob
         $this->jobSucceeded = true;
         $this->message      = 'Auto-budget cron job fired successfully.';
 
-        FireflyConfig::set('last_ab_job', (int)$this->date->format('U'));
+        FireflyConfig::set('last_ab_job', (int) $this->date->format('U'));
         Log::info('Done with auto budget cron job task.');
     }
 }

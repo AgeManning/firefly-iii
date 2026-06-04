@@ -23,27 +23,26 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Transaction;
 
-use FireflyIII\Support\Facades\Preferences;
-use Illuminate\Support\Facades\Log;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\JournalLinkRequest;
 use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Models\TransactionJournalLink;
 use FireflyIII\Repositories\Journal\JournalRepositoryInterface;
 use FireflyIII\Repositories\LinkType\LinkTypeRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\Support\Facades\Steam;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Redirector;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
-use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class LinkController.
  */
-class LinkController extends Controller
+final class LinkController extends Controller
 {
-    private JournalRepositoryInterface  $journalRepository;
+    private JournalRepositoryInterface $journalRepository;
     private LinkTypeRepositoryInterface $repository;
 
     /**
@@ -53,17 +52,15 @@ class LinkController extends Controller
     {
         parent::__construct();
         // some useful repositories:
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('title', (string) trans('firefly.transactions'));
-                app('view')->share('mainTitleIcon', 'fa-exchange');
+        $this->middleware(function ($request, $next) {
+            app('view')->share('title', (string) trans('firefly.transactions'));
+            app('view')->share('mainTitleIcon', 'fa-exchange');
 
-                $this->journalRepository = app(JournalRepositoryInterface::class);
-                $this->repository        = app(LinkTypeRepositoryInterface::class);
+            $this->journalRepository = app(JournalRepositoryInterface::class);
+            $this->repository        = app(LinkTypeRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -83,7 +80,7 @@ class LinkController extends Controller
     /**
      * Actually destroy it.
      */
-    public function destroy(TransactionJournalLink $link): Redirector|RedirectResponse
+    public function destroy(TransactionJournalLink $link): RedirectResponse
     {
         $this->repository->destroyLink($link);
 
@@ -106,7 +103,7 @@ class LinkController extends Controller
     /**
      * Store a new link.
      */
-    public function store(JournalLinkRequest $request, TransactionJournal $journal): Redirector|RedirectResponse
+    public function store(JournalLinkRequest $request, TransactionJournal $journal): RedirectResponse
     {
         $linkInfo      = $request->getLinkInfo();
 
@@ -141,7 +138,7 @@ class LinkController extends Controller
     /**
      * Switch link from A <> B to B <> A.
      */
-    public function switchLink(Request $request): Redirector|RedirectResponse
+    public function switchLink(Request $request): RedirectResponse
     {
         $linkId = (int) $request->get('id');
         $this->repository->switchLinkById($linkId);

@@ -37,9 +37,9 @@ use League\Fractal\Resource\Item;
 /**
  * Class UpdateController
  */
-class UpdateController extends Controller
+final class UpdateController extends Controller
 {
-    private JournalRepositoryInterface  $journalRepository;
+    private JournalRepositoryInterface $journalRepository;
     private LinkTypeRepositoryInterface $repository;
 
     /**
@@ -48,20 +48,18 @@ class UpdateController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                /** @var User $user */
-                $user                    = auth()->user();
+        $this->middleware(function ($request, $next) {
+            /** @var User $user */
+            $user                    = auth()->user();
 
-                $this->repository        = app(LinkTypeRepositoryInterface::class);
-                $this->journalRepository = app(JournalRepositoryInterface::class);
+            $this->repository        = app(LinkTypeRepositoryInterface::class);
+            $this->journalRepository = app(JournalRepositoryInterface::class);
 
-                $this->repository->setUser($user);
-                $this->journalRepository->setUser($user);
+            $this->repository->setUser($user);
+            $this->journalRepository->setUser($user);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**

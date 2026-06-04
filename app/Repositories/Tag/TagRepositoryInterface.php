@@ -51,8 +51,6 @@ interface TagRepositoryInterface
      */
     public function destroy(Tag $tag): bool;
 
-    public function periodCollection(Tag $tag, Carbon $start, Carbon $end): array;
-
     /**
      * Destroy all tags.
      */
@@ -72,6 +70,8 @@ interface TagRepositoryInterface
     public function get(): Collection;
 
     public function getAttachments(Tag $tag): Collection;
+
+    public function getJournalIds(Tag $tag): array;
 
     /**
      * Return location, or NULL.
@@ -93,6 +93,8 @@ interface TagRepositoryInterface
      * Will return the newest tag (if known) or NULL.
      */
     public function oldestTag(): ?Tag;
+
+    public function periodCollection(Tag $tag, Carbon $start, Carbon $end): array;
 
     /**
      * Find one or more tags based on the query.

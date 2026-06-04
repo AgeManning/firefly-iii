@@ -25,7 +25,7 @@ declare(strict_types=1);
 namespace FireflyIII\TransactionRules\Actions;
 
 use FireflyIII\Events\Model\Rule\RuleActionFailedOnArray;
-use FireflyIII\Events\TriggeredAuditLog;
+use FireflyIII\Events\Model\TransactionGroup\TransactionGroupRequestsAuditLogEntry;
 use FireflyIII\Models\RuleAction;
 use FireflyIII\Models\Transaction;
 use FireflyIII\Models\TransactionJournal;
@@ -40,14 +40,16 @@ class SetAmount implements ActionInterface
     /**
      * TriggerInterface constructor.
      */
-    public function __construct(private RuleAction $action) {}
+    public function __construct(
+        private RuleAction $action
+    ) {}
 
     public function actOnArray(array $journal): bool
     {
         $this->refreshNotes($journal);
 
         // not on slpit transactions
-        $groupCount = TransactionJournal::where('transaction_group_id', $journal['transaction_group_id'])->count();
+        $groupCount = TransactionJournal::query()->where('transaction_group_id', $journal['transaction_group_id'])->count();
         if ($groupCount > 1) {
             Log::error(sprintf('Group #%d has more than one transaction in it, cannot convert to transfer.', $journal['transaction_group_id']));
             event(new RuleActionFailedOnArray($this->action, $journal, trans('rules.split_group')));
@@ -65,7 +67,7 @@ class SetAmount implements ActionInterface
         }
 
         /** @var TransactionJournal $object */
-        $object     = TransactionJournal::where('user_id', $journal['user_id'])->find($journal['transaction_journal_id']);
+        $object     = TransactionJournal::query()->where('user_id', $journal['user_id'])->find($journal['transaction_journal_id']);
 
         $positive   = Steam::positive($value);
         $negative   = Steam::negative($value);
@@ -76,34 +78,26 @@ class SetAmount implements ActionInterface
 
         // event for audit log entry
         if (0 !== bccomp($journal['amount'], $value)) {
-            event(new TriggeredAuditLog(
-                $this->action->rule,
-                $object,
-                'update_amount',
-                [
-                    'currency_symbol' => $object->transactionCurrency->symbol,
-                    'decimal_places'  => $object->transactionCurrency->decimal_places,
-                    'amount'          => $journal['amount'],
-                ],
-                [
-                    'currency_symbol' => $object->transactionCurrency->symbol,
-                    'decimal_places'  => $object->transactionCurrency->decimal_places,
-                    'amount'          => $value,
-                ]
-            ));
+            event(
+                new TransactionGroupRequestsAuditLogEntry(
+                    $this->action->rule,
+                    $object,
+                    'update_amount',
+                    [
+                        'currency_symbol' => $object->transactionCurrency->symbol,
+                        'decimal_places'  => $object->transactionCurrency->decimal_places,
+                        'amount'          => $journal['amount'],
+                    ],
+                    [
+                        'currency_symbol' => $object->transactionCurrency->symbol,
+                        'decimal_places'  => $object->transactionCurrency->decimal_places,
+                        'amount'          => $value,
+                    ]
+                )
+            );
         }
 
         return true;
-    }
-
-    private function updatePositive(TransactionJournal $object, string $amount): void
-    {
-        /** @var null|Transaction $transaction */
-        $transaction = $object->transactions()->where('amount', '>', 0)->first();
-        if (null === $transaction) {
-            return;
-        }
-        $this->updateAmount($transaction, $amount);
     }
 
     private function updateAmount(Transaction $transaction, string $amount): void
@@ -117,6 +111,16 @@ class SetAmount implements ActionInterface
     {
         /** @var null|Transaction $transaction */
         $transaction = $object->transactions()->where('amount', '<', 0)->first();
+        if (null === $transaction) {
+            return;
+        }
+        $this->updateAmount($transaction, $amount);
+    }
+
+    private function updatePositive(TransactionJournal $object, string $amount): void
+    {
+        /** @var null|Transaction $transaction */
+        $transaction = $object->transactions()->where('amount', '>', 0)->first();
         if (null === $transaction) {
             return;
         }

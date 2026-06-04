@@ -31,7 +31,6 @@ use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
-use FireflyIII\Support\Debug\Timer;
 use FireflyIII\Support\Facades\Amount;
 use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Api\AccountFilter;
@@ -42,7 +41,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * Class AccountController
  */
-class AccountController extends Controller
+final class AccountController extends Controller
 {
     use AccountFilter;
 
@@ -80,26 +79,24 @@ class AccountController extends Controller
      */
     public function accounts(AutocompleteApiRequest $request): JsonResponse
     {
-        Log::debug('Before All.');
-        ['types' => $types, 'query' => $query, 'date'  => $date, 'limit' => $limit] = $request->attributes->all();
+        // Log::debug('Before All.');
+        ['types' => $types, 'query' => $query, 'date' => $date, 'limit' => $limit] = $request->attributes->all();
 
         $date ??= today(config('app.timezone'));
 
         // set date to end-of-day for account balance. so it is at $date 23:59:59
         $date->endOfDay();
 
-        $return                                                                     = [];
-        $timer                                                                      = Timer::getInstance();
-        $timer->start(sprintf('AC accounts "%s"', $query));
-        $result                                                                     = $this->repository->searchAccount((string) $query, $types, $limit);
-        $allBalances                                                                = Steam::accountsBalancesOptimized($result, $date, $this->primaryCurrency, $this->convertToPrimary);
+        $return                                                                    = [];
+        $result                                                                    = $this->repository->searchAccount((string) $query, $types, $limit);
+        $allBalances                                                               = Steam::accountsBalancesOptimized($result, $date, $this->primaryCurrency, $this->convertToPrimary);
 
         /** @var Account $account */
         foreach ($result as $account) {
             $nameWithBalance = $account->name;
             $currency        = $this->repository->getAccountCurrency($account) ?? $this->primaryCurrency;
             $useCurrency     = $currency;
-            if (in_array($account->accountType->type, $this->balanceTypes, true)) {
+            if (in_array($account->accountType->type, $this->balanceTypes, strict: true)) {
                 // this one is correct.
                 Log::debug(sprintf('accounts: Call finalAccountBalance with date/time "%s"', $date->toIso8601String()));
                 $balance         = $allBalances[$account->id] ?? [];
@@ -136,7 +133,6 @@ class AccountController extends Controller
 
             return $posA - $posB;
         });
-        $timer->stop(sprintf('AC accounts "%s"', $query));
 
         return response()->api($return);
     }

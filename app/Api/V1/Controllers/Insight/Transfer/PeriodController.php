@@ -35,7 +35,7 @@ use Illuminate\Http\JsonResponse;
 /**
  * Class PeriodController
  */
-class PeriodController extends Controller
+final class PeriodController extends Controller
 {
     public function total(GenericRequest $request): JsonResponse
     {
@@ -74,7 +74,6 @@ class PeriodController extends Controller
             ];
             $response[$currencyId]['difference']       = bcadd($response[$currencyId]['difference'], Steam::positive($journal[$field]));
             $response[$currencyId]['difference_float'] = (float) $response[$currencyId]['difference'];
-
         }
 
         return response()->json(array_values($response));

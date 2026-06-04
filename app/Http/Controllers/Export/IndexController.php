@@ -40,7 +40,7 @@ use Illuminate\View\View;
 /**
  * Class IndexController
  */
-class IndexController extends Controller
+final class IndexController extends Controller
 {
     private JournalRepositoryInterface $journalRepository;
 
@@ -52,16 +52,14 @@ class IndexController extends Controller
         parent::__construct();
 
         // translations:
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('mainTitleIcon', 'fa-life-bouy');
-                app('view')->share('title', (string) trans('firefly.export_data_title'));
-                $this->journalRepository = app(JournalRepositoryInterface::class);
-                $this->middleware(IsDemoUser::class)->except(['index']);
+        $this->middleware(function ($request, $next) {
+            app('view')->share('mainTitleIcon', 'fa-life-bouy');
+            app('view')->share('title', (string) trans('firefly.export_data_title'));
+            $this->journalRepository = app(JournalRepositoryInterface::class);
+            $this->middleware(IsDemoUser::class)->except(['index']);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**

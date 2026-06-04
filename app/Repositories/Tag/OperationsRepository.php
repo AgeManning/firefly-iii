@@ -28,10 +28,10 @@ use Carbon\Carbon;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupInterface;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupTrait;
 use Illuminate\Support\Collection;
-use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class OperationsRepository
@@ -91,14 +91,22 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
                     continue;
                 }
                 $listedJournals[]                                                       = $journalId;
-                $array[$currencyId]['tags'][$tagId] ??= [
-                    'id'                   => $tagId,
-                    'name'                 => $tagName,
-                    'transaction_journals' => [],
-                ];
+                $array[$currencyId]['tags'][$tagId] ??= ['id' => $tagId, 'name' => $tagName, 'transaction_journals' => []];
 
                 $array[$currencyId]['tags'][$tagId]['transaction_journals'][$journalId] = [
                     'amount'                   => Steam::negative($journal['amount']),
+                    'currency_id'              => (int) $journal['currency_id'],
+                    'currency_name'            => (string) $journal['currency_name'],
+                    'currency_symbol'          => (string) $journal['currency_symbol'],
+                    'currency_code'            => (string) $journal['currency_code'],
+                    'currency_decimal_places'  => (int) $journal['currency_decimal_places'],
+                    'foreign_currency_id'      => (int) ($journal['foreign_currency_id'] ?? 0),
+                    'foreign_amount'           => array_key_exists('foreign_amount', $journal) && null !== $journal['foreign_amount']
+                        ? Steam::negative((string) $journal['foreign_amount'])
+                        : null,
+                    'pc_amount'                => array_key_exists('pc_amount', $journal) && null !== $journal['pc_amount']
+                        ? Steam::negative((string) $journal['pc_amount'])
+                        : null,
                     'date'                     => $journal['date'],
                     'source_account_id'        => $journal['source_account_id'],
                     'budget_name'              => $journal['budget_name'],
@@ -113,14 +121,6 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
         }
 
         return $array;
-    }
-
-    private function getTags(): Collection
-    {
-        /** @var TagRepositoryInterface $repository */
-        $repository = app(TagRepositoryInterface::class);
-
-        return $repository->get();
     }
 
     /**
@@ -184,6 +184,18 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
                 $journalId                                                              = (int) $journal['transaction_journal_id'];
                 $array[$currencyId]['tags'][$tagId]['transaction_journals'][$journalId] = [
                     'amount'                   => Steam::positive($journal['amount']),
+                    'currency_id'              => (int) $journal['currency_id'],
+                    'currency_name'            => (string) $journal['currency_name'],
+                    'currency_symbol'          => (string) $journal['currency_symbol'],
+                    'currency_code'            => (string) $journal['currency_code'],
+                    'currency_decimal_places'  => (int) $journal['currency_decimal_places'],
+                    'foreign_currency_id'      => (int) ($journal['foreign_currency_id'] ?? 0),
+                    'foreign_amount'           => array_key_exists('foreign_amount', $journal) && null !== $journal['foreign_amount']
+                        ? Steam::positive((string) $journal['foreign_amount'])
+                        : null,
+                    'pc_amount'                => array_key_exists('pc_amount', $journal) && null !== $journal['pc_amount']
+                        ? Steam::positive((string) $journal['pc_amount'])
+                        : null,
                     'date'                     => $journal['date'],
                     'source_account_id'        => $journal['source_account_id'],
                     'budget_name'              => $journal['budget_name'],
@@ -217,5 +229,13 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
     public function sumIncome(Carbon $start, Carbon $end, ?Collection $accounts = null, ?Collection $tags = null): array
     {
         throw new FireflyException(sprintf('%s is not yet implemented.', __METHOD__));
+    }
+
+    private function getTags(): Collection
+    {
+        /** @var TagRepositoryInterface $repository */
+        $repository = app(TagRepositoryInterface::class);
+
+        return $repository->get();
     }
 }

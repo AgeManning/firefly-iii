@@ -31,8 +31,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * @codeCoverageIgnore
  */
-class CreateUsersTable extends Migration
-{
+return new class extends Migration {
     private const TABLE_ALREADY_EXISTS = 'If this table exists already (see the error message), this is not a problem. Other errors? Please open a discussion on GitHub.';
     private const TABLE_ERROR          = 'Could not create table "%s": %s';
 
@@ -53,23 +52,20 @@ class CreateUsersTable extends Migration
     {
         if (!Schema::hasTable('users')) {
             try {
-                Schema::create(
-                    'users',
-                    static function (Blueprint $table): void {
-                        $table->increments('id');
-                        $table->timestamps();
-                        $table->string('email', 255);
-                        $table->string('password', 60);
-                        $table->string('remember_token', 100)->nullable();
-                        $table->string('reset', 32)->nullable();
-                        $table->tinyInteger('blocked', false, true)->default('0');
-                        $table->string('blocked_code', 25)->nullable();
-                    }
-                );
+                Schema::create('users', static function (Blueprint $table): void {
+                    $table->increments('id');
+                    $table->timestamps();
+                    $table->string('email', 255);
+                    $table->string('password', 60);
+                    $table->string('remember_token', 100)->nullable();
+                    $table->string('reset', 32)->nullable();
+                    $table->tinyInteger('blocked', false, true)->default('0');
+                    $table->string('blocked_code', 25)->nullable();
+                });
             } catch (QueryException $e) {
                 app('log')->error(sprintf(self::TABLE_ERROR, 'users', $e->getMessage()));
                 app('log')->error(self::TABLE_ALREADY_EXISTS);
             }
         }
     }
-}
+};

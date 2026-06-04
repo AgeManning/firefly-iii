@@ -52,12 +52,13 @@ class NoCategoryRepository implements NoCategoryRepositoryInterface, UserGroupIn
         $collector->setUser($this->user)->setRange($start, $end)->setTypes([TransactionTypeEnum::WITHDRAWAL->value])->withoutCategory();
         if ($accounts instanceof Collection && $accounts->count() > 0) {
             $collector->setAccounts($accounts);
+            $collector->excludeDestinationAccounts($accounts); // to exclude withdrawals to liabilities.
         }
         $journals  = $collector->getExtractedJournals();
         $array     = [];
 
         foreach ($journals as $journal) {
-            $currencyId = (int) $journal['currency_id'];
+            $currencyId                                                              = (int) $journal['currency_id'];
             $array[$currencyId]                  ??= [
                 'categories'              => [],
                 'currency_id'             => $currencyId,
@@ -75,12 +76,23 @@ class NoCategoryRepository implements NoCategoryRepositoryInterface, UserGroupIn
 
             // add journal to array:
             // only a subset of the fields.
-            $journalId  = (int) $journal['transaction_journal_id'];
-            $array[$currencyId]['categories'][0]['transaction_journals'][$journalId]
-                        = [
-                            'amount' => Steam::negative($journal['amount']),
-                            'date'   => $journal['date'],
-                        ];
+            $journalId                                                               = (int) $journal['transaction_journal_id'];
+            $array[$currencyId]['categories'][0]['transaction_journals'][$journalId] = [
+                'amount'                  => Steam::negative($journal['amount']),
+                'currency_id'             => (int) $journal['currency_id'],
+                'currency_name'           => (string) $journal['currency_name'],
+                'currency_symbol'         => (string) $journal['currency_symbol'],
+                'currency_code'           => (string) $journal['currency_code'],
+                'currency_decimal_places' => (int) $journal['currency_decimal_places'],
+                'foreign_currency_id'     => (int) ($journal['foreign_currency_id'] ?? 0),
+                'foreign_amount'          => array_key_exists('foreign_amount', $journal) && null !== $journal['foreign_amount']
+                    ? Steam::negative((string) $journal['foreign_amount'])
+                    : null,
+                'pc_amount'               => array_key_exists('pc_amount', $journal) && null !== $journal['pc_amount']
+                    ? Steam::negative((string) $journal['pc_amount'])
+                    : null,
+                'date'                    => $journal['date'],
+            ];
         }
 
         return $array;
@@ -98,12 +110,13 @@ class NoCategoryRepository implements NoCategoryRepositoryInterface, UserGroupIn
         $collector->setUser($this->user)->setRange($start, $end)->setTypes([TransactionTypeEnum::DEPOSIT->value])->withoutCategory();
         if ($accounts instanceof Collection && $accounts->count() > 0) {
             $collector->setAccounts($accounts);
+            $collector->excludeSourceAccounts($accounts); // to prevent income from liabilities.
         }
         $journals  = $collector->getExtractedJournals();
         $array     = [];
 
         foreach ($journals as $journal) {
-            $currencyId = (int) $journal['currency_id'];
+            $currencyId                                                              = (int) $journal['currency_id'];
             $array[$currencyId]                  ??= [
                 'categories'              => [],
                 'currency_id'             => $currencyId,
@@ -121,12 +134,23 @@ class NoCategoryRepository implements NoCategoryRepositoryInterface, UserGroupIn
             ];
             // add journal to array:
             // only a subset of the fields.
-            $journalId  = (int) $journal['transaction_journal_id'];
-            $array[$currencyId]['categories'][0]['transaction_journals'][$journalId]
-                        = [
-                            'amount' => Steam::positive($journal['amount']),
-                            'date'   => $journal['date'],
-                        ];
+            $journalId                                                               = (int) $journal['transaction_journal_id'];
+            $array[$currencyId]['categories'][0]['transaction_journals'][$journalId] = [
+                'amount'                  => Steam::positive($journal['amount']),
+                'currency_id'             => (int) $journal['currency_id'],
+                'currency_name'           => (string) $journal['currency_name'],
+                'currency_symbol'         => (string) $journal['currency_symbol'],
+                'currency_code'           => (string) $journal['currency_code'],
+                'currency_decimal_places' => (int) $journal['currency_decimal_places'],
+                'foreign_currency_id'     => (int) ($journal['foreign_currency_id'] ?? 0),
+                'foreign_amount'          => array_key_exists('foreign_amount', $journal) && null !== $journal['foreign_amount']
+                    ? Steam::positive((string) $journal['foreign_amount'])
+                    : null,
+                'pc_amount'               => array_key_exists('pc_amount', $journal) && null !== $journal['pc_amount']
+                    ? Steam::positive((string) $journal['pc_amount'])
+                    : null,
+                'date'                    => $journal['date'],
+            ];
         }
 
         return $array;

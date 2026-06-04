@@ -23,8 +23,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Requests;
 
-use Illuminate\Contracts\Validation\Validator;
 use FireflyIII\Support\Request\ChecksLogin;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
 
@@ -34,6 +34,8 @@ use Illuminate\Support\Facades\Log;
 class UserRegistrationRequest extends FormRequest
 {
     use ChecksLogin;
+
+    protected array $acceptedRoles = [];
 
     /**
      * Verify the request.
@@ -50,10 +52,7 @@ class UserRegistrationRequest extends FormRequest
     public function rules(): array
     {
         // fixed
-        return [
-            'email'    => 'email|required',
-            'password' => 'confirmed|secure_password',
-        ];
+        return ['email' => ['email', 'required'], 'password' => ['confirmed', 'secure_password']];
     }
 
     public function withValidator(Validator $validator): void

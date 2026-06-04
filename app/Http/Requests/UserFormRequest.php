@@ -23,9 +23,9 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Requests;
 
-use Illuminate\Contracts\Validation\Validator;
 use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
 
@@ -36,6 +36,8 @@ class UserFormRequest extends FormRequest
 {
     use ChecksLogin;
     use ConvertsDataTypes;
+
+    protected array $acceptedRoles = [];
 
     /**
      * Get data for controller.
@@ -57,12 +59,12 @@ class UserFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'id'           => 'required|exists:users,id',
-            'email'        => 'email|required',
-            'password'     => 'confirmed|secure_password',
-            'blocked_code' => 'min:0|max:32|nullable',
-            'blocked'      => 'min:0|max:1|numeric',
-            'is_owner'     => 'min:0|max:1|numeric',
+            'id'           => ['required', 'exists:users,id'],
+            'email'        => ['email', 'required'],
+            'password'     => ['confirmed', 'secure_password'],
+            'blocked_code' => ['min:0', 'max:32', 'nullable'],
+            'blocked'      => ['min:0', 'max:1', 'numeric'],
+            'is_owner'     => ['min:0', 'max:1', 'numeric'],
         ];
     }
 

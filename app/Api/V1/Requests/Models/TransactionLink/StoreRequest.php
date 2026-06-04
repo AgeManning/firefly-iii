@@ -24,12 +24,12 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Requests\Models\TransactionLink;
 
-use Illuminate\Contracts\Validation\Validator;
 use FireflyIII\Repositories\Journal\JournalRepositoryInterface;
 use FireflyIII\Repositories\LinkType\LinkTypeRepositoryInterface;
 use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
 use FireflyIII\User;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
 
@@ -40,6 +40,8 @@ class StoreRequest extends FormRequest
 {
     use ChecksLogin;
     use ConvertsDataTypes;
+
+    protected array $acceptedRoles = [];
 
     /**
      * Get all data from the request.
@@ -61,11 +63,11 @@ class StoreRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'link_type_id'   => 'exists:link_types,id|required_without:link_type_name',
-            'link_type_name' => 'exists:link_types,name|required_without:link_type_id',
-            'inward_id'      => 'required|belongsToUser:transaction_journals,id|different:outward_id',
-            'outward_id'     => 'required|belongsToUser:transaction_journals,id|different:inward_id',
-            'notes'          => 'min:1|max:32768|nullable',
+            'link_type_id'   => ['exists:link_types,id', 'required_without:link_type_name'],
+            'link_type_name' => ['exists:link_types,name', 'required_without:link_type_id'],
+            'inward_id'      => ['required', 'belongsToUser:transaction_journals,id', 'different:outward_id'],
+            'outward_id'     => ['required', 'belongsToUser:transaction_journals,id', 'different:inward_id'],
+            'notes'          => ['min:1', 'max:32768', 'nullable'],
         ];
     }
 
@@ -74,11 +76,9 @@ class StoreRequest extends FormRequest
      */
     public function withValidator(Validator $validator): void
     {
-        $validator->after(
-            function (Validator $validator): void {
-                $this->validateExistingLink($validator);
-            }
-        );
+        $validator->after(function (Validator $validator): void {
+            $this->validateExistingLink($validator);
+        });
         if ($validator->fails()) {
             Log::channel('audit')->error(sprintf('Validation errors in %s', self::class), $validator->errors()->toArray());
         }

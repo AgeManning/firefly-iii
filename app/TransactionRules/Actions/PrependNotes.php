@@ -23,11 +23,11 @@ declare(strict_types=1);
 
 namespace FireflyIII\TransactionRules\Actions;
 
-use Illuminate\Support\Facades\Log;
-use FireflyIII\Events\TriggeredAuditLog;
+use FireflyIII\Events\Model\TransactionGroup\TransactionGroupRequestsAuditLogEntry;
 use FireflyIII\Models\Note;
 use FireflyIII\Models\RuleAction;
 use FireflyIII\Models\TransactionJournal;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Class PrependNotes.
@@ -38,11 +38,14 @@ class PrependNotes implements ActionInterface
     /**
      * TriggerInterface constructor.
      */
-    public function __construct(private readonly RuleAction $action) {}
+    public function __construct(
+        private readonly RuleAction $action
+    ) {}
 
     public function actOnArray(array $journal): bool
     {
-        $dbNote       = Note::where('noteable_id', (int) $journal['transaction_journal_id'])
+        $dbNote       = Note::query()
+            ->where('noteable_id', (int) $journal['transaction_journal_id'])
             ->where('noteable_type', TransactionJournal::class)
             ->first(['notes.*'])
         ;
@@ -61,10 +64,10 @@ class PrependNotes implements ActionInterface
 
         // journal
         /** @var TransactionJournal $object */
-        $object       = TransactionJournal::where('user_id', $journal['user_id'])->find($journal['transaction_journal_id']);
+        $object       = TransactionJournal::query()->where('user_id', $journal['user_id'])->find($journal['transaction_journal_id']);
 
         // audit log
-        event(new TriggeredAuditLog($this->action->rule, $object, 'update_notes', $before, $text));
+        event(new TransactionGroupRequestsAuditLogEntry($this->action->rule, $object, 'update_notes', $before, $text));
 
         return true;
     }

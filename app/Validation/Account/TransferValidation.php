@@ -24,14 +24,18 @@ declare(strict_types=1);
 
 namespace FireflyIII\Validation\Account;
 
-use Illuminate\Support\Facades\Log;
 use FireflyIII\Models\Account;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Trait TransferValidation
  */
 trait TransferValidation
 {
+    abstract protected function canCreateTypes(array $accountTypes): bool;
+
+    abstract protected function findExistingAccount(array $validTypes, array $data): ?Account;
+
     protected function validateTransferDestination(array $array): bool
     {
         $accountId   = $array['id'] ?? null;
@@ -69,10 +73,6 @@ trait TransferValidation
         return true;
     }
 
-    abstract protected function canCreateTypes(array $accountTypes): bool;
-
-    abstract protected function findExistingAccount(array $validTypes, array $data): ?Account;
-
     protected function validateTransferSource(array $array): bool
     {
         $accountId     = $array['id'] ?? null;
@@ -82,9 +82,7 @@ trait TransferValidation
         Log::debug('Now in validateTransferSource', $array);
         // source can be any of the following types.
         $validTypes    = array_keys($this->combinations[$this->transactionType]);
-        if (null === $accountId && null === $accountName
-            && null === $accountIban && null === $accountNumber
-            && false === $this->canCreateTypes($validTypes)) {
+        if (null === $accountId && null === $accountName && null === $accountIban && null === $accountNumber && false === $this->canCreateTypes($validTypes)) {
             // if both values are NULL we return false,
             // because the source of a withdrawal can't be created.
             $this->sourceError = (string) trans('validation.transfer_source_need_data');

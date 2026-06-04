@@ -24,11 +24,10 @@ declare(strict_types=1);
 
 namespace FireflyIII\TransactionRules\Actions;
 
-use Illuminate\Support\Facades\Log;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Events\Model\Rule\RuleActionFailedOnArray;
-use FireflyIII\Events\TriggeredAuditLog;
+use FireflyIII\Events\Model\TransactionGroup\TransactionGroupRequestsAuditLogEntry;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Factory\AccountFactory;
 use FireflyIII\Models\Account;
@@ -38,6 +37,7 @@ use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Models\TransactionType;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Class ConvertToDeposit
@@ -47,7 +47,9 @@ class ConvertToDeposit implements ActionInterface
     /**
      * TriggerInterface constructor.
      */
-    public function __construct(private readonly RuleAction $action) {}
+    public function __construct(
+        private readonly RuleAction $action
+    ) {}
 
     public function actOnArray(array $journal): bool
     {
@@ -55,14 +57,14 @@ class ConvertToDeposit implements ActionInterface
 
         // make object from array (so the data is fresh).
         /** @var null|TransactionJournal $object */
-        $object      = TransactionJournal::where('user_id', $journal['user_id'])->find($journal['transaction_journal_id']);
+        $object      = TransactionJournal::query()->where('user_id', $journal['user_id'])->find($journal['transaction_journal_id']);
         if (null === $object) {
             Log::error(sprintf('Cannot find journal #%d, cannot convert to deposit.', $journal['transaction_journal_id']));
             event(new RuleActionFailedOnArray($this->action, $journal, trans('rules.journal_not_found')));
 
             return false;
         }
-        $groupCount  = TransactionJournal::where('transaction_group_id', $journal['transaction_group_id'])->count();
+        $groupCount  = TransactionJournal::query()->where('transaction_group_id', $journal['transaction_group_id'])->count();
         if ($groupCount > 1) {
             Log::error(sprintf('Group #%d has more than one transaction in it, cannot convert to deposit.', $journal['transaction_group_id']));
             event(new RuleActionFailedOnArray($this->action, $journal, trans('rules.split_group')));
@@ -92,7 +94,15 @@ class ConvertToDeposit implements ActionInterface
                 return false;
             }
 
-            event(new TriggeredAuditLog($this->action->rule, $object, 'update_transaction_type', TransactionTypeEnum::WITHDRAWAL->value, TransactionTypeEnum::DEPOSIT->value));
+            event(
+                new TransactionGroupRequestsAuditLogEntry(
+                    $this->action->rule,
+                    $object,
+                    'update_transaction_type',
+                    TransactionTypeEnum::WITHDRAWAL->value,
+                    TransactionTypeEnum::DEPOSIT->value
+                )
+            );
 
             return $res;
         }
@@ -108,101 +118,21 @@ class ConvertToDeposit implements ActionInterface
 
                 return false;
             }
-            event(new TriggeredAuditLog($this->action->rule, $object, 'update_transaction_type', TransactionTypeEnum::TRANSFER->value, TransactionTypeEnum::DEPOSIT->value));
+            event(
+                new TransactionGroupRequestsAuditLogEntry(
+                    $this->action->rule,
+                    $object,
+                    'update_transaction_type',
+                    TransactionTypeEnum::TRANSFER->value,
+                    TransactionTypeEnum::DEPOSIT->value
+                )
+            );
 
             return $res;
         }
         event(new RuleActionFailedOnArray($this->action, $journal, trans('rules.unsupported_transaction_type_deposit', ['type' => $type])));
 
         return false;
-    }
-
-    /**
-     * Input is a withdrawal from A to B
-     * Is converted to a deposit from C to A.
-     *
-     * @throws FireflyException
-     */
-    private function convertWithdrawalArray(TransactionJournal $journal, string $actionValue = ''): bool
-    {
-        $user            = $journal->user;
-
-        // find or create revenue account.
-        /** @var AccountFactory $factory */
-        $factory         = app(AccountFactory::class);
-        $factory->setUser($user);
-
-        $repository      = app(AccountRepositoryInterface::class);
-        $repository->setUser($user);
-
-        $destAccount     = $this->getDestinationAccount($journal);
-        $sourceAccount   = $this->getSourceAccount($journal);
-
-        // get the action value, or use the original destination name in case the action value is empty:
-        // this becomes a new or existing (revenue) account, which is the source of the new deposit.
-        $opposingName    = '' === $actionValue ? $destAccount->name : $actionValue;
-        // we check all possible source account types if one exists:
-        $validTypes      = config('firefly.expected_source_types.source.Deposit');
-        $opposingAccount = $repository->findByName($opposingName, $validTypes);
-        if (null === $opposingAccount) {
-            $opposingAccount = $factory->findOrCreate($opposingName, AccountTypeEnum::REVENUE->value);
-        }
-
-        Log::debug(sprintf('ConvertToDeposit. Action value is "%s", new opposing name is "%s"', $actionValue, $opposingAccount->name));
-
-        // update the source transaction and put in the new revenue ID.
-        DB::table('transactions')
-            ->where('transaction_journal_id', '=', $journal->id)
-            ->where('amount', '<', 0)
-            ->update(['account_id' => $opposingAccount->id])
-        ;
-
-        // update the destination transaction and put in the original source account ID.
-        DB::table('transactions')
-            ->where('transaction_journal_id', '=', $journal->id)
-            ->where('amount', '>', 0)
-            ->update(['account_id' => $sourceAccount->id])
-        ;
-
-        // change transaction type of journal:
-        $newType         = TransactionType::whereType(TransactionTypeEnum::DEPOSIT->value)->first();
-
-        DB::table('transaction_journals')
-            ->where('id', '=', $journal->id)
-            ->update(['transaction_type_id' => $newType->id, 'bill_id' => null])
-        ;
-
-        Log::debug('Converted withdrawal to deposit.');
-
-        return true;
-    }
-
-    /**
-     * @throws FireflyException
-     */
-    private function getDestinationAccount(TransactionJournal $journal): Account
-    {
-        /** @var null|Transaction $destAccount */
-        $destAccount = $journal->transactions()->where('amount', '>', 0)->first();
-        if (null === $destAccount) {
-            throw new FireflyException(sprintf('Cannot find destination transaction for journal #%d', $journal->id));
-        }
-
-        return $destAccount->account;
-    }
-
-    /**
-     * @throws FireflyException
-     */
-    private function getSourceAccount(TransactionJournal $journal): Account
-    {
-        /** @var null|Transaction $sourceTransaction */
-        $sourceTransaction = $journal->transactions()->where('amount', '<', 0)->first();
-        if (null === $sourceTransaction) {
-            throw new FireflyException(sprintf('Cannot find source transaction for journal #%d', $journal->id));
-        }
-
-        return $sourceTransaction->account;
     }
 
     /**
@@ -239,22 +169,104 @@ class ConvertToDeposit implements ActionInterface
         Log::debug(sprintf('ConvertToDeposit. Action value is "%s", revenue name is "%s"', $actionValue, $opposingAccount->name));
 
         // update source transaction(s) to be revenue account
-        DB::table('transactions')
-            ->where('transaction_journal_id', '=', $journal->id)
-            ->where('amount', '<', 0)
-            ->update(['account_id' => $opposingAccount->id])
-        ;
+        DB::table('transactions')->where('transaction_journal_id', '=', $journal->id)->where('amount', '<', 0)->update(['account_id' => $opposingAccount->id]);
 
         // change transaction type of journal:
         $newType         = TransactionType::whereType(TransactionTypeEnum::DEPOSIT->value)->first();
 
-        DB::table('transaction_journals')
-            ->where('id', '=', $journal->id)
-            ->update(['transaction_type_id' => $newType->id, 'bill_id' => null])
-        ;
+        DB::table('transaction_journals')->where('id', '=', $journal->id)->update(['transaction_type_id' => $newType->id, 'bill_id' => null]);
 
         Log::debug('Converted transfer to deposit.');
 
         return true;
+    }
+
+    /**
+     * Input is a withdrawal from A to B
+     * Is converted to a deposit from C to A.
+     *
+     * @throws FireflyException
+     */
+    private function convertWithdrawalArray(TransactionJournal $journal, string $actionValue = ''): bool
+    {
+        $user            = $journal->user;
+
+        // find or create revenue account.
+        /** @var AccountFactory $factory */
+        $factory         = app(AccountFactory::class);
+        $factory->setUser($user);
+
+        $repository      = app(AccountRepositoryInterface::class);
+        $repository->setUser($user);
+
+        $destAccount     = $this->getDestinationAccount($journal);
+        $sourceAccount   = $this->getSourceAccount($journal);
+
+        // get the action value, or use the original destination name in case the action value is empty:
+        // this becomes a new or existing (revenue) account, which is the source of the new deposit.
+        $opposingName    = '' === $actionValue ? $destAccount->name : $actionValue;
+        // we check all possible source account types if one exists:
+        $validTypes      = config('firefly.expected_source_types.source.Deposit');
+        $opposingAccount = $repository->findByName($opposingName, $validTypes);
+        if (null === $opposingAccount) {
+            $opposingAccount = $factory->findOrCreate($opposingName, AccountTypeEnum::REVENUE->value);
+        }
+
+        Log::debug(sprintf('ConvertToDeposit. Action value is "%s", new opposing name is "%s"', $actionValue, $opposingAccount->name));
+
+        // update the source transaction and put in the new revenue ID.
+        DB::table('transactions')->where('transaction_journal_id', '=', $journal->id)->where('amount', '<', 0)->update(['account_id' => $opposingAccount->id]);
+
+        // update the destination transaction and put in the original source account ID.
+        DB::table('transactions')->where('transaction_journal_id', '=', $journal->id)->where('amount', '>', 0)->update(['account_id' => $sourceAccount->id]);
+
+        // change transaction type of journal:
+        $newType         = TransactionType::whereType(TransactionTypeEnum::DEPOSIT->value)->first();
+
+        DB::table('transaction_journals')->where('id', '=', $journal->id)->update(['transaction_type_id' => $newType->id, 'bill_id' => null]);
+
+        Log::debug('Converted withdrawal to deposit.');
+
+        return true;
+    }
+
+    /**
+     * @throws FireflyException
+     */
+    private function getDestinationAccount(TransactionJournal $journal): Account
+    {
+        /** @var null|Transaction $destTransaction */
+        $destTransaction = $journal->transactions()->where('amount', '>', 0)->first();
+        if (null === $destTransaction) {
+            throw new FireflyException(sprintf('Cannot find destination transaction for journal #%d', $journal->id));
+        }
+
+        /** @var null|Account $res */
+        $res             = $destTransaction->account;
+        if (null === $res) {
+            throw new FireflyException('Account is unexpectedly NULL.');
+        }
+
+        return $res;
+    }
+
+    /**
+     * @throws FireflyException
+     */
+    private function getSourceAccount(TransactionJournal $journal): Account
+    {
+        /** @var null|Transaction $sourceTransaction */
+        $sourceTransaction = $journal->transactions()->where('amount', '<', 0)->first();
+        if (null === $sourceTransaction) {
+            throw new FireflyException(sprintf('Cannot find source transaction for journal #%d', $journal->id));
+        }
+
+        /** @var null|Account $res */
+        $res               = $sourceTransaction->account;
+        if (null === $res) {
+            throw new FireflyException('Account is unexpectedly NULL.');
+        }
+
+        return $res;
     }
 }

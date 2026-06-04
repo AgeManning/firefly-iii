@@ -23,12 +23,12 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Admin;
 
-use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Middleware\IsDemoUser;
 use FireflyIII\Http\Requests\LinkTypeFormRequest;
 use FireflyIII\Models\LinkType;
 use FireflyIII\Repositories\LinkType\LinkTypeRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -39,7 +39,7 @@ use Illuminate\View\View;
 /**
  * Class LinkController.
  */
-class LinkController extends Controller
+final class LinkController extends Controller
 {
     private LinkTypeRepositoryInterface $repository;
 
@@ -50,15 +50,13 @@ class LinkController extends Controller
     {
         parent::__construct();
 
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('title', (string) trans('firefly.system_settings'));
-                app('view')->share('mainTitleIcon', 'fa-hand-spock-o');
-                $this->repository = app(LinkTypeRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            app('view')->share('title', (string) trans('firefly.system_settings'));
+            app('view')->share('mainTitleIcon', 'fa-hand-spock-o');
+            $this->repository = app(LinkTypeRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
         $this->middleware(IsDemoUser::class)->except(['index', 'show']);
     }
 
@@ -85,7 +83,7 @@ class LinkController extends Controller
     /**
      * Delete a link form.
      *
-     * @return Factory|Redirector|RedirectResponse|View
+     * @return Factory|RedirectResponse|View
      */
     public function delete(Request $request, LinkType $linkType): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
@@ -118,7 +116,7 @@ class LinkController extends Controller
     /**
      * Actually destroy the link.
      */
-    public function destroy(Request $request, LinkType $linkType): Redirector|RedirectResponse
+    public function destroy(Request $request, LinkType $linkType): RedirectResponse
     {
         Log::channel('audit')->info(sprintf('User destroyed link type #%d', $linkType->id));
         $name   = $linkType->name;
@@ -134,7 +132,7 @@ class LinkController extends Controller
     /**
      * Edit a link form.
      *
-     * @return Factory|Redirector|RedirectResponse|View
+     * @return Factory|RedirectResponse|View
      */
     public function edit(Request $request, LinkType $linkType): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
@@ -169,11 +167,9 @@ class LinkController extends Controller
         $linkTypes    = $this->repository->get();
 
         Log::channel('audit')->info('User on index of link types in admin.');
-        $linkTypes->each(
-            function (LinkType $linkType): void {
-                $linkType->journalCount = $this->repository->countJournals($linkType);
-            }
-        );
+        $linkTypes->each(function (LinkType $linkType): void {
+            $linkType->journalCount = $this->repository->countJournals($linkType);
+        });
 
         return view('settings.link.index', ['subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'linkTypes' => $linkTypes]);
     }
@@ -191,13 +187,18 @@ class LinkController extends Controller
 
         Log::channel('audit')->info(sprintf('User viewing link type #%d', $linkType->id));
 
-        return view('settings.link.show', ['subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'linkType' => $linkType, 'links' => $links]);
+        return view('settings.link.show', [
+            'subTitle'     => $subTitle,
+            'subTitleIcon' => $subTitleIcon,
+            'linkType'     => $linkType,
+            'links'        => $links,
+        ]);
     }
 
     /**
      * Store the new link.
      *
-     * @return $this|Redirector|RedirectResponse
+     * @return RedirectResponse
      */
     public function store(LinkTypeFormRequest $request)
     {
@@ -226,7 +227,7 @@ class LinkController extends Controller
     /**
      * Update an existing link.
      *
-     * @return $this|Redirector|RedirectResponse
+     * @return RedirectResponse
      */
     public function update(LinkTypeFormRequest $request, LinkType $linkType)
     {
@@ -236,11 +237,7 @@ class LinkController extends Controller
             return redirect(route('settings.links.index'));
         }
 
-        $data     = [
-            'name'    => $request->convertString('name'),
-            'inward'  => $request->convertString('inward'),
-            'outward' => $request->convertString('outward'),
-        ];
+        $data     = ['name' => $request->convertString('name'), 'inward' => $request->convertString('inward'), 'outward' => $request->convertString('outward')];
         $this->repository->update($linkType, $data);
 
         Log::channel('audit')->info(sprintf('User update link type #%d.', $linkType->id), $data);

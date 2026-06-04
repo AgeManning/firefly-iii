@@ -32,8 +32,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * @codeCoverageIgnore
  */
-class ChangesForV530a extends Migration
-{
+return new class extends Migration {
     /**
      * Reverse the migrations.
      */
@@ -41,12 +40,9 @@ class ChangesForV530a extends Migration
     {
         if (Schema::hasColumn('bills', 'order')) {
             try {
-                Schema::table(
-                    'bills',
-                    static function (Blueprint $table): void {
-                        $table->dropColumn('order');
-                    }
-                );
+                Schema::table('bills', static function (Blueprint $table): void {
+                    $table->dropColumn('order');
+                });
             } catch (QueryException $e) {
                 app('log')->error(sprintf('Could not execute query: %s', $e->getMessage()));
                 app('log')->error('If the column or index already exists (see error), this is not an problem. Otherwise, please open a GitHub discussion.');
@@ -63,16 +59,13 @@ class ChangesForV530a extends Migration
     {
         if (!Schema::hasColumn('bills', 'order')) {
             try {
-                Schema::table(
-                    'bills',
-                    static function (Blueprint $table): void {
-                        $table->integer('order', false, true)->default(0);
-                    }
-                );
+                Schema::table('bills', static function (Blueprint $table): void {
+                    $table->integer('order', false, true)->default(0);
+                });
             } catch (QueryException $e) {
                 app('log')->error(sprintf('Could not execute query: %s', $e->getMessage()));
                 app('log')->error('If the column or index already exists (see error), this is not an problem. Otherwise, please open a GitHub discussion.');
             }
         }
     }
-}
+};

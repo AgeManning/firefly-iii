@@ -23,18 +23,18 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Requests;
 
-use Illuminate\Contracts\Validation\Validator;
 use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\Location;
 use FireflyIII\Rules\IsValidAmount;
 use FireflyIII\Rules\UniqueIban;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Request\AppendsLocationData;
 use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
-use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class AccountFormRequest.
@@ -104,14 +104,14 @@ class AccountFormRequest extends FormRequest
         $types          = implode(',', array_keys(config('firefly.subTitlesByIdentifier')));
         $ccPaymentTypes = implode(',', array_keys(config('firefly.ccTypes')));
         $rules          = [
-            'name'                               => 'required|max:1024|min:1|uniqueAccountForUser',
+            'name'                               => ['required', 'max:1024', 'min:1', 'uniqueAccountForUser'],
             'opening_balance'                    => ['nullable', new IsValidAmount()],
-            'opening_balance_date'               => 'date|required_with:opening_balance|nullable',
+            'opening_balance_date'               => ['date', 'required_with:opening_balance', 'nullable'],
             'iban'                               => ['iban', 'nullable', new UniqueIban(null, $this->convertString('objectType'))],
-            'BIC'                                => 'bic|nullable',
+            'BIC'                                => ['bic', 'nullable'],
             'virtual_balance'                    => ['nullable', new IsValidAmount()],
             'currency_id'                        => 'exists:transaction_currencies,id',
-            'account_number'                     => 'min:1|max:255|uniqueAccountNumberForUser|nullable',
+            'account_number'                     => ['min:1', 'max:255', 'uniqueAccountNumberForUser', 'nullable'],
             'account_role'                       => 'in:'.$accountRoles,
             'active'                             => 'boolean',
             'cc_type'                            => 'in:'.$ccPaymentTypes,
@@ -119,7 +119,7 @@ class AccountFormRequest extends FormRequest
             'amount_currency_id_virtual_balance' => 'exists:transaction_currencies,id',
             'what'                               => 'in:'.$types,
             'interest_period'                    => 'in:daily,monthly,yearly',
-            'notes'                              => 'min:1|max:32768|nullable',
+            'notes'                              => ['min:1', 'max:32768', 'nullable'],
         ];
         $rules          = Location::requestRules($rules);
 

@@ -23,7 +23,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\TransactionRules\Actions;
 
-use FireflyIII\Events\TriggeredAuditLog;
+use FireflyIII\Events\Model\TransactionGroup\TransactionGroupRequestsAuditLogEntry;
 use FireflyIII\Models\RuleAction;
 use FireflyIII\Models\TransactionJournal;
 use FireflyIII\TransactionRules\Traits\RefreshNotesTrait;
@@ -40,7 +40,9 @@ class AppendDescription implements ActionInterface
     /**
      * TriggerInterface constructor.
      */
-    public function __construct(private RuleAction $action) {}
+    public function __construct(
+        private RuleAction $action
+    ) {}
 
     public function actOnArray(array $journal): bool
     {
@@ -51,8 +53,8 @@ class AppendDescription implements ActionInterface
 
         // event for audit log entry
         /** @var TransactionJournal $object */
-        $object      = TransactionJournal::where('user_id', $journal['user_id'])->find($journal['transaction_journal_id']);
-        event(new TriggeredAuditLog($this->action->rule, $object, 'update_description', $journal['description'], $description));
+        $object      = TransactionJournal::query()->where('user_id', $journal['user_id'])->find($journal['transaction_journal_id']);
+        event(new TransactionGroupRequestsAuditLogEntry($this->action->rule, $object, 'update_description', $journal['description'], $description));
 
         return true;
     }

@@ -38,7 +38,7 @@ use Illuminate\Support\Facades\Log;
  */
 trait ValidatesUserGroupTrait
 {
-    protected User      $user;
+    protected User $user;
     protected UserGroup $userGroup;
 
     /**
@@ -62,11 +62,11 @@ trait ValidatesUserGroupTrait
         $user        = auth()->user();
         $groupId     = 0;
         if (!$request->has('user_group_id')) {
-            $groupId = (int)$user->user_group_id;
+            $groupId = (int) $user->user_group_id;
             Log::debug(sprintf('validateUserGroup: no user group submitted, use default group #%d.', $groupId));
         }
         if ($request->has('user_group_id')) {
-            $groupId = (int)$request->get('user_group_id');
+            $groupId = (int) $request->get('user_group_id');
             Log::debug(sprintf('validateUserGroup: user group submitted, search for memberships in group #%d.', $groupId));
         }
 
@@ -78,7 +78,7 @@ trait ValidatesUserGroupTrait
         if (0 === $memberships->count()) {
             Log::debug(sprintf('validateUserGroup: user has no access to group #%d.', $groupId));
 
-            throw new AuthorizationException((string)trans('validation.no_access_group'));
+            throw new AuthorizationException((string) trans('validation.no_access_group'));
         }
 
         // need to get the group from the membership:
@@ -86,19 +86,18 @@ trait ValidatesUserGroupTrait
         if (null === $group) {
             Log::debug(sprintf('validateUserGroup: group #%d does not exist.', $groupId));
 
-            throw new AuthorizationException((string)trans('validation.belongs_user_or_user_group'));
+            throw new AuthorizationException((string) trans('validation.belongs_user_or_user_group'));
         }
         Log::debug(sprintf('validateUserGroup: validate access of user to group #%d ("%s").', $groupId, $group->title));
-        $roles       = property_exists($this, 'acceptedRoles') ? $this->acceptedRoles : []; // @phpstan-ignore-line
-        if (0 === count($roles)) {
+        if (0 === count($this->acceptedRoles)) {
             Log::debug('validateUserGroup: no roles defined, so no access.');
 
-            throw new AuthorizationException((string)trans('validation.no_accepted_roles_defined'));
+            throw new AuthorizationException((string) trans('validation.no_accepted_roles_defined'));
         }
-        Log::debug(sprintf('validateUserGroup: have %d roles to check.', count($roles)), $roles);
+        Log::debug(sprintf('validateUserGroup: have %d roles to check.', count($this->acceptedRoles)), $this->acceptedRoles);
 
         /** @var UserRoleEnum $role */
-        foreach ($roles as $role) {
+        foreach ($this->acceptedRoles as $role) {
             if ($user->hasRoleInGroupOrOwner($group, $role)) {
                 Log::debug(sprintf('validateUserGroup: User has role "%s" in group #%d, return the group.', $role->value, $groupId));
                 $this->userGroup = $group;
@@ -111,6 +110,6 @@ trait ValidatesUserGroupTrait
 
         Log::debug('validateUserGroup: User does NOT have enough rights to access endpoint.');
 
-        throw new AuthorizationException((string)trans('validation.belongs_user_or_user_group'));
+        throw new AuthorizationException((string) trans('validation.belongs_user_or_user_group'));
     }
 }

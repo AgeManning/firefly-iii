@@ -24,27 +24,27 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Report;
 
-use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Report\ReportHelperInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Support\CacheProperties;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
  * Class BillController
  */
-class BillController extends Controller
+final class BillController extends Controller
 {
     /**
      * @return mixed|string
      *
      * @throws FireflyException
      */
-    public function overview(Collection $accounts, Carbon $start, Carbon $end)   // chart properties for cache:
-    {
+    public function overview(Collection $accounts, Carbon $start, Carbon $end)
+    { // chart properties for cache:
         $cache  = new CacheProperties();
         $cache->addProperty($start);
         $cache->addProperty($end);

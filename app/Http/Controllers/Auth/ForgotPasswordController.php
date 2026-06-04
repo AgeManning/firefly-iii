@@ -26,6 +26,7 @@ namespace FireflyIII\Http\Controllers\Auth;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Repositories\User\UserRepositoryInterface;
+use FireflyIII\Support\Facades\FireflyConfig;
 use FireflyIII\User;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Foundation\Auth\SendsPasswordResetEmails;
@@ -36,14 +37,13 @@ use Illuminate\View\View;
 use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\NotFoundExceptionInterface;
 use Safe\Exceptions\UrlException;
-use FireflyIII\Support\Facades\FireflyConfig;
 
 use function Safe\parse_url;
 
 /**
  * Class ForgotPasswordController
  */
-class ForgotPasswordController extends Controller
+final class ForgotPasswordController extends Controller
 {
     use SendsPasswordResetEmails;
 
@@ -70,7 +70,7 @@ class ForgotPasswordController extends Controller
     public function sendResetLinkEmail(Request $request, UserRepositoryInterface $repository)
     {
         Log::info('Start of sendResetLinkEmail()');
-        if ('web'   !== config('firefly.authentication_guard')) {
+        if ('web' !== config('firefly.authentication_guard')) {
             $message = sprintf('Cannot reset password when authenticating over "%s".', config('firefly.authentication_guard'));
             Log::error($message);
 
@@ -84,7 +84,7 @@ class ForgotPasswordController extends Controller
 
         // verify if the user is not a demo user. If so, we give him back an error.
         /** @var null|User $user */
-        $user     = User::where('email', $request->get('email'))->first();
+        $user     = User::query()->where('email', $request->get('email'))->first();
 
         if (null !== $user && $repository->hasRole($user, 'demo')) {
             return back()->withErrors(['email' => (string) trans('firefly.cannot_reset_demo_user')]);
@@ -102,27 +102,6 @@ class ForgotPasswordController extends Controller
         $response = trans('firefly.forgot_password_response');
 
         return back()->with('status', trans($response));
-    }
-
-    /**
-     * @throws FireflyException
-     */
-    private function validateHost(): void
-    {
-        try {
-            $configuredHost = parse_url((string)config('app.url'), PHP_URL_HOST);
-        } catch (UrlException $e) {
-            throw new FireflyException('Please set a valid and correct Firefly III URL in the APP_URL environment variable.', 0, $e);
-        }
-        if (!is_string($configuredHost)) {
-            throw new FireflyException('Please set a valid and correct Firefly III URL in the APP_URL environment variable.');
-        }
-        $host = request()->host();
-        if ($configuredHost !== $host) {
-            Log::error(sprintf('Host header is "%s", APP_URL is "%s".', $host, $configuredHost));
-
-            throw new FireflyException('The Host-header does not match the host in the APP_URL environment variable. Please make sure these match. See also: https://bit.ly/FF3-host-header');
-        }
     }
 
     /**
@@ -152,5 +131,28 @@ class ForgotPasswordController extends Controller
         }
 
         return view('auth.passwords.email')->with(['allowRegistration' => $allowRegistration, 'pageTitle' => $pageTitle]);
+    }
+
+    /**
+     * @throws FireflyException
+     */
+    private function validateHost(): void
+    {
+        try {
+            $configuredHost = parse_url((string) config('app.url'), PHP_URL_HOST);
+        } catch (UrlException $e) {
+            throw new FireflyException('Please set a valid and correct Firefly III URL in the APP_URL environment variable.', 0, $e);
+        }
+        if (!is_string($configuredHost)) {
+            throw new FireflyException('Please set a valid and correct Firefly III URL in the APP_URL environment variable.');
+        }
+        $host = request()->host();
+        if ($configuredHost !== $host) {
+            Log::error(sprintf('Host header is "%s", APP_URL is "%s".', $host, $configuredHost));
+
+            throw new FireflyException(
+                'The Host-header does not match the host in the APP_URL environment variable. Please make sure these match. See also: https://bit.ly/FF3-host-header'
+            );
+        }
     }
 }

@@ -24,7 +24,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Models;
 
-use Deprecated;
 use FireflyIII\Support\Models\ReturnsIntegerIdTrait;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
@@ -36,24 +35,9 @@ class RecurrenceRepetition extends Model
     use ReturnsIntegerIdTrait;
     use SoftDeletes;
 
-    #[Deprecated]
-    /** @deprecated */
-    public const int WEEKEND_DO_NOTHING    = 1;
-
-    #[Deprecated]
-    /** @deprecated */
-    public const int WEEKEND_SKIP_CREATION = 2;
-
-    #[Deprecated]
-    /** @deprecated */
-    public const int WEEKEND_TO_FRIDAY     = 3;
-
-    #[Deprecated]
-    /** @deprecated */
-    public const int WEEKEND_TO_MONDAY     = 4;
-
-    protected $casts
-                                           = [
+    protected function casts(): array
+    {
+        return [
             'created_at'        => 'datetime',
             'updated_at'        => 'datetime',
             'deleted_at'        => 'datetime',
@@ -62,41 +46,29 @@ class RecurrenceRepetition extends Model
             'repetition_skip'   => 'int',
             'weekend'           => 'int',
         ];
+    }
 
-    protected $fillable                    = ['recurrence_id', 'weekend', 'repetition_type', 'repetition_moment', 'repetition_skip'];
+    protected $fillable = ['recurrence_id', 'weekend', 'repetition_type', 'repetition_moment', 'repetition_skip'];
 
-    protected $table                       = 'recurrences_repetitions';
+    protected $table    = 'recurrences_repetitions';
 
     public function recurrence(): BelongsTo
     {
         return $this->belongsTo(Recurrence::class);
     }
 
-    protected function casts(): array
-    {
-        return [
-            // 'weekend' => RecurrenceRepetitionWeekend::class,
-        ];
-    }
-
     protected function recurrenceId(): Attribute
     {
-        return Attribute::make(
-            get: static fn ($value): int => (int)$value,
-        );
+        return Attribute::make(get: static fn ($value): int => (int) $value);
     }
 
     protected function repetitionSkip(): Attribute
     {
-        return Attribute::make(
-            get: static fn ($value): int => (int)$value,
-        );
+        return Attribute::make(get: static fn ($value): int => (int) $value);
     }
 
     protected function weekend(): Attribute
     {
-        return Attribute::make(
-            get: static fn ($value): int => (int)$value,
-        );
+        return Attribute::make(get: static fn ($value): int => (int) $value);
     }
 }

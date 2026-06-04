@@ -24,13 +24,13 @@ declare(strict_types=1);
 
 namespace FireflyIII\Repositories\ObjectGroup;
 
-use Illuminate\Support\Facades\Log;
 use FireflyIII\Models\ObjectGroup;
 use FireflyIII\Models\PiggyBank;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupInterface;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupTrait;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Class ObjectGroupRepository
@@ -49,15 +49,6 @@ class ObjectGroupRepository implements ObjectGroupRepositoryInterface, UserGroup
             $group->bills()->sync([]);
             $group->delete();
         }
-    }
-
-    public function get(): Collection
-    {
-        return $this->user->objectGroups()
-            ->with(['piggyBanks', 'bills'])
-            ->orderBy('order', 'ASC')
-            ->orderBy('title', 'ASC')->get()
-        ;
     }
 
     public function deleteEmpty(): void
@@ -85,6 +76,17 @@ class ObjectGroupRepository implements ObjectGroupRepositoryInterface, UserGroup
         $objectGroup->delete();
     }
 
+    public function get(): Collection
+    {
+        return $this->user
+            ->objectGroups()
+            ->with(['piggyBanks', 'bills'])
+            ->orderBy('order', 'ASC')
+            ->orderBy('title', 'ASC')
+            ->get()
+        ;
+    }
+
     public function getBills(ObjectGroup $objectGroup): Collection
     {
         return $objectGroup->bills;
@@ -104,9 +106,13 @@ class ObjectGroupRepository implements ObjectGroupRepositoryInterface, UserGroup
         /** @var ObjectGroup $objectGroup */
         foreach ($list as $objectGroup) {
             if ($index !== $objectGroup->order) {
-                Log::debug(
-                    sprintf('objectGroup #%d ("%s"): order should %d be but is %d.', $objectGroup->id, $objectGroup->title, $index, $objectGroup->order)
-                );
+                Log::debug(sprintf(
+                    'objectGroup #%d ("%s"): order should %d be but is %d.',
+                    $objectGroup->id,
+                    $objectGroup->title,
+                    $index,
+                    $objectGroup->order
+                ));
                 $objectGroup->order = $index;
                 $objectGroup->save();
             }
@@ -129,6 +135,40 @@ class ObjectGroupRepository implements ObjectGroupRepositoryInterface, UserGroup
         return $dbQuery->take($limit)->get(['object_groups.*']);
     }
 
+    public function setOrder(ObjectGroup $objectGroup, int $newOrder): ObjectGroup
+    {
+        $oldOrder = $objectGroup->order;
+
+        if ($newOrder > $oldOrder) {
+            $this->user
+                ->objectGroups()
+                ->where('object_groups.order', '<=', $newOrder)
+                ->where('object_groups.order', '>', $oldOrder)
+                ->where('object_groups.id', '!=', $objectGroup->id)
+                ->decrement('object_groups.order')
+            ;
+
+            $objectGroup->order = $newOrder;
+            $objectGroup->save();
+        }
+        if ($newOrder < $oldOrder) {
+            $this->user
+                ->objectGroups()
+                ->where('object_groups.order', '>=', $newOrder)
+                ->where('object_groups.order', '<', $oldOrder)
+                ->where('object_groups.id', '!=', $objectGroup->id)
+                ->increment('object_groups.order')
+            ;
+
+            $objectGroup->order = $newOrder;
+            $objectGroup->save();
+        }
+
+        Log::debug(sprintf('Objectgroup #%d order is now %d', $objectGroup->id, $newOrder));
+
+        return $objectGroup;
+    }
+
     public function update(ObjectGroup $objectGroup, array $data): ObjectGroup
     {
         if (array_key_exists('title', $data)) {
@@ -140,34 +180,6 @@ class ObjectGroupRepository implements ObjectGroupRepositoryInterface, UserGroup
         }
 
         $objectGroup->save();
-
-        return $objectGroup;
-    }
-
-    public function setOrder(ObjectGroup $objectGroup, int $newOrder): ObjectGroup
-    {
-        $oldOrder = $objectGroup->order;
-
-        if ($newOrder > $oldOrder) {
-            $this->user->objectGroups()->where('object_groups.order', '<=', $newOrder)->where('object_groups.order', '>', $oldOrder)
-                ->where('object_groups.id', '!=', $objectGroup->id)
-                ->decrement('object_groups.order')
-            ;
-
-            $objectGroup->order = $newOrder;
-            $objectGroup->save();
-        }
-        if ($newOrder < $oldOrder) {
-            $this->user->objectGroups()->where('object_groups.order', '>=', $newOrder)->where('object_groups.order', '<', $oldOrder)
-                ->where('object_groups.id', '!=', $objectGroup->id)
-                ->increment('object_groups.order')
-            ;
-
-            $objectGroup->order = $newOrder;
-            $objectGroup->save();
-        }
-
-        Log::debug(sprintf('Objectgroup #%d order is now %d', $objectGroup->id, $newOrder));
 
         return $objectGroup;
     }

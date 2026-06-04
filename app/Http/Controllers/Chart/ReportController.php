@@ -23,7 +23,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Chart;
 
-use FireflyIII\Support\Facades\Navigation;
 use Carbon\Carbon;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Generator\Chart\Basic\GeneratorInterface;
@@ -33,9 +32,11 @@ use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\CacheProperties;
+use FireflyIII\Support\Facades\Navigation;
 use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Controllers\BasicDataSupport;
 use FireflyIII\Support\Http\Controllers\ChartGeneration;
+use FireflyIII\Support\Http\Controllers\ResolvesJournalAmountAndCurrency;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -43,10 +44,11 @@ use Illuminate\Support\Facades\Log;
 /**
  * Class ReportController.
  */
-class ReportController extends Controller
+final class ReportController extends Controller
 {
     use BasicDataSupport;
     use ChartGeneration;
+    use ResolvesJournalAmountAndCurrency;
 
     protected GeneratorInterface $generator;
 
@@ -86,17 +88,15 @@ class ReportController extends Controller
         // filter accounts on having the preference for being included.
         /** @var AccountRepositoryInterface $accountRepository */
         $accountRepository = app(AccountRepositoryInterface::class);
-        $filtered          = $accounts->filter(
-            static function (Account $account) use ($accountRepository): bool {
-                $includeNetWorth = $accountRepository->getMetaValue($account, 'include_net_worth');
-                $result          = null === $includeNetWorth ? true : '1' === $includeNetWorth;
-                if (false === $result) {
-                    Log::debug(sprintf('Will not include "%s" in net worth charts.', $account->name));
-                }
-
-                return $result;
+        $filtered          = $accounts->filter(static function (Account $account) use ($accountRepository): bool {
+            $includeNetWorth = $accountRepository->getMetaValue($account, 'include_net_worth');
+            $result          = null === $includeNetWorth ? true : '1' === $includeNetWorth;
+            if (false === $result) {
+                Log::debug(sprintf('Will not include "%s" in net worth charts.', $account->name));
             }
-        );
+
+            return $result;
+        });
 
         // TODO get liabilities and include those as well?
 
@@ -149,10 +149,10 @@ class ReportController extends Controller
         $cache->addProperty($start);
         $cache->addProperty($accounts);
         $cache->addProperty($end);
+        $cache->addProperty($this->convertToPrimary);
         if ($cache->has()) {
-            return response()->json($cache->get());
+            //             return response()->json($cache->get());
         }
-
         Log::debug('Going to do operations for accounts ', $accounts->pluck('id')->toArray());
         Log::debug(sprintf('Period: %s to %s', $start->toW3cString(), $end->toW3cString()));
         $format         = Navigation::preferredCarbonFormat($start, $end);
@@ -166,47 +166,48 @@ class ReportController extends Controller
         $collector      = app(GroupCollectorInterface::class);
         $collector->setRange($start, $end)->withAccountInformation();
         $collector->setXorAccounts($accounts);
-        $collector->setTypes(
-            [
-                TransactionTypeEnum::WITHDRAWAL,
-                TransactionTypeEnum::DEPOSIT,
-                TransactionTypeEnum::RECONCILIATION,
-                TransactionTypeEnum::TRANSFER,
-            ]
-        );
+        $collector->setTypes([
+            TransactionTypeEnum::WITHDRAWAL,
+            TransactionTypeEnum::DEPOSIT,
+            TransactionTypeEnum::RECONCILIATION,
+            TransactionTypeEnum::TRANSFER,
+        ]);
         $journals       = $collector->getExtractedJournals();
 
         // loop. group by currency and by period.
         /** @var array $journal */
         foreach ($journals as $journal) {
             $period                           = $journal['date']->format($format);
-            $currencyId                       = (int) $journal['currency_id'];
+            $journalData                      = $this->resolveJournalAmountAndCurrency($journal, $journal);
+            $currencyId                       = $journalData['currency_id'];
+            $currencySymbol                   = $journalData['currency_symbol'];
+            $currencyCode                     = $journalData['currency_code'];
+            $currencyName                     = $journalData['currency_name'];
+            $currencyDecimalPlaces            = $journalData['currency_decimal_places'];
+            $amount                           = $journalData['amount'];
+
             $data[$currencyId]          ??= [
                 'currency_id'             => $currencyId,
-                'currency_symbol'         => $journal['currency_symbol'],
-                'currency_code'           => $journal['currency_code'],
-                'currency_name'           => $journal['currency_name'],
-                'currency_decimal_places' => (int) $journal['currency_decimal_places'],
+                'currency_symbol'         => $currencySymbol,
+                'currency_code'           => $currencyCode,
+                'currency_name'           => $currencyName,
+                'currency_decimal_places' => $currencyDecimalPlaces,
             ];
-            $data[$currencyId][$period] ??= [
-                'period' => $period,
-                'spent'  => '0',
-                'earned' => '0',
-            ];
+            $data[$currencyId][$period] ??= ['period' => $period, 'spent' => '0', 'earned' => '0'];
             // in our outgoing?
             $key                              = 'spent';
-            $amount                           = Steam::positive($journal['amount']);
 
             // deposit = incoming
             // transfer or reconcile or opening balance, and these accounts are the destination.
             if (
                 TransactionTypeEnum::DEPOSIT->value === $journal['transaction_type_type']
-                || ((
+                || (
                     TransactionTypeEnum::TRANSFER->value === $journal['transaction_type_type']
-                        || TransactionTypeEnum::RECONCILIATION->value === $journal['transaction_type_type']
-                        || TransactionTypeEnum::OPENING_BALANCE->value === $journal['transaction_type_type']
+                    || TransactionTypeEnum::RECONCILIATION->value === $journal['transaction_type_type']
+                    || TransactionTypeEnum::OPENING_BALANCE->value === $journal['transaction_type_type']
                 )
-                    && in_array($journal['destination_account_id'], $ids, true))) {
+                && in_array($journal['destination_account_id'], $ids, true)
+            ) {
                 $key = 'earned';
             }
             $data[$currencyId][$period][$key] = bcadd((string) $data[$currencyId][$period][$key], $amount);
@@ -217,7 +218,7 @@ class ReportController extends Controller
 
         /** @var array $currency */
         foreach ($data as $currency) {
-            Log::debug(sprintf('Now processing currency "%s"', $currency['currency_name']));
+            Log::debug(sprintf('Now processing currency %s', $currency['currency_code']));
             $income       = [
                 'label'           => (string) trans('firefly.box_earned_in_currency', ['currency' => $currency['currency_name']]),
                 'type'            => 'bar',
@@ -245,7 +246,7 @@ class ReportController extends Controller
             if ('1Y' === $preferredRange) {
                 $currentEnd = Navigation::endOfPeriod($currentEnd, $preferredRange);
             }
-            Log::debug('Start of sub-loop');
+            Log::debug(sprintf('Start of sub-loop, current end is %s', $currentEnd->toW3cString()));
             while ($currentStart <= $currentEnd) {
                 Log::debug(sprintf('Current start: %s', $currentStart->toW3cString()));
                 $key          = $currentStart->format($format);
@@ -259,7 +260,6 @@ class ReportController extends Controller
                 if (!array_key_exists($key, $currency)) {
                     $income['entries'][$title]  = '0';
                     $expense['entries'][$title] = '0';
-
                 }
                 $currentStart = Navigation::addPeriod($currentStart, $preferredRange);
             }

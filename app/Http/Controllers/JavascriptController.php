@@ -23,7 +23,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers;
 
-use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Exceptions\FireflyException;
@@ -31,18 +30,19 @@ use FireflyIII\Models\Account;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\Currency\CurrencyRepositoryInterface;
+use FireflyIII\Support\Facades\Amount;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Controllers\GetConfigurationData;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\NotFoundExceptionInterface;
-use FireflyIII\Support\Facades\Amount;
 
 /**
  * Class JavascriptController.
  */
-class JavascriptController extends Controller
+final class JavascriptController extends Controller
 {
     use GetConfigurationData;
 
@@ -51,9 +51,14 @@ class JavascriptController extends Controller
      */
     public function accounts(AccountRepositoryInterface $repository): Response
     {
-        $accounts = $repository->getAccountsByType(
-            [AccountTypeEnum::DEFAULT->value, AccountTypeEnum::ASSET->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::LOAN->value, AccountTypeEnum::MORTGAGE->value, AccountTypeEnum::CREDITCARD->value]
-        );
+        $accounts = $repository->getAccountsByType([
+            AccountTypeEnum::DEFAULT->value,
+            AccountTypeEnum::ASSET->value,
+            AccountTypeEnum::DEBT->value,
+            AccountTypeEnum::LOAN->value,
+            AccountTypeEnum::MORTGAGE->value,
+            AccountTypeEnum::CREDITCARD->value,
+        ]);
         $data     = ['accounts' => []];
 
         /** @var Account $account */
@@ -65,10 +70,7 @@ class JavascriptController extends Controller
             $data['accounts'][$accountId] = $entry;
         }
 
-        return response()
-            ->view('javascript.accounts', $data)
-            ->header('Content-Type', 'text/javascript')
-        ;
+        return response()->view('javascript.accounts', $data)->header('Content-Type', 'text/javascript');
     }
 
     /**
@@ -86,10 +88,7 @@ class JavascriptController extends Controller
             $data['currencies'][$currencyId] = $entry;
         }
 
-        return response()
-            ->view('javascript.currencies', $data)
-            ->header('Content-Type', 'text/javascript')
-        ;
+        return response()->view('javascript.currencies', $data)->header('Content-Type', 'text/javascript');
     }
 
     /**
@@ -122,7 +121,7 @@ class JavascriptController extends Controller
             'currencyCode'         => $currency->code,
             'currencySymbol'       => $currency->symbol,
             'accountingLocaleInfo' => $accounting,
-            'anonymous'            => var_export(Steam::anonymous(), true),
+            'anonymous'            => var_export(Steam::anonymous(), return: true),
             'language'             => $lang,
             'dateRangeTitle'       => $dateRange['title'],
             'locale'               => $locale,
@@ -133,10 +132,7 @@ class JavascriptController extends Controller
         ];
         $request->session()->keep(['two-factor-secret']);
 
-        return response()
-            ->view('javascript.variables', $data)
-            ->header('Content-Type', 'text/javascript')
-        ;
+        return response()->view('javascript.variables', $data)->header('Content-Type', 'text/javascript');
     }
 
     /**
@@ -150,14 +146,8 @@ class JavascriptController extends Controller
         /** @var Carbon $end */
         $end   = clone session('end', today(config('app.timezone'))->endOfMonth());
 
-        $data  = [
-            'start' => $start->format('Y-m-d'),
-            'end'   => $end->format('Y-m-d'),
-        ];
+        $data  = ['start' => $start->format('Y-m-d'), 'end' => $end->format('Y-m-d')];
 
-        return response()
-            ->view('v2.javascript.variables', $data)
-            ->header('Content-Type', 'text/javascript')
-        ;
+        return response()->view('v2.javascript.variables', $data)->header('Content-Type', 'text/javascript');
     }
 }

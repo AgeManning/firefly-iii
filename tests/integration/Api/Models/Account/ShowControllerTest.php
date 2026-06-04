@@ -1,6 +1,5 @@
 <?php
 
-
 /*
  * AccountControllerTest.php
  * Copyright (c) 2025 james@firefly-iii.org
@@ -25,11 +24,11 @@ declare(strict_types=1);
 
 namespace Tests\integration\Api\Models\Account;
 
-use Override;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Models\Account;
 use FireflyIII\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Override;
 use Tests\integration\TestCase;
 
 /**
@@ -40,7 +39,35 @@ use Tests\integration\TestCase;
 final class ShowControllerTest extends TestCase
 {
     use RefreshDatabase;
+
     private User $user;
+
+    public function testIndex(): void
+    {
+        $this->actingAs($this->user);
+        $response = $this->getJson(route('api.v1.accounts.index'));
+        $response->assertOk();
+        $response->assertJson(['meta' => ['pagination' => ['total' => 5]]]);
+    }
+
+    public function testIndexCanFilterOnAccountType(): void
+    {
+        $this->actingAs($this->user);
+        $response = $this->getJson(route('api.v1.accounts.index').'?type=asset');
+        $response->assertOk();
+        $response->assertJson([
+            'data' => [['attributes' => ['type' => 'asset']], ['attributes' => ['type' => 'asset']]],
+            'meta' => ['pagination' => ['total' => 2]],
+        ]);
+    }
+
+    public function testIndexFailsOnUnknownAccountType(): void
+    {
+        $this->actingAs($this->user);
+        $response = $this->getJson(route('api.v1.accounts.index').'?type=foobar');
+        $response->assertUnprocessable();
+        $response->assertJson(['errors' => ['type' => ['The selected type is invalid.']]]);
+    }
 
     #[Override]
     protected function setUp(): void
@@ -55,37 +82,5 @@ final class ShowControllerTest extends TestCase
         Account::factory()->for($this->user)->withType(AccountTypeEnum::EXPENSE)->create();
         Account::factory()->for($this->user)->withType(AccountTypeEnum::DEBT)->create();
         Account::factory()->for($this->user)->withType(AccountTypeEnum::ASSET)->create();
-    }
-
-    public function testIndex(): void
-    {
-        $this->actingAs($this->user);
-        $response = $this->getJson(route('api.v1.accounts.index'));
-        $response->assertStatus(200);
-        $response->assertJson([
-            'meta' => ['pagination' => ['total' => 5]],
-        ]);
-    }
-
-    public function testIndexFailsOnUnknownAccountType(): void
-    {
-        $this->actingAs($this->user);
-        $response = $this->getJson(route('api.v1.accounts.index').'?type=foobar');
-        $response->assertStatus(422);
-        $response->assertJson(['errors' => ['type' => ['The selected type is invalid.']]]);
-    }
-
-    public function testIndexCanFilterOnAccountType(): void
-    {
-        $this->actingAs($this->user);
-        $response = $this->getJson(route('api.v1.accounts.index').'?type=asset');
-        $response->assertStatus(200);
-        $response->assertJson([
-            'data' => [
-                ['attributes' => ['type' => 'asset']],
-                ['attributes' => ['type' => 'asset']],
-            ],
-            'meta' => ['pagination' => ['total' => 2]],
-        ]);
     }
 }

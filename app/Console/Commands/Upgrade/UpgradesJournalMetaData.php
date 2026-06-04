@@ -29,10 +29,10 @@ use FireflyIII\Models\Budget;
 use FireflyIII\Models\Category;
 use FireflyIII\Models\Transaction;
 use FireflyIII\Models\TransactionJournal;
+use FireflyIII\Support\Facades\FireflyConfig;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use FireflyIII\Support\Facades\FireflyConfig;
 
 class UpgradesJournalMetaData extends Command
 {
@@ -68,11 +68,32 @@ class UpgradesJournalMetaData extends Command
         return 0;
     }
 
-    private function isMigrated(): bool
+    private function getIdsForBudgets(): array
     {
-        $configVar = FireflyConfig::get(UpgradesToGroups::CONFIG_NAME, false);
+        $transactions = DB::table('budget_transaction')->distinct()->pluck('transaction_id')->toArray();
+        $array        = [];
+        $chunks       = array_chunk($transactions, 500);
 
-        return (bool) $configVar->data;
+        foreach ($chunks as $chunk) {
+            $set   = DB::table('transactions')->whereIn('transactions.id', $chunk)->pluck('transaction_journal_id')->toArray();
+            $array = array_merge($array, $set);
+        }
+
+        return $array;
+    }
+
+    private function getIdsForCategories(): array
+    {
+        $transactions = DB::table('category_transaction')->distinct()->pluck('transaction_id')->toArray();
+        $array        = [];
+        $chunks       = array_chunk($transactions, 500);
+
+        foreach ($chunks as $chunk) {
+            $set   = DB::table('transactions')->whereIn('transactions.id', $chunk)->pluck('transaction_journal_id')->toArray();
+            $array = array_merge($array, $set);
+        }
+
+        return $array;
     }
 
     private function isExecuted(): bool
@@ -80,6 +101,18 @@ class UpgradesJournalMetaData extends Command
         $configVar = FireflyConfig::get(self::CONFIG_NAME, false);
 
         return (bool) $configVar->data;
+    }
+
+    private function isMigrated(): bool
+    {
+        $configVar = FireflyConfig::get(UpgradesToGroups::CONFIG_NAME, false);
+
+        return (bool) $configVar->data;
+    }
+
+    private function markAsExecuted(): void
+    {
+        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 
     private function migrateAll(): void
@@ -98,7 +131,7 @@ class UpgradesJournalMetaData extends Command
         $allIds   = $this->getIdsForBudgets();
         $chunks   = array_chunk($allIds, 500);
         foreach ($chunks as $journalIds) {
-            $collected = TransactionJournal::whereIn('id', $journalIds)->with(['transactions', 'budgets', 'transactions.budgets'])->get();
+            $collected = TransactionJournal::query()->whereIn('id', $journalIds)->with(['transactions', 'budgets', 'transactions.budgets'])->get();
             $journals  = $journals->merge($collected);
         }
 
@@ -106,20 +139,6 @@ class UpgradesJournalMetaData extends Command
         foreach ($journals as $journal) {
             $this->migrateBudgetsForJournal($journal);
         }
-    }
-
-    private function getIdsForBudgets(): array
-    {
-        $transactions = DB::table('budget_transaction')->distinct()->pluck('transaction_id')->toArray();
-        $array        = [];
-        $chunks       = array_chunk($transactions, 500);
-
-        foreach ($chunks as $chunk) {
-            $set   = DB::table('transactions')->whereIn('transactions.id', $chunk)->pluck('transaction_journal_id')->toArray();
-            $array = array_merge($array, $set);
-        }
-
-        return $array;
     }
 
     private function migrateBudgetsForJournal(TransactionJournal $journal): void
@@ -161,7 +180,7 @@ class UpgradesJournalMetaData extends Command
 
         $chunks   = array_chunk($allIds, 500);
         foreach ($chunks as $chunk) {
-            $collected = TransactionJournal::whereIn('id', $chunk)->with(['transactions', 'categories', 'transactions.categories'])->get();
+            $collected = TransactionJournal::query()->whereIn('id', $chunk)->with(['transactions', 'categories', 'transactions.categories'])->get();
             $journals  = $journals->merge($collected);
         }
 
@@ -169,23 +188,6 @@ class UpgradesJournalMetaData extends Command
         foreach ($journals as $journal) {
             $this->migrateCategoriesForJournal($journal);
         }
-    }
-
-    private function getIdsForCategories(): array
-    {
-        $transactions = DB::table('category_transaction')->distinct()->pluck('transaction_id')->toArray();
-        $array        = [];
-        $chunks       = array_chunk($transactions, 500);
-
-        foreach ($chunks as $chunk) {
-            $set   = DB::table('transactions')
-                ->whereIn('transactions.id', $chunk)
-                ->pluck('transaction_journal_id')->toArray()
-            ;
-            $array = array_merge($array, $set);
-        }
-
-        return $array;
     }
 
     private function migrateCategoriesForJournal(TransactionJournal $journal): void
@@ -215,10 +217,5 @@ class UpgradesJournalMetaData extends Command
         if (null !== $category && null === $journalCategory) {
             $journal->categories()->sync([$category->id]);
         }
-    }
-
-    private function markAsExecuted(): void
-    {
-        FireflyConfig::set(self::CONFIG_NAME, true);
     }
 }

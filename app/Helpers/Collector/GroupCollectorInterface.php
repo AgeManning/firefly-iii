@@ -469,11 +469,6 @@ interface GroupCollectorInterface
      */
     public function setEnd(Carbon $end): self;
 
-    /**
-     * Set the page to get.
-     */
-    public function setEndRow(int $endRow): self;
-
     public function setExpandGroupSearch(bool $expandGroupSearch): self;
 
     /**
@@ -574,11 +569,6 @@ interface GroupCollectorInterface
     public function setStart(Carbon $start): self;
 
     /**
-     * Set the page to get.
-     */
-    public function setStartRow(int $startRow): self;
-
-    /**
      * Limit results to a specific tag.
      */
     public function setTag(Tag $tag): self;
@@ -629,11 +619,6 @@ interface GroupCollectorInterface
     public function sortCollection(Collection $collection): Collection;
 
     /**
-     * Automatically include all stuff required to make API calls work.
-     */
-    public function withAPIInformation(): self;
-
-    /**
      * Will include the source and destination account names and types.
      */
     public function withAccountInformation(): self;
@@ -642,6 +627,11 @@ interface GroupCollectorInterface
      * Any notes, no matter what.
      */
     public function withAnyNotes(): self;
+
+    /**
+     * Automatically include all stuff required to make API calls work.
+     */
+    public function withAPIInformation(): self;
 
     /**
      * Add basic info on attachments of transactions.
@@ -699,11 +689,6 @@ interface GroupCollectorInterface
     public function withNotes(): self;
 
     /**
-     * Add tag info.
-     */
-    public function withTagInformation(): self;
-
-    /**
      * Limit results to a transactions without a bill.
      */
     public function withoutBill(): self;
@@ -731,6 +716,11 @@ interface GroupCollectorInterface
     public function withoutNotes(): self;
 
     public function withoutTags(): self;
+
+    /**
+     * Add tag info.
+     */
+    public function withTagInformation(): self;
 
     public function yearAfter(string $year): self;
 

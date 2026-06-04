@@ -24,13 +24,13 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Chart;
 
-use FireflyIII\Support\Facades\Navigation;
 use Carbon\Carbon;
 use FireflyIII\Generator\Chart\Basic\GeneratorInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\CacheProperties;
+use FireflyIII\Support\Facades\Navigation;
 use FireflyIII\Support\Http\Controllers\AugumentData;
 use FireflyIII\Support\Http\Controllers\TransactionCalculation;
 use Illuminate\Http\JsonResponse;
@@ -41,13 +41,13 @@ use Illuminate\Support\Collection;
  *
  * Class ExpenseReportController
  */
-class ExpenseReportController extends Controller
+final class ExpenseReportController extends Controller
 {
     use AugumentData;
     use TransactionCalculation;
 
     protected AccountRepositoryInterface $accountRepository;
-    protected GeneratorInterface         $generator;
+    protected GeneratorInterface $generator;
 
     /**
      * ExpenseReportController constructor.
@@ -55,14 +55,12 @@ class ExpenseReportController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->generator         = app(GeneratorInterface::class);
-                $this->accountRepository = app(AccountRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            $this->generator         = app(GeneratorInterface::class);
+            $this->accountRepository = app(AccountRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -137,7 +135,7 @@ class ExpenseReportController extends Controller
 
         while ($currentStart < $end) {
             $currentEnd   = clone $currentStart;
-            $currentEnd   = $currentEnd->{$function}(); // @phpstan-ignore-line
+            $currentEnd   = $currentEnd->{$function}();
 
             // get expenses grouped by opposing name:
             $expenses     = $this->groupByName($this->getExpensesForOpposing($accounts, $all, $currentStart, $currentEnd));

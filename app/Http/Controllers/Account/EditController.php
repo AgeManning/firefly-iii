@@ -24,13 +24,14 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Account;
 
-use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\AccountFormRequest;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\Location;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Controllers\ModelInformation;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
@@ -38,16 +39,15 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
-use FireflyIII\Support\Facades\Steam;
 
 /**
  * Class EditController
  */
-class EditController extends Controller
+final class EditController extends Controller
 {
     use ModelInformation;
 
-    private AttachmentHelperInterface  $attachments;
+    private AttachmentHelperInterface $attachments;
     private AccountRepositoryInterface $repository;
 
     /**
@@ -58,17 +58,15 @@ class EditController extends Controller
         parent::__construct();
 
         // translations:
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('mainTitleIcon', 'fa-credit-card');
-                app('view')->share('title', (string) trans('firefly.accounts'));
+        $this->middleware(function ($request, $next) {
+            app('view')->share('mainTitleIcon', 'fa-credit-card');
+            app('view')->share('title', (string) trans('firefly.accounts'));
 
-                $this->repository  = app(AccountRepositoryInterface::class);
-                $this->attachments = app(AttachmentHelperInterface::class);
+            $this->repository  = app(AccountRepositoryInterface::class);
+            $this->attachments = app(AttachmentHelperInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -76,10 +74,13 @@ class EditController extends Controller
      *
      * @SuppressWarnings("PHPMD.NPathComplexity")
      *
-     * @return Factory|Redirector|RedirectResponse|View
+     * @return Factory|RedirectResponse|View
      */
-    public function edit(Request $request, Account $account, AccountRepositoryInterface $repository): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
-    {
+    public function edit(
+        Request $request,
+        Account $account,
+        AccountRepositoryInterface $repository
+    ): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse {
         if (!$this->isEditableAccount($account)) {
             return $this->redirectAccountToAccount($account);
         }
@@ -104,10 +105,7 @@ class EditController extends Controller
             ],
         ];
 
-        $liabilityDirections  = [
-            'debit'  => trans('firefly.liability_direction_debit'),
-            'credit' => trans('firefly.liability_direction_credit'),
-        ];
+        $liabilityDirections  = ['debit' => trans('firefly.liability_direction_debit'), 'credit' => trans('firefly.liability_direction_credit')];
 
         // interest calculation periods:
         $interestPeriods      = [];
@@ -165,13 +163,27 @@ class EditController extends Controller
 
         $request->session()->flash('preFilled', $preFilled);
 
-        return view('accounts.edit', ['account' => $account, 'currency' => $currency, 'canEditCurrency' => $canEditCurrency, 'showNetWorth' => $showNetWorth, 'subTitle' => $subTitle, 'subTitleIcon' => $subTitleIcon, 'locations' => $locations, 'liabilityDirections' => $liabilityDirections, 'objectType' => $objectType, 'roles' => $roles, 'preFilled' => $preFilled, 'liabilityTypes' => $liabilityTypes, 'interestPeriods' => $interestPeriods]);
+        return view('accounts.edit', [
+            'account'             => $account,
+            'currency'            => $currency,
+            'canEditCurrency'     => $canEditCurrency,
+            'showNetWorth'        => $showNetWorth,
+            'subTitle'            => $subTitle,
+            'subTitleIcon'        => $subTitleIcon,
+            'locations'           => $locations,
+            'liabilityDirections' => $liabilityDirections,
+            'objectType'          => $objectType,
+            'roles'               => $roles,
+            'preFilled'           => $preFilled,
+            'liabilityTypes'      => $liabilityTypes,
+            'interestPeriods'     => $interestPeriods,
+        ]);
     }
 
     /**
      * Update the account.
      *
-     * @return $this|Redirector|RedirectResponse
+     * @return RedirectResponse
      */
     public function update(AccountFormRequest $request, Account $account)
     {

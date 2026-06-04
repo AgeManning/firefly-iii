@@ -23,8 +23,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Requests;
 
-use Illuminate\Contracts\Validation\Validator;
 use FireflyIII\Support\Request\ChecksLogin;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
 
@@ -35,15 +35,14 @@ class SelectTransactionsRequest extends FormRequest
 {
     use ChecksLogin;
 
+    protected array $acceptedRoles = [];
+
     /**
      * Rules for this request.
      */
     public function rules(): array
     {
-        return [
-            'accounts'   => 'required',
-            'accounts.*' => 'required|exists:accounts,id|belongsToUser:accounts',
-        ];
+        return ['accounts' => 'required', 'accounts.*' => ['required', 'exists:accounts,id', 'belongsToUser:accounts']];
     }
 
     public function withValidator(Validator $validator): void

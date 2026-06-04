@@ -43,6 +43,58 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
 {
     use UserGroupTrait;
 
+    public function collectExpenses(Carbon $start, Carbon $end, ?Collection $accounts = null, ?Collection $categories = null): array
+    {
+        /** @var GroupCollectorInterface $collector */
+        $collector = app(GroupCollectorInterface::class);
+        $collector->setUser($this->user)->setRange($start, $end)->setTypes([TransactionTypeEnum::WITHDRAWAL->value]);
+
+        if ($accounts instanceof Collection && $accounts->count() > 0) {
+            $collector->setAccounts($accounts);
+        }
+        if (!$categories instanceof Collection || 0 === $categories->count()) {
+            $categories = $this->getCategories();
+        }
+        $collector->setCategories($categories);
+        $collector->withCategoryInformation();
+
+        return $collector->getExtractedJournals();
+    }
+
+    public function collectIncome(Carbon $start, Carbon $end, ?Collection $accounts = null, ?Collection $categories = null): array
+    {
+        /** @var GroupCollectorInterface $collector */
+        $collector = app(GroupCollectorInterface::class);
+        $collector->setUser($this->user)->setRange($start, $end)->setTypes([TransactionTypeEnum::DEPOSIT->value]);
+
+        if ($accounts instanceof Collection && $accounts->count() > 0) {
+            $collector->setAccounts($accounts);
+        }
+        if (!$categories instanceof Collection || 0 === $categories->count()) {
+            $categories = $this->getCategories();
+        }
+        $collector->setCategories($categories);
+
+        return $collector->getExtractedJournals();
+    }
+
+    public function collectTransfers(Carbon $start, Carbon $end, ?Collection $accounts = null, ?Collection $categories = null): array
+    {
+        /** @var GroupCollectorInterface $collector */
+        $collector = app(GroupCollectorInterface::class);
+        $collector->setUser($this->user)->setRange($start, $end)->setTypes([TransactionTypeEnum::TRANSFER->value]);
+
+        if ($accounts instanceof Collection && $accounts->count() > 0) {
+            $collector->setAccounts($accounts);
+        }
+        if (!$categories instanceof Collection || 0 === $categories->count()) {
+            $categories = $this->getCategories();
+        }
+        $collector->setCategories($categories);
+
+        return $collector->getExtractedJournals();
+    }
+
     /**
      * This method returns a list of all the withdrawal transaction journals (as arrays) set in that period
      * which have the specified category set to them. It's grouped per currency, with as few details in the array
@@ -101,6 +153,18 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
             $journalId                                                                         = (int) $journal['transaction_journal_id'];
             $array[$currencyId]['categories'][$categoryId]['transaction_journals'][$journalId] = [
                 'amount'                   => Steam::negative($journal['amount']),
+                'currency_id'              => (int) $journal['currency_id'],
+                'currency_name'            => (string) $journal['currency_name'],
+                'currency_symbol'          => (string) $journal['currency_symbol'],
+                'currency_code'            => (string) $journal['currency_code'],
+                'currency_decimal_places'  => (int) $journal['currency_decimal_places'],
+                'foreign_currency_id'      => (int) ($journal['foreign_currency_id'] ?? 0),
+                'foreign_amount'           => array_key_exists('foreign_amount', $journal) && null !== $journal['foreign_amount']
+                    ? Steam::negative((string) $journal['foreign_amount'])
+                    : null,
+                'pc_amount'                => array_key_exists('pc_amount', $journal) && null !== $journal['pc_amount']
+                    ? Steam::negative((string) $journal['pc_amount'])
+                    : null,
                 'date'                     => $journal['date'],
                 'source_account_id'        => (string) $journal['source_account_id'],
                 'budget_name'              => $journal['budget_name'],
@@ -113,14 +177,6 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
         }
 
         return $array;
-    }
-
-    /**
-     * Returns a list of all the categories belonging to a user.
-     */
-    private function getCategories(): Collection
-    {
-        return $this->user->categories()->get();
     }
 
     /**
@@ -179,6 +235,18 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
             $journalId                                                                         = (int) $journal['transaction_journal_id'];
             $array[$currencyId]['categories'][$categoryId]['transaction_journals'][$journalId] = [
                 'amount'                   => Steam::positive($journal['amount']),
+                'currency_id'              => (int) $journal['currency_id'],
+                'currency_name'            => (string) $journal['currency_name'],
+                'currency_symbol'          => (string) $journal['currency_symbol'],
+                'currency_code'            => (string) $journal['currency_code'],
+                'currency_decimal_places'  => (int) $journal['currency_decimal_places'],
+                'foreign_currency_id'      => (int) ($journal['foreign_currency_id'] ?? 0),
+                'foreign_amount'           => array_key_exists('foreign_amount', $journal) && null !== $journal['foreign_amount']
+                    ? Steam::positive((string) $journal['foreign_amount'])
+                    : null,
+                'pc_amount'                => array_key_exists('pc_amount', $journal) && null !== $journal['pc_amount']
+                    ? Steam::positive((string) $journal['pc_amount'])
+                    : null,
                 'date'                     => $journal['date'],
                 'source_account_id'        => (string) $journal['source_account_id'],
                 'destination_account_id'   => (string) $journal['destination_account_id'],
@@ -196,8 +264,12 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
     {
         /** @var GroupCollectorInterface $collector */
         $collector = app(GroupCollectorInterface::class);
-        $collector->setUser($this->user)->setRange($start, $end)->setTypes([TransactionTypeEnum::TRANSFER->value])
-            ->setDestinationAccounts($accounts)->excludeSourceAccounts($accounts)
+        $collector
+            ->setUser($this->user)
+            ->setRange($start, $end)
+            ->setTypes([TransactionTypeEnum::TRANSFER->value])
+            ->setDestinationAccounts($accounts)
+            ->excludeSourceAccounts($accounts)
         ;
         if ($categories instanceof Collection && $categories->count() > 0) {
             $collector->setCategories($categories);
@@ -259,8 +331,12 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
     {
         /** @var GroupCollectorInterface $collector */
         $collector = app(GroupCollectorInterface::class);
-        $collector->setUser($this->user)->setRange($start, $end)->setTypes([TransactionTypeEnum::TRANSFER->value])
-            ->setSourceAccounts($accounts)->excludeDestinationAccounts($accounts)
+        $collector
+            ->setUser($this->user)
+            ->setRange($start, $end)
+            ->setTypes([TransactionTypeEnum::TRANSFER->value])
+            ->setSourceAccounts($accounts)
+            ->excludeDestinationAccounts($accounts)
         ;
         if ($categories instanceof Collection && $categories->count() > 0) {
             $collector->setCategories($categories);
@@ -318,6 +394,18 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
         return $array;
     }
 
+    public function sumCollectedTransactionsByCategory(array $expenses, Category $category, string $method, bool $convertToPrimary = false): array
+    {
+        //        Log::debug(sprintf('Start of %s.', __METHOD__));
+        $summarizer = new TransactionSummarizer($this->user);
+        $summarizer->setConvertToPrimary($convertToPrimary);
+
+        // filter $journals by range AND currency if it is present.
+        $expenses   = array_filter($expenses, static fn (array $expense): bool => $expense['category_id'] === $category->id);
+
+        return $summarizer->groupByCurrencyId($expenses, $method, false);
+    }
+
     /**
      * Sum of withdrawal journals in period for a set of categories, grouped per currency. Amounts are always negative.
      */
@@ -348,9 +436,7 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
     {
         /** @var GroupCollectorInterface $collector */
         $collector        = app(GroupCollectorInterface::class);
-        $collector->setUser($this->user)->setRange($start, $end)
-            ->setTypes([TransactionTypeEnum::DEPOSIT->value])
-        ;
+        $collector->setUser($this->user)->setRange($start, $end)->setTypes([TransactionTypeEnum::DEPOSIT->value]);
 
         if ($accounts instanceof Collection && $accounts->count() > 0) {
             $collector->setAccounts($accounts);
@@ -417,9 +503,7 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
     {
         /** @var GroupCollectorInterface $collector */
         $collector = app(GroupCollectorInterface::class);
-        $collector->setUser($this->user)->setRange($start, $end)
-            ->setTypes([TransactionTypeEnum::TRANSFER->value])
-        ;
+        $collector->setUser($this->user)->setRange($start, $end)->setTypes([TransactionTypeEnum::TRANSFER->value]);
 
         if ($accounts instanceof Collection && $accounts->count() > 0) {
             $collector->setAccounts($accounts);
@@ -447,71 +531,11 @@ class OperationsRepository implements OperationsRepositoryInterface, UserGroupIn
         return $array;
     }
 
-    public function collectExpenses(Carbon $start, Carbon $end, ?Collection $accounts = null, ?Collection $categories = null): array
+    /**
+     * Returns a list of all the categories belonging to a user.
+     */
+    private function getCategories(): Collection
     {
-        /** @var GroupCollectorInterface $collector */
-        $collector = app(GroupCollectorInterface::class);
-        $collector->setUser($this->user)->setRange($start, $end)->setTypes([TransactionTypeEnum::WITHDRAWAL->value]);
-
-        if ($accounts instanceof Collection && $accounts->count() > 0) {
-            $collector->setAccounts($accounts);
-        }
-        if (!$categories instanceof Collection || 0 === $categories->count()) {
-            $categories = $this->getCategories();
-        }
-        $collector->setCategories($categories);
-        $collector->withCategoryInformation();
-
-        return $collector->getExtractedJournals();
-    }
-
-    public function collectIncome(Carbon $start, Carbon $end, ?Collection $accounts = null, ?Collection $categories = null): array
-    {
-        /** @var GroupCollectorInterface $collector */
-        $collector = app(GroupCollectorInterface::class);
-        $collector->setUser($this->user)->setRange($start, $end)
-            ->setTypes([TransactionTypeEnum::DEPOSIT->value])
-        ;
-
-        if ($accounts instanceof Collection && $accounts->count() > 0) {
-            $collector->setAccounts($accounts);
-        }
-        if (!$categories instanceof Collection || 0 === $categories->count()) {
-            $categories = $this->getCategories();
-        }
-        $collector->setCategories($categories);
-
-        return $collector->getExtractedJournals();
-    }
-
-    public function collectTransfers(Carbon $start, Carbon $end, ?Collection $accounts = null, ?Collection $categories = null): array
-    {
-        /** @var GroupCollectorInterface $collector */
-        $collector = app(GroupCollectorInterface::class);
-        $collector->setUser($this->user)->setRange($start, $end)
-            ->setTypes([TransactionTypeEnum::TRANSFER->value])
-        ;
-
-        if ($accounts instanceof Collection && $accounts->count() > 0) {
-            $collector->setAccounts($accounts);
-        }
-        if (!$categories instanceof Collection || 0 === $categories->count()) {
-            $categories = $this->getCategories();
-        }
-        $collector->setCategories($categories);
-
-        return $collector->getExtractedJournals();
-    }
-
-    public function sumCollectedTransactionsByCategory(array $expenses, Category $category, string $method, bool $convertToPrimary = false): array
-    {
-        Log::debug(sprintf('Start of %s.', __METHOD__));
-        $summarizer = new TransactionSummarizer($this->user);
-        $summarizer->setConvertToPrimary($convertToPrimary);
-
-        // filter $journals by range AND currency if it is present.
-        $expenses   = array_filter($expenses, static fn (array $expense): bool => $expense['category_id'] === $category->id);
-
-        return $summarizer->groupByCurrencyId($expenses, $method, false);
+        return $this->user->categories()->get();
     }
 }

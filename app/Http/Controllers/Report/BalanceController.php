@@ -23,7 +23,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Report;
 
-use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Exceptions\FireflyException;
@@ -34,12 +33,13 @@ use FireflyIII\Models\Budget;
 use FireflyIII\Repositories\Budget\BudgetRepositoryInterface;
 use FireflyIII\Support\CacheProperties;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
  * Class BalanceController.
  */
-class BalanceController extends Controller
+final class BalanceController extends Controller
 {
     /** @var BudgetRepositoryInterface */
     private $repository;
@@ -51,13 +51,11 @@ class BalanceController extends Controller
     {
         parent::__construct();
 
-        $this->middleware(
-            function ($request, $next) {
-                $this->repository = app(BudgetRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            $this->repository = app(BudgetRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -69,19 +67,11 @@ class BalanceController extends Controller
      */
     public function general(Collection $accounts, Carbon $start, Carbon $end)
     {
-        $report  = [
-            'budgets'  => [],
-            'accounts' => [],
-        ];
+        $report  = ['budgets' => [], 'accounts' => []];
 
         /** @var Account $account */
         foreach ($accounts as $account) {
-            $report['accounts'][$account->id] = [
-                'id'   => $account->id,
-                'name' => $account->name,
-                'iban' => $account->iban,
-                'sum'  => '0',
-            ];
+            $report['accounts'][$account->id] = ['id' => $account->id, 'name' => $account->name, 'iban' => $account->iban, 'sum' => '0'];
         }
 
         $budgets = $this->repository->getBudgets();
@@ -99,7 +89,11 @@ class BalanceController extends Controller
 
             /** @var GroupCollectorInterface $collector */
             $collector                             = app(GroupCollectorInterface::class);
-            $journals                              = $collector->setRange($start, $end)->setSourceAccounts($accounts)->setTypes([TransactionTypeEnum::WITHDRAWAL->value])->setBudget($budget)
+            $journals                              = $collector
+                ->setRange($start, $end)
+                ->setSourceAccounts($accounts)
+                ->setTypes([TransactionTypeEnum::WITHDRAWAL->value])
+                ->setBudget($budget)
                 ->getExtractedJournals()
             ;
 
@@ -138,6 +132,7 @@ class BalanceController extends Controller
                 $report['accounts'][$sourceAccount]['currency_decimal_places'] = $journal['currency_decimal_places'];
             }
             $report['budgets'][$budgetId]['spent'] = $spent;
+
             // get transactions in budget
         }
 

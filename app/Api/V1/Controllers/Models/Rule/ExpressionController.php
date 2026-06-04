@@ -31,7 +31,7 @@ use Illuminate\Http\JsonResponse;
 /**
  * Class ExpressionController
  */
-class ExpressionController extends Controller
+final class ExpressionController extends Controller
 {
     /**
      * This endpoint is documented at:
@@ -41,8 +41,6 @@ class ExpressionController extends Controller
      */
     public function validateExpression(ValidateExpressionRequest $request): JsonResponse
     {
-        return response()->json([
-            'valid' => true,
-        ]);
+        return response()->json(['valid' => true]);
     }
 }

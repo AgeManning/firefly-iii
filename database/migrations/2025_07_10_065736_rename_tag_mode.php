@@ -1,5 +1,6 @@
 <?php
 
+declare(strict_types=1);
 
 /*
  * 2025_07_10_065736_rename_tag_mode.php
@@ -28,6 +29,22 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        try {
+            Schema::table('tags', static function (Blueprint $table): void {
+                if (Schema::hasColumn('tags', 'tag_mode') && !Schema::hasColumn('piggy_banks', 'tagMode')) {
+                    $table->renameColumn('tag_mode', 'tagMode');
+                }
+            });
+        } catch (RuntimeException $e) {
+            Log::error(sprintf('Could not rename column: %s', $e->getMessage()));
+        }
+    }
+
+    /**
      * Run the migrations.
      */
     public function up(): void
@@ -43,22 +60,6 @@ return new class extends Migration {
             Schema::table('tags', static function (Blueprint $table): void {
                 if (Schema::hasColumn('tags', 'tagmode') && !Schema::hasColumn('piggy_banks', 'tag_mode')) {
                     $table->renameColumn('tagmode', 'tag_mode');
-                }
-            });
-        } catch (RuntimeException $e) {
-            Log::error(sprintf('Could not rename column: %s', $e->getMessage()));
-        }
-    }
-
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
-        try {
-            Schema::table('tags', static function (Blueprint $table): void {
-                if (Schema::hasColumn('tags', 'tag_mode') && !Schema::hasColumn('piggy_banks', 'tagMode')) {
-                    $table->renameColumn('tag_mode', 'tagMode');
                 }
             });
         } catch (RuntimeException $e) {

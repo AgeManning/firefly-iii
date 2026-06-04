@@ -24,13 +24,12 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Rule;
 
-use FireflyIII\Support\Facades\Preferences;
-use Illuminate\Support\Facades\Log;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\RuleFormRequest;
 use FireflyIII\Models\Rule;
 use FireflyIII\Repositories\Rule\RuleRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Http\Controllers\RenderPartialViews;
 use FireflyIII\Support\Http\Controllers\RuleManagement;
 use FireflyIII\Support\Search\OperatorQuerySearch;
@@ -38,14 +37,14 @@ use FireflyIII\Support\Search\SearchInterface;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Redirector;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Throwable;
 
 /**
  * Class EditController
  */
-class EditController extends Controller
+final class EditController extends Controller
 {
     use RenderPartialViews;
     use RuleManagement;
@@ -59,16 +58,14 @@ class EditController extends Controller
     {
         parent::__construct();
 
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('title', (string) trans('firefly.rules'));
-                app('view')->share('mainTitleIcon', 'fa-random');
+        $this->middleware(function ($request, $next) {
+            app('view')->share('title', (string) trans('firefly.rules'));
+            app('view')->share('mainTitleIcon', 'fa-random');
 
-                $this->ruleRepos = app(RuleRepositoryInterface::class);
+            $this->ruleRepos = app(RuleRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -96,19 +93,13 @@ class EditController extends Controller
             if (count($words) > 0) {
                 session()->flash('warning', trans('firefly.rule_from_search_words', ['string' => implode('', $words)]));
                 foreach ($words as $word) {
-                    $operators[] = [
-                        'type'  => 'description_contains',
-                        'value' => $word,
-                    ];
+                    $operators[] = ['type' => 'description_contains', 'value' => $word];
                 }
             }
             if (count($excludedWords) > 0) {
                 session()->flash('warning', trans('firefly.rule_from_search_words', ['string' => implode('', $excludedWords)]));
                 foreach ($excludedWords as $excludedWord) {
-                    $operators[] = [
-                        'type'  => '-description_contains',
-                        'value' => $excludedWord,
-                    ];
+                    $operators[] = ['type' => '-description_contains', 'value' => $excludedWord];
                 }
             }
             $oldTriggers   = $this->parseFromOperators($operators);
@@ -148,55 +139,21 @@ class EditController extends Controller
 
         $request->session()->flash('preFilled', $preFilled);
 
-        return view('rules.rule.edit', ['rule' => $rule, 'subTitle' => $subTitle, 'primaryTrigger' => $primaryTrigger, 'oldTriggers' => $oldTriggers, 'oldActions' => $oldActions, 'triggerCount' => $triggerCount, 'actionCount' => $actionCount]);
-    }
-
-    /**
-     * @throws FireflyException
-     */
-    private function parseFromOperators(array $submittedOperators): array
-    {
-        // TODO this code is duplicate.
-        $operators       = config('search.operators');
-        $renderedEntries = [];
-        $triggers        = [];
-        foreach ($operators as $key => $operator) {
-            if ('user_action' !== $key && false === $operator['alias']) {
-                $triggers[$key] = (string) trans(sprintf('firefly.rule_trigger_%s_choice', $key));
-            }
-        }
-        asort($triggers);
-
-        $index           = 0;
-        foreach ($submittedOperators as $operator) {
-            try {
-                $renderedEntries[] = view(
-                    'rules.partials.trigger',
-                    [
-                        'oldTrigger' => OperatorQuerySearch::getRootOperator($operator['type']),
-                        'oldValue'   => $operator['value'],
-                        'oldChecked' => false,
-                        'count'      => $index + 1,
-                        'triggers'   => $triggers,
-                    ]
-                )->render();
-            } catch (Throwable $e) {
-                $message = sprintf('Throwable was thrown in getPreviousTriggers(): %s', $e->getMessage());
-                Log::debug($message);
-                Log::error($e->getTraceAsString());
-
-                throw new FireflyException($message, 0, $e);
-            }
-            ++$index;
-        }
-
-        return $renderedEntries;
+        return view('rules.rule.edit', [
+            'rule'           => $rule,
+            'subTitle'       => $subTitle,
+            'primaryTrigger' => $primaryTrigger,
+            'oldTriggers'    => $oldTriggers,
+            'oldActions'     => $oldActions,
+            'triggerCount'   => $triggerCount,
+            'actionCount'    => $actionCount,
+        ]);
     }
 
     /**
      * Update the rule.
      *
-     * @return Redirector|RedirectResponse
+     * @return RedirectResponse
      */
     public function update(RuleFormRequest $request, Rule $rule)
     {
@@ -219,5 +176,44 @@ class EditController extends Controller
         }
 
         return $redirect;
+    }
+
+    /**
+     * @throws FireflyException
+     */
+    private function parseFromOperators(array $submittedOperators): array
+    {
+        // TODO this code is duplicate.
+        $operators       = config('search.operators');
+        $renderedEntries = [];
+        $triggers        = [];
+        foreach ($operators as $key => $operator) {
+            if ('user_action' !== $key && false === $operator['alias']) {
+                $triggers[$key] = (string) trans(sprintf('firefly.rule_trigger_%s_choice', $key));
+            }
+        }
+        asort($triggers);
+
+        $index           = 0;
+        foreach ($submittedOperators as $operator) {
+            try {
+                $renderedEntries[] = view('rules.partials.trigger', [
+                    'oldTrigger' => OperatorQuerySearch::getRootOperator($operator['type']),
+                    'oldValue'   => $operator['value'],
+                    'oldChecked' => false,
+                    'count'      => $index + 1,
+                    'triggers'   => $triggers,
+                ])->render();
+            } catch (Throwable $e) {
+                $message = sprintf('Throwable was thrown in getPreviousTriggers(): %s', $e->getMessage());
+                Log::debug($message);
+                Log::error($e->getTraceAsString());
+
+                throw new FireflyException($message, 0, $e);
+            }
+            ++$index;
+        }
+
+        return $renderedEntries;
     }
 }

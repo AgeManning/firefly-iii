@@ -24,7 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Admin;
 
-use FireflyIII\Events\Test\OwnerTestNotificationChannel;
+use FireflyIII\Events\Test\OwnerTestsNotificationChannel;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\NotificationRequest;
 use FireflyIII\Notifications\Notifiables\OwnerNotifiable;
@@ -34,7 +34,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
-class NotificationController extends Controller
+final class NotificationController extends Controller
 {
     public function index(): View
     {
@@ -72,10 +72,23 @@ class NotificationController extends Controller
         $forcedAvailability['pushover'] = '' !== $pushoverAppToken && '' !== $pushoverUserToken;
         $forcedAvailability['slack']    = '' !== $slackUrl;
 
-        return view(
-            'settings.notifications.index',
-            ['title' => $title, 'subTitle' => $subTitle, 'forcedAvailability' => $forcedAvailability, 'mainTitleIcon' => $mainTitleIcon, 'subTitleIcon' => $subTitleIcon, 'channels' => $channels, 'slackUrl' => $slackUrl, 'notifications' => $notifications, 'pushoverAppToken' => $pushoverAppToken, 'pushoverUserToken' => $pushoverUserToken, 'ntfyServer' => $ntfyServer, 'ntfyTopic' => $ntfyTopic, 'ntfyAuth' => $ntfyAuth, 'ntfyUser' => $ntfyUser, 'ntfyPass' => $ntfyPass]
-        );
+        return view('settings.notifications.index', [
+            'title'              => $title,
+            'subTitle'           => $subTitle,
+            'forcedAvailability' => $forcedAvailability,
+            'mainTitleIcon'      => $mainTitleIcon,
+            'subTitleIcon'       => $subTitleIcon,
+            'channels'           => $channels,
+            'slackUrl'           => $slackUrl,
+            'notifications'      => $notifications,
+            'pushoverAppToken'   => $pushoverAppToken,
+            'pushoverUserToken'  => $pushoverUserToken,
+            'ntfyServer'         => $ntfyServer,
+            'ntfyTopic'          => $ntfyTopic,
+            'ntfyAuth'           => $ntfyAuth,
+            'ntfyUser'           => $ntfyUser,
+            'ntfyPass'           => $ntfyPass,
+        ]);
     }
 
     public function postIndex(NotificationRequest $request): RedirectResponse
@@ -98,7 +111,6 @@ class NotificationController extends Controller
         }
         FireflyConfig::set('ntfy_auth', $all['ntfy_auth'] ?? false);
 
-
         session()->flash('success', (string) trans('firefly.notification_settings_saved'));
 
         return redirect(route('settings.notification.index'));
@@ -112,8 +124,16 @@ class NotificationController extends Controller
             return redirect(route('settings.notification.index'));
         }
 
-        $all     = $request->all();
-        $channel = $all['test_submit'] ?? '';
+        /** @var int $lastNotification */
+        $lastNotification = FireflyConfig::get('last_test_notification', 123)->data;
+        if ((time() - $lastNotification) < 120) {
+            session()->flash('error', (string) trans('firefly.test_rate_limited'));
+
+            return redirect(route('settings.notification.index'));
+        }
+
+        $all              = $request->only(['test_submit']);
+        $channel          = $all['test_submit'] ?? '';
 
         switch ($channel) {
             default:
@@ -127,9 +147,10 @@ class NotificationController extends Controller
             case 'ntfy':
                 $owner = new OwnerNotifiable();
                 Log::debug(sprintf('Now in testNotification("%s") controller.', $channel));
-                event(new OwnerTestNotificationChannel($channel, $owner));
+                event(new OwnerTestsNotificationChannel($channel, $owner));
                 session()->flash('success', (string) trans('firefly.notification_test_executed', ['channel' => $channel]));
         }
+        FireflyConfig::set('last_test_notification', time());
 
         return redirect(route('settings.notification.index'));
     }

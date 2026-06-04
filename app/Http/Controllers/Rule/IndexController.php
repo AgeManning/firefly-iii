@@ -38,12 +38,12 @@ use Illuminate\View\View;
 /**
  * Class IndexController
  */
-class IndexController extends Controller
+final class IndexController extends Controller
 {
     use RuleManagement;
 
     private RuleGroupRepositoryInterface $ruleGroupRepos;
-    private RuleRepositoryInterface      $ruleRepos;
+    private RuleRepositoryInterface $ruleRepos;
 
     /**
      * RuleController constructor.
@@ -51,16 +51,14 @@ class IndexController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('title', (string) trans('firefly.rules'));
-                app('view')->share('mainTitleIcon', 'fa-random');
-                $this->ruleGroupRepos = app(RuleGroupRepositoryInterface::class);
-                $this->ruleRepos      = app(RuleRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            app('view')->share('title', (string) trans('firefly.rules'));
+            app('view')->share('mainTitleIcon', 'fa-random');
+            $this->ruleGroupRepos = app(RuleGroupRepositoryInterface::class);
+            $this->ruleRepos      = app(RuleRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**

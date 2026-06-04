@@ -42,41 +42,36 @@ class TagList implements BinderInterface
     {
         if (auth()->check()) {
             if ('allTags' === $value) {
-                return auth()->user()->tags()
-                    ->orderBy('tag', 'ASC')
-                    ->get()
-                ;
+                return auth()->user()->tags()->orderBy('tag', 'ASC')->get();
             }
-            $list       = array_unique(array_map(\strtolower(...), explode(',', $value)));
-            Log::debug('List of tags is', $list);
-
-            if (0 === count($list)) { // @phpstan-ignore-line
-                Log::error('Tag list is empty.');
+            if ('' === $value) {
+                Log::warning('Category list count is zero, return 404.');
 
                 throw new NotFoundHttpException();
             }
+
+            $list       = array_unique(array_map(\strtolower(...), explode(',', $value)));
+            Log::debug('List of tags is', $list);
 
             /** @var TagRepositoryInterface $repository */
             $repository = app(TagRepositoryInterface::class);
             $repository->setUser(auth()->user());
             $allTags    = $repository->get();
 
-            $collection = $allTags->filter(
-                static function (Tag $tag) use ($list): bool {
-                    if (in_array(strtolower($tag->tag), $list, true)) {
-                        Log::debug(sprintf('TagList: (string) found tag #%d ("%s") in list.', $tag->id, $tag->tag));
+            $collection = $allTags->filter(static function (Tag $tag) use ($list): bool {
+                if (in_array(strtolower($tag->tag), $list, true)) {
+                    Log::debug(sprintf('TagList: (string) found tag #%d ("%s") in list.', $tag->id, $tag->tag));
 
-                        return true;
-                    }
-                    if (in_array((string)$tag->id, $list, true)) {
-                        Log::debug(sprintf('TagList: (id) found tag #%d ("%s") in list.', $tag->id, $tag->tag));
-
-                        return true;
-                    }
-
-                    return false;
+                    return true;
                 }
-            );
+                if (in_array((string) $tag->id, $list, true)) {
+                    Log::debug(sprintf('TagList: (id) found tag #%d ("%s") in list.', $tag->id, $tag->tag));
+
+                    return true;
+                }
+
+                return false;
+            });
 
             if ($collection->count() > 0) {
                 return $collection;

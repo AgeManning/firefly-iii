@@ -98,7 +98,7 @@ class JournalCLIRepository implements JournalCLIRepositoryInterface, UserGroupIn
      */
     public function getJournalsWithoutGroup(): array
     {
-        return TransactionJournal::whereNull('transaction_group_id')->get(['id', 'user_id'])->toArray();
+        return TransactionJournal::query()->whereNull('transaction_group_id')->get(['id', 'user_id'])->toArray();
     }
 
     /**
@@ -168,7 +168,6 @@ class JournalCLIRepository implements JournalCLIRepositoryInterface, UserGroupIn
         $note = $journal->notes()->first();
 
         return $note?->text;
-
     }
 
     /**
@@ -177,9 +176,9 @@ class JournalCLIRepository implements JournalCLIRepositoryInterface, UserGroupIn
      */
     public function getSplitJournals(): Collection
     {
-        $query      = TransactionJournal::leftJoin('transactions', 'transaction_journals.id', '=', 'transactions.transaction_journal_id')
-            ->groupBy('transaction_journals.id')
-        ;
+        $query      = TransactionJournal::leftJoin('transactions', 'transaction_journals.id', '=', 'transactions.transaction_journal_id')->groupBy(
+            'transaction_journals.id'
+        );
         $result     = $query->get(['transaction_journals.id as id', DB::raw('count(transactions.id) as transaction_count')]);
         $journalIds = [];
 
@@ -191,9 +190,7 @@ class JournalCLIRepository implements JournalCLIRepositoryInterface, UserGroupIn
         }
         $journalIds = array_unique($journalIds);
 
-        return TransactionJournal::with(['transactions'])
-            ->whereIn('id', $journalIds)->get()
-        ;
+        return TransactionJournal::query()->with(['transactions'])->whereIn('id', $journalIds)->get();
     }
 
     /**

@@ -23,7 +23,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Report;
 
-use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
@@ -33,17 +32,18 @@ use FireflyIII\Repositories\Account\OperationsRepositoryInterface;
 use FireflyIII\Support\Http\Controllers\AugumentData;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Throwable;
 
 /**
  * Class DoubleController
  */
-class DoubleController extends Controller
+final class DoubleController extends Controller
 {
     use AugumentData;
 
-    protected AccountRepositoryInterface  $accountRepository;
+    protected AccountRepositoryInterface $accountRepository;
     private OperationsRepositoryInterface $opsRepository;
 
     /**
@@ -54,14 +54,12 @@ class DoubleController extends Controller
         parent::__construct();
 
         // translations:
-        $this->middleware(
-            function ($request, $next) {
-                $this->accountRepository = app(AccountRepositoryInterface::class);
-                $this->opsRepository     = app(OperationsRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            $this->accountRepository = app(AccountRepositoryInterface::class);
+            $this->opsRepository     = app(OperationsRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -281,24 +279,6 @@ class DoubleController extends Controller
     }
 
     /**
-     * TODO this method is duplicated.
-     */
-    private function getCounterpartName(Collection $accounts, int $id, string $name, ?string $iban): string
-    {
-        /** @var Account $account */
-        foreach ($accounts as $account) {
-            if ($account->name === $name && $account->id !== $id) {
-                return $account->name;
-            }
-            if (null !== $account->iban && $account->iban === $iban && $account->id !== $id) {
-                return $account->iban;
-            }
-        }
-
-        return $name;
-    }
-
-    /**
      * @return Factory|View
      */
     public function operationsPerAsset(Collection $accounts, Collection $double, Carbon $start, Carbon $end): Factory|\Illuminate\Contracts\View\View
@@ -487,5 +467,23 @@ class DoubleController extends Controller
         }
 
         return $result;
+    }
+
+    /**
+     * TODO this method is duplicated.
+     */
+    private function getCounterpartName(Collection $accounts, int $id, string $name, ?string $iban): string
+    {
+        /** @var Account $account */
+        foreach ($accounts as $account) {
+            if ($account->name === $name && $account->id !== $id) {
+                return $account->name;
+            }
+            if (null !== $account->iban && $account->iban === $iban && $account->id !== $id) {
+                return $account->iban;
+            }
+        }
+
+        return $name;
     }
 }

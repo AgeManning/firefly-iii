@@ -35,7 +35,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * Class PeriodController
  */
-class PeriodController extends Controller
+final class PeriodController extends Controller
 {
     public function total(GenericRequest $request): JsonResponse
     {
@@ -72,7 +72,6 @@ class PeriodController extends Controller
                 Log::debug(sprintf('[b] Add amount %s %s', $currencyCode, $journal['amount']));
                 $amount = $journal['amount'];
             }
-
 
             $response[$currencyId] ??= [
                 'difference'       => '0',

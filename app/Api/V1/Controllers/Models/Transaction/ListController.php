@@ -42,7 +42,7 @@ use League\Fractal\Resource\Collection as FractalCollection;
 /**
  * Class ListController
  */
-class ListController extends Controller
+final class ListController extends Controller
 {
     private JournalAPIRepositoryInterface $journalAPIRepository;
 
@@ -52,17 +52,15 @@ class ListController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                /** @var User $admin */
-                $admin                      = auth()->user();
+        $this->middleware(function ($request, $next) {
+            /** @var User $admin */
+            $admin                      = auth()->user();
 
-                $this->journalAPIRepository = app(JournalAPIRepositoryInterface::class);
-                $this->journalAPIRepository->setUser($admin);
+            $this->journalAPIRepository = app(JournalAPIRepositoryInterface::class);
+            $this->journalAPIRepository->setUser($admin);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**

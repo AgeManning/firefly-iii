@@ -46,27 +46,10 @@ trait MetaCollection
     public function excludeBills(Collection $bills): GroupCollectorInterface
     {
         $this->withBillInformation();
-        $this->query->where(static function (EloquentBuilder $q1) use ($bills): void { // @phpstan-ignore-line
+        $this->query->where(static function (EloquentBuilder $q1) use ($bills): void {
             $q1->whereNotIn('transaction_journals.bill_id', $bills->pluck('id')->toArray());
             $q1->orWhereNull('transaction_journals.bill_id');
         });
-
-        return $this;
-    }
-
-    /**
-     * Will include bill name + ID, if any.
-     */
-    public function withBillInformation(): GroupCollectorInterface
-    {
-        if (false === $this->hasBillInformation) {
-            // join bill table
-            $this->query->leftJoin('bills', 'bills.id', '=', 'transaction_journals.bill_id');
-            // add fields
-            $this->fields[]           = 'bills.id as bill_id';
-            $this->fields[]           = 'bills.name as bill_name';
-            $this->hasBillInformation = true;
-        }
 
         return $this;
     }
@@ -78,29 +61,10 @@ trait MetaCollection
     {
         $this->withBudgetInformation();
 
-        $this->query->where(static function (EloquentBuilder $q2) use ($budget): void { // @phpstan-ignore-line
+        $this->query->where(static function (EloquentBuilder $q2) use ($budget): void {
             $q2->where('budgets.id', '!=', $budget->id);
             $q2->orWhereNull('budgets.id');
         });
-
-        return $this;
-    }
-
-    /**
-     * Will include budget ID + name, if any.
-     */
-    public function withBudgetInformation(): GroupCollectorInterface
-    {
-        if (false === $this->hasBudgetInformation) {
-            // join link table
-            $this->query->leftJoin('budget_transaction_journal', 'budget_transaction_journal.transaction_journal_id', '=', 'transaction_journals.id');
-            // join cat table
-            $this->query->leftJoin('budgets', 'budget_transaction_journal.budget_id', '=', 'budgets.id');
-            // add fields
-            $this->fields[]             = 'budgets.id as budget_id';
-            $this->fields[]             = 'budgets.name as budget_name';
-            $this->hasBudgetInformation = true;
-        }
 
         return $this;
     }
@@ -109,7 +73,7 @@ trait MetaCollection
     {
         if ($budgets->count() > 0) {
             $this->withBudgetInformation();
-            $this->query->where(static function (EloquentBuilder $q1) use ($budgets): void { // @phpstan-ignore-line
+            $this->query->where(static function (EloquentBuilder $q1) use ($budgets): void {
                 $q1->whereNotIn('budgets.id', $budgets->pluck('id')->toArray());
                 $q1->orWhereNull('budgets.id');
             });
@@ -122,29 +86,10 @@ trait MetaCollection
     {
         if ($categories->count() > 0) {
             $this->withCategoryInformation();
-            $this->query->where(static function (EloquentBuilder $q1) use ($categories): void { // @phpstan-ignore-line
+            $this->query->where(static function (EloquentBuilder $q1) use ($categories): void {
                 $q1->whereNotIn('categories.id', $categories->pluck('id')->toArray());
                 $q1->orWhereNull('categories.id');
             });
-        }
-
-        return $this;
-    }
-
-    /**
-     * Will include category ID + name, if any.
-     */
-    public function withCategoryInformation(): GroupCollectorInterface
-    {
-        if (false === $this->hasCatInformation) {
-            // join link table
-            $this->query->leftJoin('category_transaction_journal', 'category_transaction_journal.transaction_journal_id', '=', 'transaction_journals.id');
-            // join cat table
-            $this->query->leftJoin('categories', 'category_transaction_journal.category_id', '=', 'categories.id');
-            // add fields
-            $this->fields[]          = 'categories.id as category_id';
-            $this->fields[]          = 'categories.name as category_name';
-            $this->hasCatInformation = true;
         }
 
         return $this;
@@ -157,7 +102,7 @@ trait MetaCollection
     {
         $this->withCategoryInformation();
 
-        $this->query->where(static function (EloquentBuilder $q2) use ($category): void { // @phpstan-ignore-line
+        $this->query->where(static function (EloquentBuilder $q2) use ($category): void {
             $q2->where('categories.id', '!=', $category->id);
             $q2->orWhereNull('categories.id');
         });
@@ -173,19 +118,6 @@ trait MetaCollection
         $this->query->whereNull('journal_meta.deleted_at');
 
         return $this;
-    }
-
-    /**
-     * Join table to get tag information.
-     */
-    protected function joinMetaDataTables(): void
-    {
-        if (false === $this->hasJoinedMetaTables) {
-            $this->hasJoinedMetaTables = true;
-            $this->query->leftJoin('journal_meta', 'transaction_journals.id', '=', 'journal_meta.transaction_journal_id');
-            $this->fields[]            = 'journal_meta.name as meta_name';
-            $this->fields[]            = 'journal_meta.data as meta_data';
-        }
     }
 
     public function excludeExternalUrl(string $url): GroupCollectorInterface
@@ -371,34 +303,6 @@ trait MetaCollection
         return $this;
     }
 
-    public function withTagInformation(): GroupCollectorInterface
-    {
-        $this->fields[] = 'tags.id as tag_id';
-        $this->fields[] = 'tags.tag as tag_name';
-        $this->fields[] = 'tags.date as tag_date';
-        $this->fields[] = 'tags.description as tag_description';
-        $this->fields[] = 'tags.latitude as tag_latitude';
-        $this->fields[] = 'tags.longitude as tag_longitude';
-        $this->fields[] = 'tags.zoomLevel as tag_zoom_level';
-
-        $this->joinTagTables();
-
-        return $this;
-    }
-
-    /**
-     * Join table to get tag information.
-     */
-    protected function joinTagTables(): void
-    {
-        if (false === $this->hasJoinedTagTables) {
-            // join some extra tables:
-            $this->hasJoinedTagTables = true;
-            $this->query->leftJoin('tag_transaction_journal', 'tag_transaction_journal.transaction_journal_id', '=', 'transaction_journals.id');
-            $this->query->leftJoin('tags', 'tag_transaction_journal.tag_id', '=', 'tags.id');
-        }
-    }
-
     public function internalReferenceContains(string $internalReference): GroupCollectorInterface
     {
         $internalReference = json_encode($internalReference);
@@ -487,30 +391,10 @@ trait MetaCollection
         return $this;
     }
 
-    public function withNotes(): GroupCollectorInterface
-    {
-        if (false === $this->hasNotesInformation) {
-            // join bill table
-            $this->query->leftJoin(
-                'notes',
-                static function (JoinClause $join): void {
-                    $join->on('notes.noteable_id', '=', 'transaction_journals.id');
-                    $join->where('notes.noteable_type', '=', TransactionJournal::class);
-                    $join->whereNull('notes.deleted_at');
-                }
-            );
-            // add fields
-            $this->fields[]            = 'notes.text as notes';
-            $this->hasNotesInformation = true;
-        }
-
-        return $this;
-    }
-
     public function notesDoNotContain(string $value): GroupCollectorInterface
     {
         $this->withNotes();
-        $this->query->where(static function (EloquentBuilder $q) use ($value): void { // @phpstan-ignore-line
+        $this->query->where(static function (EloquentBuilder $q) use ($value): void {
             $q->whereNull('notes.text');
             $q->orWhereNotLike('notes.text', sprintf('%%%s%%', $value));
         });
@@ -521,7 +405,7 @@ trait MetaCollection
     public function notesDontEndWith(string $value): GroupCollectorInterface
     {
         $this->withNotes();
-        $this->query->where(static function (EloquentBuilder $q) use ($value): void { // @phpstan-ignore-line
+        $this->query->where(static function (EloquentBuilder $q) use ($value): void {
             $q->whereNull('notes.text');
             $q->orWhereNotLike('notes.text', sprintf('%%%s', $value));
         });
@@ -532,7 +416,7 @@ trait MetaCollection
     public function notesDontStartWith(string $value): GroupCollectorInterface
     {
         $this->withNotes();
-        $this->query->where(static function (EloquentBuilder $q) use ($value): void { // @phpstan-ignore-line
+        $this->query->where(static function (EloquentBuilder $q) use ($value): void {
             $q->whereNull('notes.text');
             $q->orWhereNotLike('notes.text', sprintf('%s%%', $value));
         });
@@ -559,7 +443,7 @@ trait MetaCollection
     public function notesExactlyNot(string $value): GroupCollectorInterface
     {
         $this->withNotes();
-        $this->query->where(static function (EloquentBuilder $q) use ($value): void { // @phpstan-ignore-line
+        $this->query->where(static function (EloquentBuilder $q) use ($value): void {
             $q->whereNull('notes.text');
             $q->orWhere('notes.text', '!=', $value);
         });
@@ -776,30 +660,22 @@ trait MetaCollection
         $this->query->whereNotNull('tag_transaction_journal.tag_id');
 
         // Added this while fixing #10898, not sure why a post filter was ever necessary.
-        $this->query->whereIn('tag_transaction_journal.tag_id', $tags->pluck('id')->toArray());
+        // Removed again for #11473 because it breaks multiple tag filters.
+        // $this->query->whereIn('tag_transaction_journal.tag_id', $tags->pluck('id')->toArray());
 
         // this method adds a "postFilter" to the collector.
         $list                = $tags->pluck('tag')->toArray();
         $list                = array_map(strtolower(...), $list);
         $filter              = static function (array $object) use ($list): bool {
-            Log::debug(sprintf('Now in setTags(%s) filter', implode(', ', $list)));
+            Log::debug(sprintf('Now in setTags (any) filter: %s', implode(', ', $list)));
             foreach ($object['transactions'] as $transaction) {
-                $total   = count($transaction['tags']);
-                $matched = 0;
                 foreach ($transaction['tags'] as $tag) {
                     Log::debug(sprintf('"%s" versus', strtolower((string) $tag['name'])), $list);
                     if (in_array(strtolower((string) $tag['name']), $list, true)) {
                         Log::debug(sprintf('Transaction has tag "%s" so return true.', $tag['name']));
-                        ++$matched;
-                        if (1 === count($list)) {
-                            return true;
-                        }
-                    }
-                }
-                if (count($list) > 1 && $total === $matched && $matched === count($list)) {
-                    Log::debug(sprintf('All %d searched tags are present.', $total));
 
-                    return true;
+                        return true;
+                    }
                 }
             }
             Log::debug('Transaction has no tags from the list, so return false.');
@@ -862,6 +738,23 @@ trait MetaCollection
     }
 
     /**
+     * Will include bill name + ID, if any.
+     */
+    public function withBillInformation(): GroupCollectorInterface
+    {
+        if (false === $this->hasBillInformation) {
+            // join bill table
+            $this->query->leftJoin('bills', 'bills.id', '=', 'transaction_journals.bill_id');
+            // add fields
+            $this->fields[]           = 'bills.id as bill_id';
+            $this->fields[]           = 'bills.name as bill_name';
+            $this->hasBillInformation = true;
+        }
+
+        return $this;
+    }
+
+    /**
      * Limit results to a transactions without a budget..
      */
     public function withBudget(): GroupCollectorInterface
@@ -873,12 +766,50 @@ trait MetaCollection
     }
 
     /**
+     * Will include budget ID + name, if any.
+     */
+    public function withBudgetInformation(): GroupCollectorInterface
+    {
+        if (false === $this->hasBudgetInformation) {
+            // join link table
+            $this->query->leftJoin('budget_transaction_journal', 'budget_transaction_journal.transaction_journal_id', '=', 'transaction_journals.id');
+            // join cat table
+            $this->query->leftJoin('budgets', 'budget_transaction_journal.budget_id', '=', 'budgets.id');
+            // add fields
+            $this->fields[]             = 'budgets.id as budget_id';
+            $this->fields[]             = 'budgets.name as budget_name';
+            $this->hasBudgetInformation = true;
+        }
+
+        return $this;
+    }
+
+    /**
      * Limit results to a transactions without a category.
      */
     public function withCategory(): GroupCollectorInterface
     {
         $this->withCategoryInformation();
         $this->query->whereNotNull('category_transaction_journal.category_id');
+
+        return $this;
+    }
+
+    /**
+     * Will include category ID + name, if any.
+     */
+    public function withCategoryInformation(): GroupCollectorInterface
+    {
+        if (false === $this->hasCatInformation) {
+            // join link table
+            $this->query->leftJoin('category_transaction_journal', 'category_transaction_journal.transaction_journal_id', '=', 'transaction_journals.id');
+            // join cat table
+            $this->query->leftJoin('categories', 'category_transaction_journal.category_id', '=', 'categories.id');
+            // add fields
+            $this->fields[]          = 'categories.id as category_id';
+            $this->fields[]          = 'categories.name as category_name';
+            $this->hasCatInformation = true;
+        }
 
         return $this;
     }
@@ -899,6 +830,23 @@ trait MetaCollection
         $this->query->where('journal_meta.name', '=', 'external_url');
         $this->query->whereNotNull('journal_meta.data');
         $this->query->whereNull('journal_meta.deleted_at');
+
+        return $this;
+    }
+
+    public function withNotes(): GroupCollectorInterface
+    {
+        if (false === $this->hasNotesInformation) {
+            // join bill table
+            $this->query->leftJoin('notes', static function (JoinClause $join): void {
+                $join->on('notes.noteable_id', '=', 'transaction_journals.id');
+                $join->where('notes.noteable_type', '=', TransactionJournal::class);
+                $join->whereNull('notes.deleted_at');
+            });
+            // add fields
+            $this->fields[]            = 'notes.text as notes';
+            $this->hasNotesInformation = true;
+        }
 
         return $this;
     }
@@ -941,7 +889,7 @@ trait MetaCollection
     {
         $this->joinMetaDataTables();
         // TODO not sure if this will work properly.
-        $this->query->where(static function (EloquentBuilder $q1): void { // @phpstan-ignore-line
+        $this->query->where(static function (EloquentBuilder $q1): void {
             $q1->where(static function (EloquentBuilder $q2): void {
                 $q2->where('journal_meta.name', '=', 'external_id');
                 $q2->whereNull('journal_meta.data');
@@ -962,7 +910,7 @@ trait MetaCollection
     {
         $this->joinMetaDataTables();
         // TODO not sure if this will work properly.
-        $this->query->where(static function (EloquentBuilder $q1): void { // @phpstan-ignore-line
+        $this->query->where(static function (EloquentBuilder $q1): void {
             $q1->where(static function (EloquentBuilder $q2): void {
                 $q2->where('journal_meta.name', '=', 'external_url');
                 $q2->whereNull('journal_meta.data');
@@ -982,7 +930,7 @@ trait MetaCollection
     public function withoutNotes(): GroupCollectorInterface
     {
         $this->withNotes();
-        $this->query->where(static function (EloquentBuilder $q): void { // @phpstan-ignore-line
+        $this->query->where(static function (EloquentBuilder $q): void {
             $q->whereNull('notes.text');
             $q->orWhere('notes.text', '');
         });
@@ -999,5 +947,46 @@ trait MetaCollection
         $this->query->whereNull('tag_transaction_journal.tag_id');
 
         return $this;
+    }
+
+    public function withTagInformation(): GroupCollectorInterface
+    {
+        $this->fields[] = 'tags.id as tag_id';
+        $this->fields[] = 'tags.tag as tag_name';
+        $this->fields[] = 'tags.date as tag_date';
+        $this->fields[] = 'tags.description as tag_description';
+        //        $this->fields[] = 'tags.latitude as tag_latitude';
+        //        $this->fields[] = 'tags.longitude as tag_longitude';
+        // $this->fields[] = 'tags.zoomLevel as tag_zoom_level';
+
+        $this->joinTagTables();
+
+        return $this;
+    }
+
+    /**
+     * Join table to get tag information.
+     */
+    protected function joinMetaDataTables(): void
+    {
+        if (false === $this->hasJoinedMetaTables) {
+            $this->hasJoinedMetaTables = true;
+            $this->query->leftJoin('journal_meta', 'transaction_journals.id', '=', 'journal_meta.transaction_journal_id');
+            $this->fields[]            = 'journal_meta.name as meta_name';
+            $this->fields[]            = 'journal_meta.data as meta_data';
+        }
+    }
+
+    /**
+     * Join table to get tag information.
+     */
+    protected function joinTagTables(): void
+    {
+        if (false === $this->hasJoinedTagTables) {
+            // join some extra tables:
+            $this->hasJoinedTagTables = true;
+            $this->query->leftJoin('tag_transaction_journal', 'tag_transaction_journal.transaction_journal_id', '=', 'transaction_journals.id');
+            $this->query->leftJoin('tags', 'tag_transaction_journal.tag_id', '=', 'tags.id');
+        }
     }
 }

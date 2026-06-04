@@ -23,9 +23,9 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Requests;
 
-use Illuminate\Contracts\Validation\Validator;
 use FireflyIII\Rules\IsValidPositiveAmount;
 use FireflyIII\Support\Request\ChecksLogin;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
 
@@ -36,6 +36,8 @@ class BudgetIncomeRequest extends FormRequest
 {
     use ChecksLogin;
 
+    protected array $acceptedRoles = [];
+
     /**
      * Rules for this request.
      */
@@ -44,8 +46,8 @@ class BudgetIncomeRequest extends FormRequest
         // fixed
         return [
             'amount' => ['required', new IsValidPositiveAmount()],
-            'start'  => 'required|date|before:end',
-            'end'    => 'required|date|after:start',
+            'start'  => ['required', 'date', 'before:end'],
+            'end'    => ['required', 'date', 'after:start'],
         ];
     }
 

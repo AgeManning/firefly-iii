@@ -37,8 +37,18 @@ class UpdateRequest extends FormRequest
     use ChecksLogin;
     use ConvertsDataTypes;
 
-    private array $booleans = ['configuration.is_demo_site', 'configuration.single_user_mode', 'configuration.enable_exchange_rates', 'configuration.use_running_balance', 'configuration.enable_external_map', 'configuration.enable_external_rates', 'configuration.allow_webhooks'];
-    private array $integers = ['configuration.permission_update_check', 'configuration.last_update_check'];
+    protected array $acceptedRoles = [];
+
+    private array $booleans        = [
+        'configuration.is_demo_site',
+        'configuration.single_user_mode',
+        'configuration.enable_exchange_rates',
+        'configuration.use_running_balance',
+        'configuration.enable_external_map',
+        'configuration.enable_external_rates',
+        'configuration.allow_webhooks',
+    ];
+    private array $integers        = ['configuration.permission_update_check', 'configuration.last_update_check'];
 
     /**
      * Get all data from the request.
@@ -46,10 +56,10 @@ class UpdateRequest extends FormRequest
     public function getAll(): array
     {
         $name = $this->route()->parameter('dynamicConfigKey');
-        if (in_array($name, $this->booleans, true)) {
+        if (in_array($name, $this->booleans, strict: true)) {
             return ['value' => $this->boolean('value')];
         }
-        if (in_array($name, $this->integers, true)) {
+        if (in_array($name, $this->integers, strict: true)) {
             return ['value' => $this->convertInteger('value')];
         }
 
@@ -63,14 +73,14 @@ class UpdateRequest extends FormRequest
     {
         $name = $this->route()->parameter('configName');
 
-        if (in_array($name, $this->booleans, true)) {
+        if (in_array($name, $this->booleans, strict: true)) {
             return ['value' => ['required', new IsBoolean()]];
         }
         if ('configuration.permission_update_check' === $name) {
-            return ['value' => 'required|numeric|min:-1|max:1'];
+            return ['value' => ['required', 'numeric', 'min:-1', 'max:1']];
         }
-        if (in_array($name, $this->integers, true)) {
-            return ['value' => 'required|numeric|min:464272080'];
+        if (in_array($name, $this->integers, strict: true)) {
+            return ['value' => ['required', 'numeric', 'min:464272080']];
         }
 
         return ['value' => 'required'];

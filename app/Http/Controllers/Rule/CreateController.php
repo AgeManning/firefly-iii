@@ -24,7 +24,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Rule;
 
-use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\RuleFormRequest;
@@ -33,6 +32,7 @@ use FireflyIII\Models\Rule;
 use FireflyIII\Models\RuleGroup;
 use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Repositories\Rule\RuleRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Http\Controllers\ModelInformation;
 use FireflyIII\Support\Http\Controllers\RuleManagement;
 use FireflyIII\Support\Search\SearchInterface;
@@ -40,13 +40,12 @@ use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Redirector;
 use Illuminate\View\View;
 
 /**
  * Class CreateController
  */
-class CreateController extends Controller
+final class CreateController extends Controller
 {
     use ModelInformation;
     use RuleManagement;
@@ -60,16 +59,14 @@ class CreateController extends Controller
     {
         parent::__construct();
 
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('title', (string) trans('firefly.rules'));
-                app('view')->share('mainTitleIcon', 'fa-random');
+        $this->middleware(function ($request, $next) {
+            app('view')->share('title', (string) trans('firefly.rules'));
+            app('view')->share('mainTitleIcon', 'fa-random');
 
-                $this->ruleRepos = app(RuleRepositoryInterface::class);
+            $this->ruleRepos = app(RuleRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -82,9 +79,7 @@ class CreateController extends Controller
     public function create(Request $request, ?RuleGroup $ruleGroup = null): Factory|\Illuminate\Contracts\View\View
     {
         $this->createDefaultRuleGroup();
-        $preFilled    = [
-            'strict' => true,
-        ];
+        $preFilled    = ['strict' => true];
         $oldTriggers  = [];
         $oldActions   = [];
 
@@ -99,19 +94,13 @@ class CreateController extends Controller
             if (count($words) > 0) {
                 session()->flash('warning', trans('firefly.rule_from_search_words', ['string' => implode('', $words)]));
                 foreach ($words as $word) {
-                    $operators[] = [
-                        'type'  => 'description_contains',
-                        'value' => $word,
-                    ];
+                    $operators[] = ['type' => 'description_contains', 'value' => $word];
                 }
             }
             if (count($excludedWords) > 0) {
                 session()->flash('warning', trans('firefly.rule_from_search_words', ['string' => implode('', $excludedWords)]));
                 foreach ($excludedWords as $excludedWord) {
-                    $operators[] = [
-                        'type'  => '-description_contains',
-                        'value' => $excludedWord,
-                    ];
+                    $operators[] = ['type' => '-description_contains', 'value' => $excludedWord];
                 }
             }
             $oldTriggers   = $this->parseFromOperators($operators);
@@ -143,10 +132,16 @@ class CreateController extends Controller
         }
         session()->forget('rules.create.fromStore');
 
-        return view(
-            'rules.rule.create',
-            ['subTitleIcon' => $subTitleIcon, 'oldTriggers' => $oldTriggers, 'preFilled' => $preFilled, 'oldActions' => $oldActions, 'triggerCount' => $triggerCount, 'actionCount' => $actionCount, 'ruleGroup' => $ruleGroup, 'subTitle' => $subTitle]
-        );
+        return view('rules.rule.create', [
+            'subTitleIcon' => $subTitleIcon,
+            'oldTriggers'  => $oldTriggers,
+            'preFilled'    => $preFilled,
+            'oldActions'   => $oldActions,
+            'triggerCount' => $triggerCount,
+            'actionCount'  => $actionCount,
+            'ruleGroup'    => $ruleGroup,
+            'subTitle'     => $subTitle,
+        ]);
     }
 
     /**
@@ -195,10 +190,15 @@ class CreateController extends Controller
         }
         session()->forget('rules.create.fromStore');
 
-        return view(
-            'rules.rule.create',
-            ['subTitleIcon' => $subTitleIcon, 'oldTriggers' => $oldTriggers, 'preFilled' => $preFilled, 'oldActions' => $oldActions, 'triggerCount' => $triggerCount, 'actionCount' => $actionCount, 'subTitle' => $subTitle]
-        );
+        return view('rules.rule.create', [
+            'subTitleIcon' => $subTitleIcon,
+            'oldTriggers'  => $oldTriggers,
+            'preFilled'    => $preFilled,
+            'oldActions'   => $oldActions,
+            'triggerCount' => $triggerCount,
+            'actionCount'  => $actionCount,
+            'subTitle'     => $subTitle,
+        ]);
     }
 
     /**
@@ -242,10 +242,15 @@ class CreateController extends Controller
         }
         session()->forget('rules.create.fromStore');
 
-        return view(
-            'rules.rule.create',
-            ['subTitleIcon' => $subTitleIcon, 'oldTriggers' => $oldTriggers, 'preFilled' => $preFilled, 'oldActions' => $oldActions, 'triggerCount' => $triggerCount, 'actionCount' => $actionCount, 'subTitle' => $subTitle]
-        );
+        return view('rules.rule.create', [
+            'subTitleIcon' => $subTitleIcon,
+            'oldTriggers'  => $oldTriggers,
+            'preFilled'    => $preFilled,
+            'oldActions'   => $oldActions,
+            'triggerCount' => $triggerCount,
+            'actionCount'  => $actionCount,
+            'subTitle'     => $subTitle,
+        ]);
     }
 
     public function duplicate(Request $request): JsonResponse
@@ -262,7 +267,7 @@ class CreateController extends Controller
     /**
      * Store the new rule.
      *
-     * @return Redirector|RedirectResponse
+     * @return RedirectResponse
      */
     public function store(RuleFormRequest $request)
     {

@@ -37,6 +37,8 @@ class UpdateRequest extends FormRequest
     use ChecksLogin;
     use ConvertsDataTypes;
 
+    protected array $acceptedRoles = [];
+
     /**
      * Get all data from the request.
      */
@@ -59,17 +61,14 @@ class UpdateRequest extends FormRequest
     public function rules(): array
     {
         $models = config('firefly.valid_attachment_models');
-        $models = array_map(
-            static fn (string $className): string => str_replace('FireflyIII\Models\\', '', $className),
-            $models
-        );
+        $models = array_map(static fn (string $className): string => str_replace('FireflyIII\Models\\', '', $className), $models);
         $models = implode(',', $models);
         $model  = $this->convertString('attachable_type');
 
         return [
             'filename'        => ['min:1', 'max:255'],
             'title'           => ['min:1', 'max:255'],
-            'notes'           => 'min:1|max:32768',
+            'notes'           => ['min:1', 'max:32768'],
             'attachable_type' => sprintf('in:%s', $models),
             'attachable_id'   => ['numeric', new IsValidAttachmentModel($model)],
         ];

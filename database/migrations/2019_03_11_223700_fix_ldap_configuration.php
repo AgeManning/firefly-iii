@@ -32,8 +32,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * @codeCoverageIgnore
  */
-class FixLdapConfiguration extends Migration
-{
+return new class extends Migration {
     /**
      * Reverse the migrations.
      */
@@ -41,12 +40,9 @@ class FixLdapConfiguration extends Migration
     {
         if (Schema::hasColumn('users', 'objectguid')) {
             try {
-                Schema::table(
-                    'users',
-                    static function (Blueprint $table): void {
-                        $table->dropColumn(['objectguid']);
-                    }
-                );
+                Schema::table('users', static function (Blueprint $table): void {
+                    $table->dropColumn(['objectguid']);
+                });
             } catch (QueryException $e) {
                 app('log')->error(sprintf('Could not execute query: %s', $e->getMessage()));
                 app('log')->error('If the column or index already exists (see error), this is not an problem. Otherwise, please open a GitHub discussion.');
@@ -67,16 +63,13 @@ class FixLdapConfiguration extends Migration
          */
         if (!Schema::hasColumn('users', 'objectguid')) {
             try {
-                Schema::table(
-                    'users',
-                    static function (Blueprint $table): void {
-                        $table->uuid('objectguid')->nullable()->after('id');
-                    }
-                );
+                Schema::table('users', static function (Blueprint $table): void {
+                    $table->uuid('objectguid')->nullable()->after('id');
+                });
             } catch (QueryException $e) {
                 app('log')->error(sprintf('Could not execute query: %s', $e->getMessage()));
                 app('log')->error('If the column or index already exists (see error), this is not an problem. Otherwise, please open a GitHub discussion.');
             }
         }
     }
-}
+};

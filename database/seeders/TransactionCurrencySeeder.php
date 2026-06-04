@@ -25,6 +25,7 @@ namespace Database\Seeders;
 
 use FireflyIII\Models\TransactionCurrency;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Log;
 use PDOException;
 
 /**
@@ -34,7 +35,7 @@ class TransactionCurrencySeeder extends Seeder
 {
     public function run(): void
     {
-        $currencies   = [];
+        $currencies = [];
         // european currencies
         $currencies[] = ['code' => 'EUR', 'name' => 'Euro', 'symbol' => '€', 'decimal_places' => 2, 'enabled' => 1];
         $currencies[] = ['code' => 'HUF', 'name' => 'Hungarian forint', 'symbol' => 'Ft', 'decimal_places' => 2];
@@ -72,7 +73,7 @@ class TransactionCurrencySeeder extends Seeder
         // asian currencies
         $currencies[] = ['code' => 'JPY', 'name' => 'Japanese yen', 'symbol' => '¥', 'decimal_places' => 0];
         $currencies[] = ['code' => 'CNY', 'name' => 'Chinese yuan', 'symbol' => '¥', 'decimal_places' => 2];
-        $currencies[] = ['code' => 'KRW', 'name' => 'South Korean won','symbol' => '₩', 'decimal_places' => 2,];
+        $currencies[] = ['code' => 'KRW', 'name' => 'South Korean won', 'symbol' => '₩', 'decimal_places' => 2];
         //        $currencies[] = ['code' => 'RMB', 'name' => 'Chinese yuan', 'symbol' => '¥', 'decimal_places' => 2];
         $currencies[] = ['code' => 'RUB', 'name' => 'Russian ruble', 'symbol' => '₽', 'decimal_places' => 2];
         $currencies[] = ['code' => 'INR', 'name' => 'Indian rupee', 'symbol' => '₹', 'decimal_places' => 2];
@@ -82,19 +83,19 @@ class TransactionCurrencySeeder extends Seeder
         $currencies[] = ['code' => 'CHF', 'name' => 'Swiss franc', 'symbol' => 'CHF', 'decimal_places' => 2];
         $currencies[] = ['code' => 'HRK', 'name' => 'Croatian kuna', 'symbol' => 'kn', 'decimal_places' => 2];
         $currencies[] = ['code' => 'HKD', 'name' => 'Hong Kong dollar', 'symbol' => 'HK$', 'decimal_places' => 2];
-        $currencies[] = ['code' => 'CHF', 'name' => 'Swiss franc', 'symbol' => 'CHF', 'decimal_places' => 2];
-        $currencies[] = ['code' => 'NOK', 'name' => 'Norwegian krone', 'symbol' => 'kr.', 'decimal_places' => 2];
         $currencies[] = ['code' => 'CZK', 'name' => 'Czech koruna', 'symbol' => 'Kč', 'decimal_places' => 2];
         $currencies[] = ['code' => 'KZT', 'name' => 'Kazakhstani tenge', 'symbol' => '₸', 'decimal_places' => 2];
         $currencies[] = ['code' => 'SAR', 'name' => 'Saudi Riyal', 'symbol' => 'SAR', 'decimal_places' => 2];
         $currencies[] = ['code' => 'RSD', 'name' => 'Serbian Dinar', 'symbol' => 'RSD', 'decimal_places' => 2];
+        $currencies[] = ['code' => 'TWD', 'name' => 'New Taiwan Dollar', 'symbol' => 'NT$', 'decimal_places' => 0];
+        $currencies[] = ['code' => 'THB', 'name' => 'Thai baht', 'symbol' => '฿', 'decimal_places' => 2];
 
         foreach ($currencies as $currency) {
-            if (null === TransactionCurrency::where('code', $currency['code'])->first()) {
+            if (null === TransactionCurrency::query()->where('code', $currency['code'])->first()) {
                 try {
                     TransactionCurrency::create($currency);
-                } catch (PDOException $e) {
-                    // @ignoreException
+                } catch (PDOException) {
+                    Log::debug(sprintf('Currency "%s" already exists and that is OK.', $currency['code']));
                 }
             }
         }

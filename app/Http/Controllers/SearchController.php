@@ -23,20 +23,20 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers;
 
-use Illuminate\Support\Facades\Log;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Repositories\Rule\RuleRepositoryInterface;
 use FireflyIII\Support\Search\SearchInterface;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Throwable;
 
 /**
  * Class SearchController.
  */
-class SearchController extends Controller
+final class SearchController extends Controller
 {
     /**
      * SearchController constructor.
@@ -45,14 +45,12 @@ class SearchController extends Controller
     {
         parent::__construct();
         app('view')->share('showCategory', true);
-        $this->middleware(
-            static function ($request, $next) {
-                app('view')->share('mainTitleIcon', 'fa-search');
-                app('view')->share('title', (string) trans('firefly.search'));
+        $this->middleware(static function ($request, $next) {
+            app('view')->share('mainTitleIcon', 'fa-search');
+            app('view')->share('title', (string) trans('firefly.search'));
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -91,7 +89,18 @@ class SearchController extends Controller
         $invalidOperators = $searcher->getInvalidOperators();
         $subTitle         = (string) trans('breadcrumbs.search_result', ['query' => $fullQuery]);
 
-        return view('search.index', ['words' => $words, 'excludedWords' => $excludedWords, 'operators' => $operators, 'page' => $page, 'rule' => $rule, 'fullQuery' => $fullQuery, 'subTitle' => $subTitle, 'ruleId' => $ruleId, 'ruleChanged' => $ruleChanged, 'invalidOperators' => $invalidOperators]);
+        return view('search.index', [
+            'words'            => $words,
+            'excludedWords'    => $excludedWords,
+            'operators'        => $operators,
+            'page'             => $page,
+            'rule'             => $rule,
+            'fullQuery'        => $fullQuery,
+            'subTitle'         => $subTitle,
+            'ruleId'           => $ruleId,
+            'ruleChanged'      => $ruleChanged,
+            'invalidOperators' => $invalidOperators,
+        ]);
     }
 
     /**

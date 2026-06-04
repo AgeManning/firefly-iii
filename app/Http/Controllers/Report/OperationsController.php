@@ -23,19 +23,19 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Report;
 
-use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Repositories\Account\AccountTaskerInterface;
 use FireflyIII\Support\CacheProperties;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
  * Class OperationsController.
  */
-class OperationsController extends Controller
+final class OperationsController extends Controller
 {
     /** @var AccountTaskerInterface Some specific account things. */
     private $tasker;
@@ -48,13 +48,11 @@ class OperationsController extends Controller
         parent::__construct();
 
         // translations:
-        $this->middleware(
-            function ($request, $next) {
-                $this->tasker = app(AccountTaskerInterface::class);
+        $this->middleware(function ($request, $next) {
+            $this->tasker = app(AccountTaskerInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**

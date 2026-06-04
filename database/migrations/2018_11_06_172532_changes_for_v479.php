@@ -32,8 +32,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * @codeCoverageIgnore
  */
-class ChangesForV479 extends Migration
-{
+return new class extends Migration {
     /**
      * Reverse the migrations.
      */
@@ -41,12 +40,9 @@ class ChangesForV479 extends Migration
     {
         if (Schema::hasColumn('transaction_currencies', 'enabled')) {
             try {
-                Schema::table(
-                    'transaction_currencies',
-                    static function (Blueprint $table): void {
-                        $table->dropColumn(['enabled']);
-                    }
-                );
+                Schema::table('transaction_currencies', static function (Blueprint $table): void {
+                    $table->dropColumn(['enabled']);
+                });
             } catch (QueryException $e) {
                 app('log')->error(sprintf('Could not execute query: %s', $e->getMessage()));
                 app('log')->error('If the column or index already exists (see error), this is not an problem. Otherwise, please open a GitHub discussion.');
@@ -63,16 +59,13 @@ class ChangesForV479 extends Migration
     {
         if (!Schema::hasColumn('transaction_currencies', 'enabled')) {
             try {
-                Schema::table(
-                    'transaction_currencies',
-                    static function (Blueprint $table): void {
-                        $table->boolean('enabled')->default(0)->after('deleted_at');
-                    }
-                );
+                Schema::table('transaction_currencies', static function (Blueprint $table): void {
+                    $table->boolean('enabled')->default(0)->after('deleted_at');
+                });
             } catch (QueryException $e) {
                 app('log')->error(sprintf('Could not execute query: %s', $e->getMessage()));
                 app('log')->error('If the column or index already exists (see error), this is not an problem. Otherwise, please open a GitHub discussion.');
             }
         }
     }
-}
+};

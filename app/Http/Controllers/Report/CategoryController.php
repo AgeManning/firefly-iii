@@ -23,8 +23,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Report;
 
-use FireflyIII\Support\Facades\Navigation;
-use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Http\Controllers\Controller;
@@ -33,17 +31,19 @@ use FireflyIII\Models\Category;
 use FireflyIII\Repositories\Category\NoCategoryRepositoryInterface;
 use FireflyIII\Repositories\Category\OperationsRepositoryInterface;
 use FireflyIII\Support\CacheProperties;
+use FireflyIII\Support\Facades\Navigation;
 use FireflyIII\Support\Http\Controllers\BasicDataSupport;
 use FireflyIII\Support\Report\Category\CategoryReportGenerator;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Throwable;
 
 /**
  * Class CategoryController.
  */
-class CategoryController extends Controller
+final class CategoryController extends Controller
 {
     use BasicDataSupport;
 
@@ -56,14 +56,12 @@ class CategoryController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $this->opsRepository   = app(OperationsRepositoryInterface::class);
-                $this->noCatRepository = app(NoCategoryRepositoryInterface::class);
+        $this->middleware(function ($request, $next) {
+            $this->opsRepository   = app(OperationsRepositoryInterface::class);
+            $this->noCatRepository = app(NoCategoryRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
@@ -78,12 +76,7 @@ class CategoryController extends Controller
         /** @var Account $account */
         foreach ($accounts as $account) {
             $accountId = $account->id;
-            $report[$accountId] ??= [
-                'name'       => $account->name,
-                'id'         => $account->id,
-                'iban'       => $account->iban,
-                'currencies' => [],
-            ];
+            $report[$accountId] ??= ['name' => $account->name, 'id' => $account->id, 'iban' => $account->iban, 'currencies' => []];
         }
 
         // loop expenses.
@@ -94,7 +87,7 @@ class CategoryController extends Controller
             foreach ($currency['categories'] as $category) {
                 foreach ($category['transaction_journals'] as $journal) {
                     $sourceAccountId                                                                             = $journal['source_account_id'];
-                    $report[$sourceAccountId]['currencies'][$currencyId]                                         ??= [
+                    $report[$sourceAccountId]['currencies'][$currencyId]                                ??= [
                         'currency_id'             => $currency['currency_id'],
                         'currency_symbol'         => $currency['currency_symbol'],
                         'currency_name'           => $currency['currency_name'],
@@ -102,12 +95,11 @@ class CategoryController extends Controller
                         'categories'              => [],
                     ];
 
-                    $report[$sourceAccountId]['currencies'][$currencyId]['categories'][$category['id']]
-                                                                                                                 ??= [
-                                                                                                                     'spent'  => '0',
-                                                                                                                     'earned' => '0',
-                                                                                                                     'sum'    => '0',
-                                                                                                                 ];
+                    $report[$sourceAccountId]['currencies'][$currencyId]['categories'][$category['id']] ??= [
+                        'spent'  => '0',
+                        'earned' => '0',
+                        'sum'    => '0',
+                    ];
                     $report[$sourceAccountId]['currencies'][$currencyId]['categories'][$category['id']]['spent'] = bcadd(
                         $report[$sourceAccountId]['currencies'][$currencyId]['categories'][$category['id']]['spent'],
                         (string) $journal['amount']
@@ -127,20 +119,18 @@ class CategoryController extends Controller
             foreach ($currency['categories'] as $category) {
                 foreach ($category['transaction_journals'] as $journal) {
                     $destinationId                                                                              = $journal['destination_account_id'];
-                    $report[$destinationId]['currencies'][$currencyId]
-                                                                                                                ??= [
-                                                                                                                    'currency_id'             => $currency['currency_id'],
-                                                                                                                    'currency_symbol'         => $currency['currency_symbol'],
-                                                                                                                    'currency_name'           => $currency['currency_name'],
-                                                                                                                    'currency_decimal_places' => $currency['currency_decimal_places'],
-                                                                                                                    'categories'              => [],
-                                                                                                                ];
-                    $report[$destinationId]['currencies'][$currencyId]['categories'][$category['id']]
-                                                                                                                ??= [
-                                                                                                                    'spent'  => '0',
-                                                                                                                    'earned' => '0',
-                                                                                                                    'sum'    => '0',
-                                                                                                                ];
+                    $report[$destinationId]['currencies'][$currencyId]                                ??= [
+                        'currency_id'             => $currency['currency_id'],
+                        'currency_symbol'         => $currency['currency_symbol'],
+                        'currency_name'           => $currency['currency_name'],
+                        'currency_decimal_places' => $currency['currency_decimal_places'],
+                        'categories'              => [],
+                    ];
+                    $report[$destinationId]['currencies'][$currencyId]['categories'][$category['id']] ??= [
+                        'spent'  => '0',
+                        'earned' => '0',
+                        'sum'    => '0',
+                    ];
                     $report[$destinationId]['currencies'][$currencyId]['categories'][$category['id']]['earned'] = bcadd(
                         $report[$destinationId]['currencies'][$currencyId]['categories'][$category['id']]['earned'],
                         (string) $journal['amount']
@@ -171,12 +161,7 @@ class CategoryController extends Controller
         /** @var Account $account */
         foreach ($accounts as $account) {
             $accountId = $account->id;
-            $report[$accountId] ??= [
-                'name'       => $account->name,
-                'id'         => $account->id,
-                'iban'       => $account->iban,
-                'currencies' => [],
-            ];
+            $report[$accountId] ??= ['name' => $account->name, 'id' => $account->id, 'iban' => $account->iban, 'currencies' => []];
         }
 
         // loop expenses.
@@ -373,11 +358,7 @@ class CategoryController extends Controller
         /** @var Category $category */
         foreach ($categories as $category) {
             $categoryId = $category->id;
-            $report[$categoryId] ??= [
-                'name'       => $category->name,
-                'id'         => $category->id,
-                'currencies' => [],
-            ];
+            $report[$categoryId] ??= ['name' => $category->name, 'id' => $category->id, 'currencies' => []];
         }
         foreach ($spent as $currency) {
             $currencyId = $currency['currency_id'];

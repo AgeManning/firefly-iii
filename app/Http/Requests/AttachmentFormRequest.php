@@ -23,9 +23,9 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Requests;
 
-use Illuminate\Contracts\Validation\Validator;
 use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
 
@@ -37,15 +37,14 @@ class AttachmentFormRequest extends FormRequest
     use ChecksLogin;
     use ConvertsDataTypes;
 
+    protected array $acceptedRoles = [];
+
     /**
      * Returns the data required by the controller.
      */
     public function getAttachmentData(): array
     {
-        return [
-            'title' => $this->convertString('title'),
-            'notes' => $this->convertString('notes'),
-        ];
+        return ['title' => $this->convertString('title'), 'notes' => $this->convertString('notes')];
     }
 
     /**
@@ -54,10 +53,7 @@ class AttachmentFormRequest extends FormRequest
     public function rules(): array
     {
         // fixed
-        return [
-            'title' => 'min:1|max:255|nullable',
-            'notes' => 'min:1|max:32768|nullable',
-        ];
+        return ['title' => ['min:1', 'max:255', 'nullable'], 'notes' => ['min:1', 'max:32768', 'nullable']];
     }
 
     public function withValidator(Validator $validator): void

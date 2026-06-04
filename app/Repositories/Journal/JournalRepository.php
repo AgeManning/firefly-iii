@@ -39,6 +39,9 @@ use FireflyIII\Support\CacheProperties;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupInterface;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupTrait;
 use Illuminate\Support\Collection;
+use Override;
+
+use function Safe\json_encode;
 
 /**
  * Class JournalRepository.
@@ -46,6 +49,48 @@ use Illuminate\Support\Collection;
 class JournalRepository implements JournalRepositoryInterface, UserGroupInterface
 {
     use UserGroupTrait;
+
+    #[Override]
+    public function countByDescription(string $value, bool $includeDeleted): int
+    {
+        $search = $this->user->transactionJournals()->where('description', $value);
+        if ($includeDeleted) {
+            $search->withTrashed();
+        }
+
+        return $search->count();
+    }
+
+    #[Override]
+    public function countByMeta(string $field, string $value, bool $includeDeleted): int
+    {
+        $search = TransactionJournalMeta::leftJoin('transaction_journals', 'transaction_journals.id', '=', 'journal_meta.transaction_journal_id')
+            ->where('name', $field)
+            ->where('data', json_encode($value))
+            ->where('transaction_journals.user_id', $this->user->id)
+        ;
+        if ($includeDeleted) {
+            $search->withTrashed();
+        }
+
+        return $search->count();
+    }
+
+    #[Override]
+    public function countByNotes(string $value, bool $includeDeleted): int
+    {
+        $search = Note::query()
+            ->where('noteable_type', TransactionJournal::class)
+            ->leftJoin('transaction_journals', 'transaction_journals.id', '=', 'notes.noteable_id')
+            ->where('transaction_journals.user_id', $this->user->id)
+            ->where('text', 'LIKE', sprintf('%%%s%%', $value))
+        ;
+        if ($includeDeleted) {
+            $search->withTrashed();
+        }
+
+        return $search->count();
+    }
 
     public function destroyGroup(TransactionGroup $transactionGroup): void
     {
@@ -59,6 +104,15 @@ class JournalRepository implements JournalRepositoryInterface, UserGroupInterfac
         /** @var JournalDestroyService $service */
         $service = app(JournalDestroyService::class);
         $service->destroy($journal);
+    }
+
+    /**
+     * Find a specific journal.
+     */
+    public function find(int $journalId): ?TransactionJournal
+    {
+        /** @var null|TransactionJournal */
+        return $this->user->transactionJournals()->find($journalId);
     }
 
     public function findByType(array $types): Collection
@@ -76,7 +130,14 @@ class JournalRepository implements JournalRepositoryInterface, UserGroupInterfac
      */
     public function firstNull(): ?TransactionJournal
     {
+        /** @var null|TransactionJournal */
         return $this->user->transactionJournals()->orderBy('date', 'ASC')->first(['transaction_journals.*']);
+    }
+
+    #[Override]
+    public function getAllUncompletedJournals(): Collection
+    {
+        return TransactionJournal::query()->where('completed', false)->get(['transaction_journals.*']);
     }
 
     public function getDestinationAccount(TransactionJournal $journal): Account
@@ -87,7 +148,13 @@ class JournalRepository implements JournalRepositoryInterface, UserGroupInterfac
             throw new FireflyException(sprintf('Your administration is broken. Transaction journal #%d has no destination transaction.', $journal->id));
         }
 
-        return $transaction->account;
+        /** @var null|Account $res */
+        $res         = $transaction->account;
+        if (null === $res) {
+            throw new FireflyException('Account is unexpectedly NULL.');
+        }
+
+        return $res;
     }
 
     /**
@@ -112,6 +179,7 @@ class JournalRepository implements JournalRepositoryInterface, UserGroupInterfac
 
     public function getLast(): ?TransactionJournal
     {
+        /** @var null|TransactionJournal */
         return $this->user->transactionJournals()->orderBy('date', 'DESC')->first(['transaction_journals.*']);
     }
 
@@ -136,9 +204,7 @@ class JournalRepository implements JournalRepositoryInterface, UserGroupInterfac
         if ($cache->has()) {
             return new Carbon($cache->get());
         }
-        $entry = TransactionJournalMeta::where('transaction_journal_id', $journalId)
-            ->where('name', $field)->first()
-        ;
+        $entry = TransactionJournalMeta::query()->where('transaction_journal_id', $journalId)->where('name', $field)->first();
         if (null === $entry) {
             return null;
         }
@@ -156,7 +222,25 @@ class JournalRepository implements JournalRepositoryInterface, UserGroupInterfac
             throw new FireflyException(sprintf('Your administration is broken. Transaction journal #%d has no source transaction.', $journal->id));
         }
 
-        return $transaction->account;
+        /** @var null|Account $res */
+        $res         = $transaction->account;
+        if (null === $res) {
+            throw new FireflyException('Account is unexpectedly NULL.');
+        }
+
+        return $res;
+    }
+
+    #[Override]
+    public function getUncompletedJournals(): Collection
+    {
+        return $this->userGroup->transactionJournals()->where('completed', false)->get(['transaction_journals.*']);
+    }
+
+    #[Override]
+    public function markAsCompleted(Collection $set): void
+    {
+        TransactionJournal::query()->whereIn('id', $set->pluck('id')->toArray())->update(['completed' => true]);
     }
 
     public function reconcileById(int $journalId): void
@@ -167,23 +251,11 @@ class JournalRepository implements JournalRepositoryInterface, UserGroupInterfac
     }
 
     /**
-     * Find a specific journal.
-     */
-    public function find(int $journalId): ?TransactionJournal
-    {
-        /** @var null|TransactionJournal */
-        return $this->user->transactionJournals()->find($journalId);
-    }
-
-    /**
      * Search in journal descriptions.
      */
     public function searchJournalDescriptions(string $search, int $limit): Collection
     {
-        $query = $this->user->transactionJournals()
-            ->orderBy('date', 'DESC')
-            ->orderBy('description', 'ASC')
-        ;
+        $query = $this->user->transactionJournals()->orderBy('date', 'DESC')->orderBy('description', 'ASC');
         if ('' !== $search) {
             $query->whereLike('description', sprintf('%%%s%%', $search));
         }
@@ -207,11 +279,7 @@ class JournalRepository implements JournalRepositoryInterface, UserGroupInterfac
         $service = app(JournalUpdateService::class);
 
         $service->setTransactionJournal($journal);
-        $service->setData(
-            [
-                'budget_id' => $budgetId,
-            ]
-        );
+        $service->setData(['budget_id' => $budgetId]);
         $service->update();
         $journal->refresh();
 
@@ -226,11 +294,7 @@ class JournalRepository implements JournalRepositoryInterface, UserGroupInterfac
         /** @var JournalUpdateService $service */
         $service = app(JournalUpdateService::class);
         $service->setTransactionJournal($journal);
-        $service->setData(
-            [
-                'category_name' => $category,
-            ]
-        );
+        $service->setData(['category_name' => $category]);
         $service->update();
         $journal->refresh();
 
@@ -245,11 +309,7 @@ class JournalRepository implements JournalRepositoryInterface, UserGroupInterfac
         /** @var JournalUpdateService $service */
         $service = app(JournalUpdateService::class);
         $service->setTransactionJournal($journal);
-        $service->setData(
-            [
-                'tags' => $tags,
-            ]
-        );
+        $service->setData(['tags' => $tags]);
         $service->update();
         $journal->refresh();
 

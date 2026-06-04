@@ -24,7 +24,6 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Account;
 
-use FireflyIII\Support\Facades\Preferences;
 use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
@@ -32,6 +31,7 @@ use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Debug\Timer;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Controllers\PeriodOverview;
 use Illuminate\Contracts\View\Factory;
@@ -48,7 +48,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 /**
  * Class ShowController
  */
-class ShowController extends Controller
+final class ShowController extends Controller
 {
     use PeriodOverview;
 
@@ -64,29 +64,31 @@ class ShowController extends Controller
         app('view')->share('showCategory', true);
 
         // translations:
-        $this->middleware(
-            function ($request, $next) {
-                app('view')->share('mainTitleIcon', 'fa-credit-card');
-                app('view')->share('title', (string) trans('firefly.accounts'));
+        $this->middleware(function ($request, $next) {
+            app('view')->share('mainTitleIcon', 'fa-credit-card');
+            app('view')->share('title', (string) trans('firefly.accounts'));
 
-                $this->repository = app(AccountRepositoryInterface::class);
+            $this->repository = app(AccountRepositoryInterface::class);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     /**
      * Show an account.
      *
-     * @return Factory|Redirector|RedirectResponse|View
+     * @return Factory|RedirectResponse|View
      *
      * @throws ContainerExceptionInterface
      * @throws FireflyException
      * @throws NotFoundExceptionInterface
      */
-    public function show(Request $request, Account $account, ?Carbon $start = null, ?Carbon $end = null): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
-    {
+    public function show(
+        Request $request,
+        Account $account,
+        ?Carbon $start = null,
+        ?Carbon $end = null
+    ): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse {
         if (0 === $account->id) {
             throw new NotFoundHttpException();
         }
@@ -160,7 +162,6 @@ class ShowController extends Controller
         $collector->setExpandGroupSearch(true);
         $groups           = $collector->getPaginatedGroups();
 
-
         Log::debug('End collect transactions');
         $timer->stop('collection');
         $groups->setPath(route('accounts.show', [$account->id, $start->format('Y-m-d'), $end->format('Y-m-d')]));
@@ -174,13 +175,29 @@ class ShowController extends Controller
         $balances         = Steam::accountsBalancesOptimized(new Collection()->push($account), $now)[$account->id];
         // $balances         = Steam::filterAccountBalance(Steam::finalAccountBalance($account, $now), $account, $this->convertToPrimary, $accountCurrency);
 
-        return view('accounts.show', ['account' => $account, 'showAll' => $showAll, 'objectType' => $objectType, 'currency' => $currency, 'today' => $today, 'periods' => $periods, 'subTitleIcon' => $subTitleIcon, 'groups' => $groups, 'attachments' => $attachments, 'subTitle' => $subTitle, 'start' => $start, 'end' => $end, 'chartUrl' => $chartUrl, 'location' => $location, 'balances' => $balances]);
+        return view('accounts.show', [
+            'account'      => $account,
+            'showAll'      => $showAll,
+            'objectType'   => $objectType,
+            'currency'     => $currency,
+            'today'        => $today,
+            'periods'      => $periods,
+            'subTitleIcon' => $subTitleIcon,
+            'groups'       => $groups,
+            'attachments'  => $attachments,
+            'subTitle'     => $subTitle,
+            'start'        => $start,
+            'end'          => $end,
+            'chartUrl'     => $chartUrl,
+            'location'     => $location,
+            'balances'     => $balances,
+        ]);
     }
 
     /**
      * Show an account.
      *
-     * @return Factory|Redirector|RedirectResponse|View
+     * @return Factory|RedirectResponse|View
      *
      * @throws ContainerExceptionInterface
      * @throws NotFoundExceptionInterface
@@ -232,6 +249,23 @@ class ShowController extends Controller
         // $balances        = Steam::filterAccountBalance($balances, $account, $this->convertToPrimary, $accountCurrency);
         $balances     = Steam::accountsBalancesOptimized(new Collection()->push($account), $now)[$account->id];
 
-        return view('accounts.show', ['account' => $account, 'showAll' => $showAll, 'location' => $location, 'objectType' => $objectType, 'isLiability' => $isLiability, 'attachments' => $attachments, 'currency' => $currency, 'today' => $today, 'chartUrl' => $chartUrl, 'periods' => $periods, 'subTitleIcon' => $subTitleIcon, 'groups' => $groups, 'subTitle' => $subTitle, 'start' => $start, 'end' => $end, 'balances' => $balances]);
+        return view('accounts.show', [
+            'account'      => $account,
+            'showAll'      => $showAll,
+            'location'     => $location,
+            'objectType'   => $objectType,
+            'isLiability'  => $isLiability,
+            'attachments'  => $attachments,
+            'currency'     => $currency,
+            'today'        => $today,
+            'chartUrl'     => $chartUrl,
+            'periods'      => $periods,
+            'subTitleIcon' => $subTitleIcon,
+            'groups'       => $groups,
+            'subTitle'     => $subTitle,
+            'start'        => $start,
+            'end'          => $end,
+            'balances'     => $balances,
+        ]);
     }
 }

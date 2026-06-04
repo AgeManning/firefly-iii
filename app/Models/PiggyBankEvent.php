@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Models;
 
+use Carbon\Carbon;
 use FireflyIII\Casts\SeparateTimezoneCaster;
 use FireflyIII\Handlers\Observer\PiggyBankEventObserver;
 use FireflyIII\Support\Models\ReturnsIntegerIdTrait;
@@ -31,6 +32,10 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property Carbon         $date
+ * @property null|PiggyBank $piggyBank
+ */
 #[ObservedBy([PiggyBankEventObserver::class])]
 class PiggyBankEvent extends Model
 {
@@ -50,7 +55,7 @@ class PiggyBankEvent extends Model
      */
     public function setAmountAttribute($value): void
     {
-        $this->attributes['amount'] = (string)$value;
+        $this->attributes['amount'] = (string) $value;
     }
 
     public function transactionJournal(): BelongsTo
@@ -63,9 +68,7 @@ class PiggyBankEvent extends Model
      */
     protected function amount(): Attribute
     {
-        return Attribute::make(
-            get: static fn ($value): string => (string)$value,
-        );
+        return Attribute::make(get: static fn ($value): string => (string) $value);
     }
 
     protected function casts(): array
@@ -81,8 +84,6 @@ class PiggyBankEvent extends Model
 
     protected function piggyBankId(): Attribute
     {
-        return Attribute::make(
-            get: static fn ($value): int => (int)$value,
-        );
+        return Attribute::make(get: static fn ($value): int => (int) $value);
     }
 }

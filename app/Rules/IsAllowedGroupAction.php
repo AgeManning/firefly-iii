@@ -36,9 +36,12 @@ use Override;
 class IsAllowedGroupAction implements ValidationRule
 {
     // you need these roles to do anything with any endpoint.
-    private array                                 $acceptedRoles = [UserRoleEnum::OWNER, UserRoleEnum::FULL];
+    private array $acceptedRoles = [UserRoleEnum::OWNER, UserRoleEnum::FULL];
 
-    public function __construct(private readonly string $className, private readonly string $methodName) {}
+    public function __construct(
+        private readonly string $className,
+        private readonly string $methodName
+    ) {}
 
     /**
      * @throws AuthorizationException
@@ -67,6 +70,8 @@ class IsAllowedGroupAction implements ValidationRule
 
     private function validateUserGroup(): void
     {
+        Log::debug('This method is not yet in use', $this->acceptedRoles);
+
         try {
             throw new FireflyException('Here we are');
         } catch (FireflyException $e) {

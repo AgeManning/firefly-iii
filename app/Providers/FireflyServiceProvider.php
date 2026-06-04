@@ -53,7 +53,7 @@ use FireflyIII\Repositories\UserGroup\UserGroupRepository;
 use FireflyIII\Repositories\UserGroup\UserGroupRepositoryInterface;
 use FireflyIII\Repositories\Webhook\WebhookRepository;
 use FireflyIII\Repositories\Webhook\WebhookRepositoryInterface;
-use FireflyIII\Services\FireflyIIIOrg\Update\UpdateRequest;
+use FireflyIII\Services\FireflyIIIOrg\Update\GitHubUpdateRequest;
 use FireflyIII\Services\FireflyIIIOrg\Update\UpdateRequestInterface;
 use FireflyIII\Services\Password\PwndVerifierV2;
 use FireflyIII\Services\Password\Verifier;
@@ -70,6 +70,7 @@ use FireflyIII\Support\Form\RuleForm;
 use FireflyIII\Support\Navigation;
 use FireflyIII\Support\Preferences;
 use FireflyIII\Support\Steam;
+use FireflyIII\TransactionRules\Engine\CustomExpressionLanguage;
 use FireflyIII\TransactionRules\Engine\RuleEngineInterface;
 use FireflyIII\TransactionRules\Engine\SearchRuleEngine;
 use FireflyIII\TransactionRules\Expressions\ActionExpressionLanguageProvider;
@@ -92,9 +93,7 @@ class FireflyServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Validator::resolver(
-            static fn ($translator, $data, $rules, $messages): FireflyValidator => new FireflyValidator($translator, $data, $rules, $messages)
-        );
+        Validator::resolver(static fn ($translator, $data, $rules, $messages): FireflyValidator => new FireflyValidator($translator, $data, $rules, $messages));
     }
 
     /**
@@ -105,55 +104,22 @@ class FireflyServiceProvider extends ServiceProvider
     #[Override]
     public function register(): void
     {
-        $this->app->bind(
-            'preferences',
-            static fn (): Preferences => new Preferences()
-        );
+        $this->app->bind('preferences', static fn (): Preferences => new Preferences());
 
-        $this->app->bind(
-            'fireflyconfig',
-            static fn (): FireflyConfig => new FireflyConfig()
-        );
-        $this->app->bind(
-            'navigation',
-            static fn (): Navigation => new Navigation()
-        );
-        $this->app->bind(
-            'amount',
-            static fn (): Amount => new Amount()
-        );
+        $this->app->bind('fireflyconfig', static fn (): FireflyConfig => new FireflyConfig());
+        $this->app->bind('navigation', static fn (): Navigation => new Navigation());
+        $this->app->bind('amount', static fn (): Amount => new Amount());
 
-        $this->app->bind(
-            'steam',
-            static fn (): Steam => new Steam()
-        );
-        $this->app->bind(
-            'balance',
-            static fn (): Balance => new Balance()
-        );
-        $this->app->bind(
-            'expandedform',
-            static fn (): ExpandedForm => new ExpandedForm()
-        );
+        $this->app->bind('steam', static fn (): Steam => new Steam());
+        $this->app->bind('balance', static fn (): Balance => new Balance());
+        $this->app->bind('expandedform', static fn (): ExpandedForm => new ExpandedForm());
 
-        $this->app->bind(
-            'accountform',
-            static fn (): AccountForm => new AccountForm()
-        );
-        $this->app->bind(
-            'currencyform',
-            static fn (): CurrencyForm => new CurrencyForm()
-        );
+        $this->app->bind('accountform', static fn (): AccountForm => new AccountForm());
+        $this->app->bind('currencyform', static fn (): CurrencyForm => new CurrencyForm());
 
-        $this->app->bind(
-            'piggybankform',
-            static fn (): PiggyBankForm => new PiggyBankForm()
-        );
+        $this->app->bind('piggybankform', static fn (): PiggyBankForm => new PiggyBankForm());
 
-        $this->app->bind(
-            'ruleform',
-            static fn (): RuleForm => new RuleForm()
-        );
+        $this->app->bind('ruleform', static fn (): RuleForm => new RuleForm());
 
         // chart generator:
         $this->app->bind(GeneratorInterface::class, ChartJsGenerator::class);
@@ -164,81 +130,70 @@ class FireflyServiceProvider extends ServiceProvider
         $this->app->bind(AttachmentHelperInterface::class, AttachmentHelper::class);
         $this->app->bind(ALERepositoryInterface::class, ALERepository::class);
 
-        $this->app->bind(
-            static function (Application $app): ObjectGroupRepositoryInterface {
-                /** @var ObjectGroupRepository $repository */
-                $repository = app(ObjectGroupRepository::class);
-                if ($app->auth->check()) { // @phpstan-ignore-line (phpstan does not understand the reference to auth)
-                    $repository->setUser(auth()->user());
-                }
-
-                return $repository;
+        $this->app->bind(static function (Application $app): ObjectGroupRepositoryInterface {
+            /** @var ObjectGroupRepository $repository */
+            $repository = app(ObjectGroupRepository::class);
+            if ($app->auth->check()) {
+                $repository->setUser(auth()->user());
             }
-        );
 
-        $this->app->bind(
-            static function (Application $app): PeriodStatisticRepositoryInterface {
-                /** @var PeriodStatisticRepository $repository */
-                $repository = app(PeriodStatisticRepository::class);
-                if ($app->auth->check()) { // @phpstan-ignore-line (phpstan does not understand the reference to auth)
-                    $repository->setUser(auth()->user());
-                }
+            return $repository;
+        });
 
-                return $repository;
+        $this->app->bind(static function (Application $app): PeriodStatisticRepositoryInterface {
+            /** @var PeriodStatisticRepository $repository */
+            $repository = app(PeriodStatisticRepository::class);
+            if ($app->auth->check()) {
+                $repository->setUser(auth()->user());
             }
-        );
 
-        $this->app->bind(
-            static function (Application $app): WebhookRepositoryInterface {
-                /** @var WebhookRepository $repository */
-                $repository = app(WebhookRepository::class);
-                if ($app->auth->check()) { // @phpstan-ignore-line (phpstan does not understand the reference to auth)
-                    $repository->setUser(auth()->user());
-                }
+            return $repository;
+        });
 
-                return $repository;
+        $this->app->bind(static function (Application $app): WebhookRepositoryInterface {
+            /** @var WebhookRepository $repository */
+            $repository = app(WebhookRepository::class);
+            if ($app->auth->check()) {
+                $repository->setUser(auth()->user());
             }
-        );
+
+            return $repository;
+        });
 
         // rule expression language
-        $this->app->singleton(
-            static function (): ExpressionLanguage {
-                $expressionLanguage = new ExpressionLanguage();
-                $expressionLanguage->registerProvider(new ActionExpressionLanguageProvider());
+        $this->app->singleton(static function (): ExpressionLanguage {
+            $expressionLanguage = new CustomExpressionLanguage();
+            $expressionLanguage->registerProvider(new ActionExpressionLanguageProvider());
 
-                return $expressionLanguage;
+            return $expressionLanguage;
+        });
+
+        $this->app->bind(static function (Application $app): RuleEngineInterface {
+            /** @var SearchRuleEngine $engine */
+            $engine = app(SearchRuleEngine::class);
+            if ($app->auth->check()) {
+                $engine->setUser(auth()->user());
             }
-        );
 
-        $this->app->bind(
-            static function (Application $app): RuleEngineInterface {
-                /** @var SearchRuleEngine $engine */
-                $engine = app(SearchRuleEngine::class);
-                if ($app->auth->check()) { // @phpstan-ignore-line (phpstan does not understand the reference to auth)
-                    $engine->setUser(auth()->user());
-                }
+            return $engine;
+        });
 
-                return $engine;
+        $this->app->bind(static function (Application $app): UserGroupRepositoryInterface {
+            /** @var UserGroupRepository $repository */
+            $repository = app(UserGroupRepository::class);
+            if ($app->auth->check()) {
+                $repository->setUser(auth()->user());
             }
-        );
 
-        $this->app->bind(
-            static function (Application $app): UserGroupRepositoryInterface {
-                /** @var UserGroupRepository $repository */
-                $repository = app(UserGroupRepository::class);
-                if ($app->auth->check()) { // @phpstan-ignore-line (phpstan does not understand the reference to auth)
-                    $repository->setUser(auth()->user());
-                }
-
-                return $repository;
-            }
-        );
+            return $repository;
+        });
 
         // more generators:
         $this->app->bind(PopupReportInterface::class, PopupReport::class);
         $this->app->bind(ReportHelperInterface::class, ReportHelper::class);
         $this->app->bind(FiscalHelperInterface::class, FiscalHelper::class);
-        $this->app->bind(UpdateRequestInterface::class, UpdateRequest::class);
+        // $this->app->bind(UpdateRequestInterface::class, UpdateRequest::class);
+        $this->app->bind(UpdateRequestInterface::class, GitHubUpdateRequest::class);
 
         // webhooks:
         $this->app->bind(MessageGeneratorInterface::class, StandardMessageGenerator::class);

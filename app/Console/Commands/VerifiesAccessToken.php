@@ -38,6 +38,15 @@ use Illuminate\Support\Facades\Log;
 trait VerifiesAccessToken
 {
     /**
+     * Abstract method to make sure trait knows about method "option".
+     *
+     * @param null|string $key
+     *
+     * @return mixed
+     */
+    abstract public function option($key = null);
+
+    /**
      * @throws FireflyException
      */
     public function getUser(): User
@@ -53,15 +62,6 @@ trait VerifiesAccessToken
 
         return $user;
     }
-
-    /**
-     * Abstract method to make sure trait knows about method "option".
-     *
-     * @param null|string $key
-     *
-     * @return mixed
-     */
-    abstract public function option($key = null);
 
     /**
      * Returns false when given token does not match given user token.
@@ -86,7 +86,7 @@ trait VerifiesAccessToken
 
             return false;
         }
-        if ($accessToken->data !== $token) {
+        if (!hash_equals($accessToken->data, $token)) {
             Log::error(sprintf('Invalid access token for user #%d.', $userId));
             Log::error(sprintf('Token given is "%s", expected something else.', $token));
 

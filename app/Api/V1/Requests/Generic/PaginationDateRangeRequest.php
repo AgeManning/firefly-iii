@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+
 /*
  * PaginationDateRangeRequest.php
  * Copyright (c) 2025 james@firefly-iii.org
@@ -27,6 +28,7 @@ use FireflyIII\Api\V1\Requests\AggregateFormRequest;
 use FireflyIII\Api\V1\Requests\DateRangeRequest;
 use FireflyIII\Api\V1\Requests\PaginationRequest;
 use FireflyIII\Models\Transaction;
+use Override;
 
 /**
  * TODO this class includes an object type filter which should be moved to its own thing.
@@ -39,7 +41,7 @@ class PaginationDateRangeRequest extends AggregateFormRequest
         return [
             DateRangeRequest::class,
             [ObjectTypeApiRequest::class, 'object_type' => Transaction::class],
-            [PaginationRequest::class, 'sort_class' => Transaction::class],
+            [PaginationRequest::class, 'sort_class'     => Transaction::class],
         ];
     }
 }

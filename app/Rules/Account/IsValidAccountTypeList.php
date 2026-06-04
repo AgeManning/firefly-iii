@@ -36,14 +36,10 @@ class IsValidAccountTypeList implements ValidationRule
     #[Override]
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
-
         // only check the type.
         $values = [];
         if (is_string($value)) {
             $values = explode(',', $value);
-        }
-        if (!is_array($values)) {
-            $fail('validation.invalid_account_list')->translate();
         }
         $keys   = array_keys($this->types);
         foreach ($values as $entry) {

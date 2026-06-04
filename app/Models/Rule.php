@@ -23,7 +23,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Models;
 
-use FireflyIII\Handlers\Observer\RuleObserver;
+use FireflyIII\Handlers\Observer\DeletedRuleObserver;
 use FireflyIII\Support\Models\ReturnsIntegerIdTrait;
 use FireflyIII\Support\Models\ReturnsIntegerUserIdTrait;
 use FireflyIII\User;
@@ -33,12 +33,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * @property User $user
+ * @property User                    $user
+ * @property Collection<RuleTrigger> $ruleTriggers
  */
-#[ObservedBy([RuleObserver::class])]
+#[ObservedBy([DeletedRuleObserver::class])]
 class Rule extends Model
 {
     use ReturnsIntegerIdTrait;
@@ -52,10 +54,13 @@ class Rule extends Model
      *
      * @throws NotFoundHttpException
      */
-    public static function routeBinder(string $value): self
+    public static function routeBinder(self|string $value): self
     {
+        if ($value instanceof self) {
+            $value = (int) $value->id;
+        }
         if (auth()->check()) {
-            $ruleId = (int)$value;
+            $ruleId = (int) $value;
 
             /** @var User $user */
             $user   = auth()->user();
@@ -68,11 +73,6 @@ class Rule extends Model
         }
 
         throw new NotFoundHttpException();
-    }
-
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
     }
 
     public function ruleActions(): HasMany
@@ -88,6 +88,11 @@ class Rule extends Model
     public function ruleTriggers(): HasMany
     {
         return $this->hasMany(RuleTrigger::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function userGroup(): BelongsTo
@@ -118,15 +123,11 @@ class Rule extends Model
 
     protected function order(): Attribute
     {
-        return Attribute::make(
-            get: static fn ($value): int => (int)$value,
-        );
+        return Attribute::make(get: static fn ($value): int => (int) $value);
     }
 
     protected function ruleGroupId(): Attribute
     {
-        return Attribute::make(
-            get: static fn ($value): int => (int)$value,
-        );
+        return Attribute::make(get: static fn ($value): int => (int) $value);
     }
 }

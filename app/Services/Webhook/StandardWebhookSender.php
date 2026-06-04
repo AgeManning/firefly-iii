@@ -28,11 +28,13 @@ use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Helpers\Webhook\SignatureGeneratorInterface;
 use FireflyIII\Models\WebhookAttempt;
 use FireflyIII\Models\WebhookMessage;
+use FireflyIII\Rules\Webhook\IsValidWebhookUrl;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use JsonException;
 
 use function Safe\json_encode;
@@ -43,7 +45,7 @@ use function Safe\json_encode;
 class StandardWebhookSender implements WebhookSenderInterface
 {
     private WebhookMessage $message;
-    private int            $version = 1;
+    private int $version = 1;
 
     public function getVersion(): int
     {
@@ -62,6 +64,16 @@ class StandardWebhookSender implements WebhookSenderInterface
         $signatureGenerator  = app(SignatureGeneratorInterface::class);
         $this->message->sent = true;
         $this->message->save();
+
+        // validate the webhook URL.
+        $data                = [
+            'url' => $this->message->webhook->url,
+        ];
+        $rules               = [
+            'url' => [new IsValidWebhookUrl()],
+        ];
+        $res                 = Validator::make($data, $rules)->validate();
+        Log::debug('Result of res', $res);
 
         try {
             $signature = $signatureGenerator->generate($this->message);
@@ -101,8 +113,9 @@ class StandardWebhookSender implements WebhookSenderInterface
             return;
         }
         $options             = [
-            'body'    => $json,
-            'headers' => [
+            'body'            => $json,
+            'allow_redirects' => false,
+            'headers'         => [
                 'Content-Type'    => 'application/json',
                 'Accept'          => 'application/json',
                 'Signature'       => $signature,

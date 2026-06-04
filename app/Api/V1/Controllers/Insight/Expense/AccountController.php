@@ -37,12 +37,12 @@ use Illuminate\Http\JsonResponse;
  * Shows expense information grouped or limited by date.
  * I.e. all expenses grouped by account + currency.
  */
-class AccountController extends Controller
+final class AccountController extends Controller
 {
     use ApiSupport;
 
     private OperationsRepositoryInterface $opsRepository;
-    private AccountRepositoryInterface    $repository;
+    private AccountRepositoryInterface $repository;
 
     /**
      * AccountController constructor.
@@ -50,18 +50,16 @@ class AccountController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(
-            function ($request, $next) {
-                $user                = auth()->user();
-                $this->repository    = app(AccountRepositoryInterface::class);
-                $this->repository->setUser($user);
+        $this->middleware(function ($request, $next) {
+            $user                = auth()->user();
+            $this->repository    = app(AccountRepositoryInterface::class);
+            $this->repository->setUser($user);
 
-                $this->opsRepository = app(OperationsRepositoryInterface::class);
-                $this->opsRepository->setUser($user);
+            $this->opsRepository = app(OperationsRepositoryInterface::class);
+            $this->opsRepository->setUser($user);
 
-                return $next($request);
-            }
-        );
+            return $next($request);
+        });
     }
 
     public function asset(GenericRequest $request): JsonResponse

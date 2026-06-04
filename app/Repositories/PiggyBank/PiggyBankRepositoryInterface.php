@@ -47,8 +47,6 @@ use Illuminate\Support\Collection;
  */
 interface PiggyBankRepositoryInterface
 {
-    public function resetHistory(PiggyBank $piggyBank): void;
-
     public function addAmount(PiggyBank $piggyBank, Account $account, string $amount, ?TransactionJournal $journal = null): bool;
 
     public function addAmountToPiggyBank(PiggyBank $piggyBank, string $amount, TransactionJournal $journal): void;
@@ -86,6 +84,7 @@ interface PiggyBankRepositoryInterface
      * Get all events.
      */
     public function getEvents(PiggyBank $piggyBank): Collection;
+
     /**
      * Get current amount saved in piggy bank.
      */
@@ -113,11 +112,6 @@ interface PiggyBankRepositoryInterface
     public function getRepetition(PiggyBank $piggyBank, bool $overrule = false): ?PiggyBankRepetition;
 
     /**
-     * Returns the suggested amount the user should save per month, or "".
-     */
-    public function getSuggestedMonthlyAmount(PiggyBank $piggyBank): string;
-
-    /**
      * Get for piggy account what is left to put in piggies.
      */
     public function leftOnAccount(PiggyBank $piggyBank, Account $account, Carbon $date): string;
@@ -129,6 +123,8 @@ interface PiggyBankRepositoryInterface
     public function removeAmountFromAll(PiggyBank $piggyBank, string $amount): void;
 
     public function removeObjectGroup(PiggyBank $piggyBank): PiggyBank;
+
+    public function resetHistory(PiggyBank $piggyBank): void;
 
     public function resetOrder(): void;
 

@@ -23,9 +23,9 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Requests;
 
-use Illuminate\Contracts\Validation\Validator;
 use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
 
@@ -36,6 +36,8 @@ class LinkTypeFormRequest extends FormRequest
 {
     use ChecksLogin;
     use ConvertsDataTypes;
+
+    protected array $acceptedRoles = [];
 
     /**
      * Rules for this request.
@@ -57,8 +59,8 @@ class LinkTypeFormRequest extends FormRequest
         return [
             'id'      => $idRule,
             'name'    => $nameRule,
-            'inward'  => 'required|max:255|min:1|different:outward',
-            'outward' => 'required|max:255|min:1|different:inward',
+            'inward'  => ['required', 'max:255', 'min:1', 'different:outward'],
+            'outward' => ['required', 'max:255', 'min:1', 'different:inward'],
         ];
     }
 
